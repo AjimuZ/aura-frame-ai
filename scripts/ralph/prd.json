@@ -268,7 +268,7 @@
       ],
       "priority": 11,
       "passes": false,
-      "notes": "Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses the standalone word AI anywhere, including in the product name or when quoting a description, and refuses the name of the project instructions file. Never quote those strings in the message. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Use exactly: `npm install --save-dev electron@<version> electron-builder@<version>`. This moves 12 majors, so read the upstream breaking changes that affect the protocol, sandbox and preload code.",
+      "notes": "BLOCKED: still failing after 3 attempts: the implementation session did not confirm the conventions it was given\nReports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses the standalone word AI anywhere, including in the product name or when quoting a description, and refuses the name of the project instructions file. Never quote those strings in the message. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Use exactly: `npm install --save-dev electron@<version> electron-builder@<version>`. This moves 12 majors, so read the upstream breaking changes that affect the protocol, sandbox and preload code.",
       "dependsOn": [
         "P01.1"
       ],
