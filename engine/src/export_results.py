@@ -55,11 +55,11 @@ def _output_base(config: dict[str, Any]) -> Path:
 # Exports the final six photos with ordered, slot-named filenames.
 def export_final_set(final_set: list[Photo], config: dict[str, Any]) -> None:
     base = _output_base(config)
-    dest = ensure_dir(base / "top_06_profilo_finale")
+    dest = ensure_dir(base / "top_06_final_set")
     for photo in final_set:
         stem = _FINAL_NAMES.get(photo.best_slot)
         _copy(photo.file_path, dest, stem)
-    events.log(f"Exported {len(final_set)} photos to top_06_profilo_finale", "info")
+    events.log(f"Exported {len(final_set)} photos to top_06_final_set", "info")
 
 
 # Exports the full set of review/curation folders from the analyzed photos.
@@ -85,7 +85,7 @@ def export_all(photos: list[Photo], config: dict[str, Any]) -> None:
     events.log("Export complete.", "info")
 
 
-# Maps a profile slot to its per-slot OpenAI candidate folder (second_photo == candid).
+# Maps a selection slot to its per-slot OpenAI candidate folder (second_photo == candid).
 _SLOT_CANDIDATE_FOLDERS = {
     "main_photo": "best_main_photo_candidates",
     "full_body": "best_full_body_candidates",
@@ -121,14 +121,14 @@ def export_openai_quality(photos: list[Photo], final_set: list[Photo], config: d
         reverse=True,
     )
 
-    # Top 6 final profile, in fixed slot order with friendly names.
-    top6_dir = ensure_dir(base / "top_06_profilo_finale")
+    # Top 6 final set, in fixed slot order with friendly names.
+    top6_dir = ensure_dir(base / "top_06_final_set")
     for photo in final_set:
         stem = _FINAL_NAMES.get(photo.final_selected_slot or photo.best_slot)
         _copy(photo.file_path, top6_dir, stem)
 
-    _export_ranked([p for p in by_consensus if p.in_top_20], base / "top_20_dating_best", "top_20_dating_best")
-    _export_ranked([p for p in by_consensus if p.in_top_50], base / "top_50_dating_review", "top_50_dating_review")
+    _export_ranked([p for p in by_consensus if p.in_top_20], base / "top_20_best", "top_20_best")
+    _export_ranked([p for p in by_consensus if p.in_top_50], base / "top_50_review", "top_50_review")
     _export_ranked([p for p in by_consensus if p.in_top_100], base / "top_100_backup_good", "top_100_backup_good")
 
     # Per-slot candidate folders (top consensus photos whose slot matches).

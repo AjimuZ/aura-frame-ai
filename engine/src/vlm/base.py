@@ -1,6 +1,6 @@
 """Abstract VLM client interface and health-status types.
 
-Implementations must be fully local. They evaluate dating-photo suitability only and must
+Implementations must be fully local. They evaluate the photograph only and must
 never be asked to identify a person (see the prompt in this package).
 """
 

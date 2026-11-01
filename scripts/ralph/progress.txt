@@ -4,6 +4,8 @@
 
 - Keep check scripts equivalent to the commands the runner invokes, so a green script implies green runner checks.
 - Under Git Bash, use MSYS_NO_PATHCONV=1 with pwd -W when passing host paths to docker -v.
+- When renaming a field that crosses layers, grep every spelling (snake_case, camelCase, DB column, config key, local variable) before declaring the rename complete.
+- Copy acceptance criteria character for character into review criteria, since the runner compares exact text.
 
 ---
 
@@ -31,4 +33,43 @@ I did not tick the roadmap checkbox, as instructed.
   - The script was never executed by the author: Bash was denied this session, so `bash -n`, `--node`, `--integration` and `--engine` all still need a real run.
   - The commit validator rejects the project instructions file name; write 'project instructions' in commit messages.
   - --integration prints SKIP until P02 adds integration checks; update the script and docs/testing.md then.
+---
+
+## 2026-11-01T18:49:55Z - P01.2.1.1
+- I finished the two remaining items, the clothing-score rename and the two wording residues in the cloud prompts. Only `npm run lint` was run, and it passed. The engine pytest was denied by the shell, so I did not run it. That also means `npm run build:electron` and `npm run test:profiles` were not run.
+
+**Clothing-score rename (names only, weights and formulas unchanged).** Electron and Angular still use the old names until the next task.
+
+| Where | Old | New |
+|---|---|---|
+| Model JSON and engine dict key | `outfit_score` | `style_score` |
+| camelCase key sent to the desktop app | `outfitScore` | `styleScore` |
+| `vlm_reviews` table column | `outfit` | `style` |
+| Ranking config key | `outfit_context_weight` | `style_context_weight` |
+| Local variable in `final_ranker.py` | `outfit_context` | `style_context` |
+
+The edits are in `engine/config.yaml`, `engine/src/db.py`, `engine/src/final_ranker.py`, `engine/src/utils.py` and `engine/src/vlm/schema.py`.
+
+**Cloud prompt wording (vocabulary only).** In `engine/src/cloud/openai_prompts.py`, "prima impressione" is now "impatto visivo" and "prima foto" is now "foto principale".
+
+**Earlier renames carried over from the tree.**
+
+| Where | Old | New |
+|---|---|---|
+| Model score field | `dating_score` | `overall_score` |
+| camelCase key sent to the desktop app | `datingScore` | `overallScore` |
+| `vlm_reviews` table column | `dating_score` | `overall_score` |
+| Ranking config key | `gemma_dating_weight` | `gemma_overall_weight` |
+
+**Searches.** Searching `engine/` for the retired terms, `outfit`, the first-photo and first-impression wording, and profile or app wording finds nothing. The `engine/` hits left over are unrelated words such as "match" and "style", which stay.
+
+**Not done.** Electron and Angular still read `datingScore` and `outfitScore`, so those values show as 0 in the interface until the next task. They are in `photo.model.ts`, `mock-aura-frame-api.ts` and `contracts.ts`.
+
+**Changelog.** `CHANGELOG.md` now records the clothing-score rename and lists both old desktop keys as pending.
+- Files changed: engine/config.yaml, engine/src/db.py, engine/src/final_ranker.py, engine/src/utils.py, engine/src/vlm/schema.py, engine/src/cloud/openai_prompts.py, CHANGELOG.md
+- **Learnings for future iterations:**
+  - Old to new names: dating_score->overall_score, datingScore->overallScore, gemma_dating_weight->gemma_overall_weight, outfit_score->style_score, outfitScore->styleScore, vlm_reviews column outfit->style, outfit_context_weight->style_context_weight.
+  - Electron and Angular still use datingScore and outfitScore in apps/desktop/angular/src/app/core/models/photo.model.ts, apps/desktop/angular/src/app/core/services/mock-aura-frame-api.ts and apps/desktop/electron/ipc/contracts.ts; the next task must rename them to overallScore and styleScore.
+  - The engine pytest (docker command) was denied in this session, so it still needs to be run by the orchestrator. The engine test files contain no references to the renamed clothing-score names.
+  - The guard test (last in the P01.2 order) can search engine/ without an allowlist, because the earlier searches for the retired terms, the clothing-score names and the first-photo wording found nothing.
 ---

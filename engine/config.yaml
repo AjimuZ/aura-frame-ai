@@ -58,11 +58,11 @@ face:
 
 ranking:
   technical_weight: 0.22
-  gemma_dating_weight: 0.22
+  gemma_overall_weight: 0.22
   face_clarity_weight: 0.15
   aesthetic_weight: 0.08
   naturalness_weight: 0.08
-  outfit_context_weight: 0.10
+  style_context_weight: 0.10
   diversity_weight: 0.10
   recency_weight: 0.05
 

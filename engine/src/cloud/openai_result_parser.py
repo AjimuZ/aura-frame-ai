@@ -118,7 +118,7 @@ def parse_quality(text: str) -> dict[str, Any] | None:
         "main_photo_score": _score_or(data.get("main_photo_score"), score),
         "face_clarity": _score_or(data.get("face_clarity"), score),
         "naturalness": _score_or(data.get("naturalness"), score),
-        "approachability": _score_or(data.get("approachability"), score),
+        "appeal": _score_or(data.get("appeal"), score),
         "confidence": _score_or(data.get("confidence"), score),
         "style_score": _score_or(data.get("style_score"), score),
         "context_score": _score_or(data.get("context_score"), score),
@@ -140,11 +140,11 @@ def parse_premium(text: str) -> dict[str, Any] | None:
         return None
     return {
         "score": score,
-        "dating_value": _score_or(data.get("dating_value"), score),
-        "profile_value": _score_or(data.get("profile_value"), score),
+        "overall_value": _score_or(data.get("overall_value"), score),
+        "selection_value": _score_or(data.get("selection_value"), score),
         "authenticity": _score_or(data.get("authenticity"), score),
         "confidence": _score_or(data.get("confidence"), score),
-        "approachability": _score_or(data.get("approachability"), score),
+        "appeal": _score_or(data.get("appeal"), score),
         "style_score": _score_or(data.get("style_score"), score),
         "context_score": _score_or(data.get("context_score"), score),
         "best_slot": normalize_slot(data.get("best_slot")),

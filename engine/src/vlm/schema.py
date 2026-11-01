@@ -8,37 +8,36 @@ import json
 import re
 from typing import Any
 
-# The evaluation prompt. Identity is never requested; only dating-photo suitability.
-PROMPT = """Analizza questa foto per un profilo dating maschile.
+# The evaluation prompt. Identity is never requested; only general photograph quality.
+PROMPT = """Analizza questa foto come fotografia, qualunque sia il soggetto.
 
 Contesto:
-- La persona principale nella foto e sempre l'utente.
-- Non devi riconoscere l'identita della persona.
-- Devi valutare solo se la foto e adatta a una dating app.
-- L'obiettivo e sembrare autentico, pulito, sicuro, interessante e approcciabile.
+- Valuta la fotografia, mai l'aspetto di una persona.
+- Se compaiono persone, non devi riconoscerne l'identita.
+- L'obiettivo e individuare le foto piu belle: nitide, ben composte, ben illuminate e memorabili.
 - Evita giudizi su etnia, religione, status sociale, salute o caratteristiche sensibili.
 
 Valuta la foto secondo questi criteri:
-1. qualita generale della foto;
-2. chiarezza del volto;
+1. qualita generale della fotografia;
+2. chiarezza del soggetto principale;
 3. luce;
-4. espressione;
+4. espressione o emozione trasmessa;
 5. naturalezza;
-6. outfit;
-7. contesto;
-8. se e adatta come prima foto;
-9. se comunica sicurezza senza sembrare arrogante;
-10. se comunica una personalita interessante.
+6. stile e cura dei dettagli;
+7. contesto e composizione;
+8. se e adatta come foto principale di una selezione;
+9. se comunica equilibrio e qualita senza sembrare costruita;
+10. se e interessante e memorabile.
 
 Rispondi SOLO in JSON valido:
 
 {
-  "dating_score": 1,
+  "overall_score": 1,
   "technical_quality": 1,
   "face_clarity": 1,
   "expression_score": 1,
   "naturalness_score": 1,
-  "outfit_score": 1,
+  "style_score": 1,
   "context_score": 1,
   "category": "HEADSHOT | FULL_BODY | ACTIVITY | SOCIAL | CANDID | ELEGANT | BAD",
   "best_slot": "main_photo | second_photo | full_body | activity_photo | social_photo | elegant_photo | backup | reject",
@@ -50,12 +49,12 @@ Rispondi SOLO in JSON valido:
 
 # Numeric criteria, all on the 1-10 scale the prompt asks for and the ranker expects.
 _SCORE_KEYS = (
-    "dating_score",
+    "overall_score",
     "technical_quality",
     "face_clarity",
     "expression_score",
     "naturalness_score",
-    "outfit_score",
+    "style_score",
     "context_score",
 )
 

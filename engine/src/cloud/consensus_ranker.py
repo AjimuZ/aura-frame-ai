@@ -1,7 +1,7 @@
 """Consensus ranking across local + OpenAI signals.
 
 The local gate is intentionally minimal, so the local score is treated as metadata with a
-small weight; OpenAI is the main judge of dating value. This module computes a consensus
+small weight; OpenAI is the main judge of photo quality. This module computes a consensus
 score, applies bonuses/penalties, integrates the comparative Final Judge selection, and
 assigns the Top 6 / 20 / 50 / 100 tiers. Top 50/100 come from consensus ordering (the Final
 Judge only sees ~40 candidates and decides Top 6 / Top 20 / per-slot).

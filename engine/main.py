@@ -171,7 +171,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     apply_diversity_rerank(photos, config)
     final_set = select_final_set(photos)
-    events.progress("final_set", len(final_set), len(final_set), "Built final dating set")
+    events.progress("final_set", len(final_set), len(final_set), "Built final set")
 
     for photo in photos:
         db.set_stage(conn, photo.id, "rank", "done")
@@ -180,7 +180,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     generate_reports(photos, config)
     export_all(photos, config)
     conn.close()
-    events.done(f"Analyzed {len(photos)} photos; selected {len(final_set)} for the profile.")
+    events.done(f"Analyzed {len(photos)} photos; selected {len(final_set)} for the final set.")
     return 0
 
 

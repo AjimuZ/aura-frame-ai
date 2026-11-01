@@ -1,7 +1,7 @@
 """Final ranking: combine technical, face, and AI signals into a final score.
 
-Also assigns a category and best profile slot, pre-ranks candidates for the AI stage,
-and builds the balanced six-photo dating set.
+Also assigns a category and best selection slot, pre-ranks candidates for the AI stage,
+and builds the balanced six-photo final set.
 """
 
 from datetime import datetime
@@ -44,7 +44,7 @@ def _heuristic_category(photo: Photo) -> str:
     return "CANDID"
 
 
-# Maps a category to a default profile slot.
+# Maps a category to a default selection slot.
 def _slot_for_category(category: str) -> str:
     return {
         "HEADSHOT": "main_photo",
@@ -64,23 +64,23 @@ def rank_photo(photo: Photo, config: dict[str, Any]) -> Photo:
     gemma = photo.gemma or {}
 
     technical = photo.technical_score
-    dating = float(gemma.get("dating_score", 0)) * 10 if gemma else technical
+    overall = float(gemma.get("overall_score", 0)) * 10 if gemma else technical
     face_clarity = photo.face_clarity_score
     aesthetic = photo.aesthetic_score
     naturalness = float(gemma.get("naturalness_score", 6)) * 10
-    outfit_context = (
-        (float(gemma.get("outfit_score", 6)) + float(gemma.get("context_score", 6))) / 2 * 10
+    style_context = (
+        (float(gemma.get("style_score", 6)) + float(gemma.get("context_score", 6))) / 2 * 10
     )
     diversity = 60.0  # refined by apply_diversity_rerank using clusters
     recency = _recency_score(photo)
 
     base = (
         technical * weights["technical_weight"]
-        + dating * weights["gemma_dating_weight"]
+        + overall * weights["gemma_overall_weight"]
         + face_clarity * weights["face_clarity_weight"]
         + aesthetic * weights.get("aesthetic_weight", 0.0)
         + naturalness * weights["naturalness_weight"]
-        + outfit_context * weights["outfit_context_weight"]
+        + style_context * weights["style_context_weight"]
         + diversity * weights["diversity_weight"]
         + recency * weights["recency_weight"]
     )
@@ -119,7 +119,7 @@ def _bonuses_and_penalties(photo: Photo, gemma: dict[str, Any]) -> float:
         delta += 15
     if float(gemma.get("naturalness_score", 0)) >= 8:
         delta += 10
-    if float(gemma.get("outfit_score", 0)) >= 8:
+    if float(gemma.get("style_score", 0)) >= 8:
         delta += 10
 
     return delta
@@ -158,7 +158,7 @@ def tag_conflicts(photos: list[Photo], high: float = 7.0, low: float = 4.0) -> i
         if not openai_score:
             continue  # no OpenAI verdict yet -> nothing to disagree with
         local = float(photo.final_score)
-        gemma = float((photo.gemma or {}).get("dating_score", 0)) if photo.gemma else None
+        gemma = float((photo.gemma or {}).get("overall_score", 0)) if photo.gemma else None
         conflict = (
             (local >= high and openai_score <= low)
             or (local <= low and openai_score >= high)
@@ -185,7 +185,7 @@ def prerank_candidates(photos: list[Photo], count: int) -> list[Photo]:
     return eligible[:count]
 
 
-# Builds the balanced six-photo dating set, preferring slot diversity over raw score.
+# Builds the balanced six-photo final set, preferring slot diversity over raw score.
 def select_final_set(photos: list[Photo]) -> list[Photo]:
     ordered = sorted(
         (p for p in photos if p.status != "rejected"),

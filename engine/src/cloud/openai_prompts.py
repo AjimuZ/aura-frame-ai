@@ -1,30 +1,29 @@
 """Prompts for the four OpenAI Quality Mode stages.
 
-The prompts never ask the model to identify the person or to infer sensitive
+The prompts never ask the model to identify a person or to infer sensitive
 characteristics (ethnicity, religion, health, orientation, social status). They evaluate
-only photographic effectiveness and dating-profile usefulness. PROMPT_VERSIONS feed the
-cache key so a prompt change invalidates stale cached results.
+only the photograph: technique, composition, light and how memorable it is.
+PROMPT_VERSIONS feed the cache key so a prompt change invalidates stale cached results.
 """
 
 import json
 from typing import Any
 
 PROMPT_VERSIONS: dict[str, str] = {
-    "broad_scan": "v1",
-    "quality_review": "v1",
-    "premium_review": "v1",
-    "final_judge": "v1",
+    "broad_scan": "v2",
+    "quality_review": "v2",
+    "premium_review": "v2",
+    "final_judge": "v2",
 }
 
-BROAD_SCAN_PROMPT = """Analizza questa foto per un profilo dating maschile.
+BROAD_SCAN_PROMPT = """Analizza questa foto come fotografia, qualunque sia il soggetto.
 
 Regole:
-- La persona principale è sempre l'utente.
-- Non identificare la persona.
+- Non identificare mai le persone.
 - Non fare inferenze su etnia, religione, salute, orientamento, status sociale o caratteristiche sensibili.
-- Valuta solo qualità fotografica e utilità per dating app.
-- Obiettivo: autentico, pulito, sicuro, interessante, approcciabile.
-- Penalizza foto buie, sfocate, confuse, troppo posate, troppo selfie, volto nascosto, gruppo non chiaro.
+- Valuta solo la qualità fotografica, mai l'aspetto di una persona.
+- Obiettivo: foto nitida, pulita, ben composta, interessante, memorabile.
+- Penalizza foto buie, sfocate, confuse, troppo posate, selfie deboli, soggetto nascosto, gruppo non chiaro.
 
 Rispondi solo JSON valido:
 
@@ -41,17 +40,16 @@ Rispondi solo JSON valido:
 }
 """
 
-QUALITY_REVIEW_PROMPT = """Analizza questa foto come candidata per un profilo dating maschile.
+QUALITY_REVIEW_PROMPT = """Analizza questa foto come candidata tra le più belle di una raccolta.
 
 Contesto:
-- La persona principale è sempre l'utente.
-- Non devi identificare la persona.
+- Non devi identificare le persone.
 - Non devi fare inferenze sensibili.
-- Valuta solo efficacia fotografica, naturalezza, presenza, pulizia visiva e utilità nel profilo.
-- Il profilo deve sembrare autentico, sicuro, interessante e non costruito.
+- Valuta solo efficacia fotografica, naturalezza, presenza, pulizia visiva e utilità nella selezione.
+- La foto deve sembrare autentica, interessante e non costruita.
 
-Criteri: prima impressione, chiarezza volto, luce, naturalezza, outfit/stile, contesto,
-postura, approcciabilità, sicurezza senza arroganza, utilità nello slot profilo.
+Criteri: impatto visivo, chiarezza del soggetto, luce, naturalezza, stile, contesto,
+postura, espressività, equilibrio, utilità nella selezione finale.
 
 Rispondi solo JSON valido:
 
@@ -60,7 +58,7 @@ Rispondi solo JSON valido:
   "main_photo_score": 1,
   "face_clarity": 1,
   "naturalness": 1,
-  "approachability": 1,
+  "appeal": 1,
   "confidence": 1,
   "style_score": 1,
   "context_score": 1,
@@ -72,26 +70,26 @@ Rispondi solo JSON valido:
 }
 """
 
-PREMIUM_REVIEW_PROMPT = """Valuta questa foto come candidata forte per un profilo dating maschile.
+PREMIUM_REVIEW_PROMPT = """Valuta questa foto come candidata forte tra le più belle di una raccolta.
 
-Non devi giudicare la persona. Devi giudicare solo la foto.
+Non devi giudicare le persone. Devi giudicare solo la foto.
 
-Il profilo finale deve sembrare: autentico, pulito, sicuro, interessante, approcciabile,
-non disperato, non costruito, non cringe.
+La foto migliore deve sembrare: autentica, pulita, interessante, espressiva,
+non costruita, non banale.
 
-Penalizza: foto troppo posate, selfie deboli, foto buie, volto poco chiaro, soggetto chiuso,
-foto troppo LinkedIn, foto troppo confuse, gruppo dove non è chiaro il soggetto, foto belle
-artisticamente ma inutili per dating app.
+Penalizza: foto troppo posate, selfie deboli, foto buie, soggetto poco chiaro, soggetto chiuso,
+foto troppo formali, foto troppo confuse, gruppo dove non è chiaro il soggetto, foto
+tecnicamente corrette ma prive di interesse.
 
 Rispondi solo JSON:
 
 {
   "score": 1,
-  "dating_value": 1,
-  "profile_value": 1,
+  "overall_value": 1,
+  "selection_value": 1,
   "authenticity": 1,
   "confidence": 1,
-  "approachability": 1,
+  "appeal": 1,
   "style_score": 1,
   "context_score": 1,
   "best_slot": "main_photo | full_body | activity_photo | social_photo | candid_photo | elegant_photo | backup | reject",
@@ -103,15 +101,15 @@ Rispondi solo JSON:
 }
 """
 
-_FINAL_JUDGE_INSTRUCTIONS = """Devi costruire il miglior set di foto per un profilo dating maschile partendo da queste candidate.
+_FINAL_JUDGE_INSTRUCTIONS = """Devi costruire il miglior set di foto, tra le più belle della raccolta, partendo da queste candidate.
 
 Regole:
-- Non identificare la persona.
+- Non identificare le persone.
 - Non fare inferenze sensibili.
-- Valuta solo efficacia fotografica e utilità nel profilo.
-- Il profilo deve sembrare autentico, sicuro, interessante e approcciabile.
+- Valuta solo efficacia fotografica e utilità nella selezione.
+- Il set deve sembrare autentico, interessante e vario.
 - Non scegliere 6 foto tutte simili. Non solo selfie. Non solo primi piani.
-- Non scegliere foto gruppo come prima foto. Niente foto troppo posate o cringe.
+- Non scegliere foto di gruppo come foto principale. Niente foto troppo posate.
 - Includi varietà reale. Top 6 = titolari, Top 20 = panchina di lusso.
 
 Seleziona Top 6 (uno per slot: main_photo, full_body, activity_photo, candid_photo,
@@ -126,7 +124,7 @@ Rispondi solo JSON valido:
     "main_photo": ["photo_id"], "full_body": ["photo_id"], "activity_photo": ["photo_id"],
     "candid_photo": ["photo_id"], "social_photo": ["photo_id"], "elegant_photo": ["photo_id"]
   },
-  "final_notes": "breve sintesi del profilo"
+  "final_notes": "breve sintesi del set"
 }
 """
 

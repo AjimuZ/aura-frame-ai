@@ -181,7 +181,7 @@ def _judge_meta(photo: Photo) -> dict[str, Any]:
     return {
         "photo_id": photo.id,
         "local_score": round(photo.final_score, 2),
-        "gemma_score": gemma.get("dating_score", None),
+        "gemma_score": gemma.get("overall_score", None),
         "openai_broad_score": round(photo.openai_broad_score, 2),
         "openai_quality_score": round(photo.openai_quality_score, 2),
         "openai_premium_score": round(photo.openai_premium_score, 2),

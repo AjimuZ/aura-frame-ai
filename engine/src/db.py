@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS faces (
 CREATE TABLE IF NOT EXISTS vlm_reviews (
     photo_id TEXT PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
     model TEXT, raw TEXT,
-    dating_score REAL, naturalness REAL, outfit REAL, context REAL
+    overall_score REAL, naturalness REAL, style REAL, context REAL
 );
 
 CREATE TABLE IF NOT EXISTS embeddings (
@@ -166,14 +166,14 @@ def upsert_photo(conn: sqlite3.Connection, photo: Photo) -> None:
     if photo.gemma is not None:
         conn.execute(
             "INSERT OR REPLACE INTO vlm_reviews("
-            "photo_id, model, raw, dating_score, naturalness, outfit, context)"
+            "photo_id, model, raw, overall_score, naturalness, style, context)"
             " VALUES (?,?,?,?,?,?,?)",
             (
                 photo.id, photo.gemma.get("_model", ""),
                 json.dumps(photo.gemma, ensure_ascii=False),
-                float(photo.gemma.get("dating_score", 0)),
+                float(photo.gemma.get("overall_score", 0)),
                 float(photo.gemma.get("naturalness_score", 0)),
-                float(photo.gemma.get("outfit_score", 0)),
+                float(photo.gemma.get("style_score", 0)),
                 float(photo.gemma.get("context_score", 0)),
             ),
         )
@@ -255,12 +255,12 @@ def _photo_from_camel(record: dict[str, Any]) -> Photo:
     g = record.get("gemmaScore")
     if g:
         gemma = {
-            "dating_score": g.get("datingScore", 0),
+            "overall_score": g.get("overallScore", 0),
             "technical_quality": g.get("technicalQuality", 0),
             "face_clarity": g.get("faceClarity", 0),
             "expression_score": g.get("expressionScore", 0),
             "naturalness_score": g.get("naturalnessScore", 0),
-            "outfit_score": g.get("outfitScore", 0),
+            "style_score": g.get("styleScore", 0),
             "context_score": g.get("contextScore", 0),
             "category": g.get("category", record.get("category", "REJECT")),
             "best_slot": g.get("bestSlot", record.get("bestSlot", "reject")),

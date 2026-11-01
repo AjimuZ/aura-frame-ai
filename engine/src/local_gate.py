@@ -2,8 +2,8 @@
 
 The gate's only job is to remove objectively unusable photos (corrupt/unreadable, exact
 duplicate, fully black, fully white, extremely low resolution, extreme blur, clearly
-non-photographic) and to attach soft flags to everything else. It does NOT judge dating
-suitability: borderline photos (no face detected, small face, group, selfie, mildly dark
+non-photographic) and to attach soft flags to everything else. It does NOT judge photo
+quality: borderline photos (no face detected, small face, group, selfie, mildly dark
 or blurry, odd composition, low local score) are KEPT and flagged so the optional OpenAI
 review can decide. Rule of thumb: "when in doubt, keep it for OpenAI."
 

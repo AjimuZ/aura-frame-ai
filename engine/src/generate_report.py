@@ -30,7 +30,7 @@ def _record(photo: Photo) -> dict[str, Any]:
         "face_detected": photo.face_detected,
         "number_of_faces": photo.number_of_faces,
         "face_clarity_score": round(photo.face_clarity_score, 1),
-        "gemma_dating_score": gemma.get("dating_score", ""),
+        "gemma_overall_score": gemma.get("overall_score", ""),
         "gemma_category": photo.category,
         "best_slot": photo.best_slot,
         "final_score": round(photo.final_score, 2),
@@ -165,7 +165,7 @@ def _openai_record(photo: Photo) -> dict[str, Any]:
         "soft_flags": "; ".join(photo.soft_flags),
         "hard_reject_reason": photo.hard_reject_reason or (photo.reject_reason or ""),
         "eligible_for_openai": photo.eligible_for_openai,
-        "gemma_score": gemma.get("dating_score", ""),
+        "gemma_score": gemma.get("overall_score", ""),
         "openai_broad_score": round(photo.openai_broad_score, 2),
         "openai_quality_score": round(photo.openai_quality_score, 2),
         "openai_premium_score": round(photo.openai_premium_score, 2),
@@ -233,9 +233,9 @@ def write_openai_html(photos: list[Photo], config: dict[str, Any]) -> Path:
     total_cost = sum(p.estimated_cost_usd for p in photos)
     sections = "".join(
         [
-            _openai_section("Top 6 — Final Profile", [p for p in by_consensus if p.in_top_6]),
-            _openai_section("Top 20 — Dating Best", [p for p in by_consensus if p.in_top_20]),
-            _openai_section("Top 50 — Dating Review", [p for p in by_consensus if p.in_top_50]),
+            _openai_section("Top 6 — Final Set", [p for p in by_consensus if p.in_top_6]),
+            _openai_section("Top 20 — Best", [p for p in by_consensus if p.in_top_20]),
+            _openai_section("Top 50 — Review", [p for p in by_consensus if p.in_top_50]),
             _openai_section("Needs Manual Review", [p for p in by_consensus if p.needs_manual_review]),
             _openai_section(
                 "Hard Rejected (extreme only)",

@@ -1,5 +1,6 @@
 """Unit tests for the AuraFrame AI engine using synthetic images only."""
 
+import json
 from pathlib import Path
 
 import cv2
@@ -103,3 +104,26 @@ def test_select_final_set_size(config: dict) -> None:
     final_set = select_final_set(photos)
     assert 0 < len(final_set) <= 6
     assert len({p.id for p in final_set}) == len(final_set)
+
+
+# A model review is valid only with the neutral overall_score key, and the ranker reads it.
+def test_review_overall_score_drives_ranking(config: dict) -> None:
+    from src.vlm.schema import REQUIRED_KEYS, RESPONSE_SCHEMA, parse_review
+
+    assert "overall_score" in REQUIRED_KEYS
+    assert "overall_score" in RESPONSE_SCHEMA["properties"]
+    assert "overall_score" in RESPONSE_SCHEMA["required"]
+
+    review = {key: 5 for key in REQUIRED_KEYS if key.endswith(("_score", "_quality", "_clarity"))}
+    review.update({"category": "CANDID", "best_slot": "backup"})
+    scored = []
+    for overall in (2, 9):
+        gemma = parse_review(json.dumps({**review, "overall_score": overall}))
+        assert gemma is not None and gemma["overall_score"] == overall
+        photo = Photo(
+            id=f"o{overall}", file_path="x.jpg", file_name="x.jpg", technical_score=60,
+            face_detected=True, face_clarity_score=60, face_size_score=40,
+            status="accepted", gemma=gemma,
+        )
+        scored.append(rank_photo(photo, config).final_score)
+    assert scored[1] > scored[0]

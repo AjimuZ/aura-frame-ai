@@ -261,7 +261,7 @@ class Photo:
     weaknesses: list[str] = field(default_factory=list)
     reason: str = ""
 
-    # --- Local Minimal Gate (privacy-first triage; does NOT decide dating quality) ---
+    # --- Local Minimal Gate (privacy-first triage; does NOT decide photo quality) ---
     soft_flags: list[str] = field(default_factory=list)
     gate_status: str = ""  # openai_candidate|low_priority_openai_candidate|needs_manual_review|duplicate_candidate|hard_reject|failed_read
     hard_reject_reason: str = ""
@@ -297,12 +297,12 @@ class Photo:
         gemma_camel = None
         if self.gemma is not None:
             gemma_camel = {
-                "datingScore": self.gemma.get("dating_score", 0),
+                "overallScore": self.gemma.get("overall_score", 0),
                 "technicalQuality": self.gemma.get("technical_quality", 0),
                 "faceClarity": self.gemma.get("face_clarity", 0),
                 "expressionScore": self.gemma.get("expression_score", 0),
                 "naturalnessScore": self.gemma.get("naturalness_score", 0),
-                "outfitScore": self.gemma.get("outfit_score", 0),
+                "styleScore": self.gemma.get("style_score", 0),
                 "contextScore": self.gemma.get("context_score", 0),
                 "category": self.gemma.get("category", self.category),
                 "bestSlot": self.gemma.get("best_slot", self.best_slot),
