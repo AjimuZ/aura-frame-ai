@@ -41,6 +41,11 @@ P00.1–P00.4 evidence (2026-11-01): see [assessment](assessment.md), [testing](
 Exit: `scripts/check.sh` passes; the retired-terms test passes; no user path or personal name in
 tracked files; the desktop app starts on a supported Electron version.
 
+Evidence 2026-11-01: `bash scripts/check.sh` ran all five steps and passed (lint, Angular build,
+Electron build, Node tests 14 of 14, engine pytest 28 of 28 in a container). The Node tests include
+the retired-terms test and the personal-data test. Not observed: the desktop app starting
+(P01.SMOKE) and P01.4 (`LICENSE`), which is still open.
+
 ## 3. P02 — Container stack
 
 **Depends on:** P01. **Areas:** Docker, API, Electron main.

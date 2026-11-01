@@ -186,3 +186,12 @@ The default library name was already neutral from P01.2.2, so the remaining code
   - scripts/ralph/prd.json shows as modified in the tree. It is orchestrator-owned and I did not touch it.
   - The roadmap checkbox for P01.6 was left for the orchestrator.
 ---
+
+## 2026-11-01T19:42:52Z - P01.EXIT
+- Ran bash scripts/check.sh. All 5 steps passed: lint, Angular build, Electron build, Node tests (14 of 14, including the retired-terms and personal-data tests) and the container engine pytest (28 of 28). I added a dated evidence line to the P01 section of docs/roadmap.md. It notes that the desktop app starting (P01.SMOKE) was not observed and that P01.4 (LICENSE) is still open. I left the checkbox alone.
+- Files changed: docs/roadmap.md
+- **Learnings for future iterations:**
+  - bash scripts/check.sh passes end to end in this environment, including the Docker engine step (28 pytest tests); it needs Docker and network access.
+  - The check run rebuilds dist/aura-frame; that directory is ignored.
+  - P01.4 (LICENSE) remains open, and P01.SMOKE is what will observe the app starting on Electron 45.
+---

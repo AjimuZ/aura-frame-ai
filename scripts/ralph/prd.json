@@ -309,8 +309,8 @@
         "The P01 section of docs/roadmap.md gains a dated evidence line with what ran and its result"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses the standalone word AI anywhere, including in the product name or when quoting a description, and refuses the name of the project instructions file. Never quote those strings in the message. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. ",
+      "passes": true,
+      "notes": "Ran bash scripts/check.sh. All 5 steps passed: lint, Angular build, Electron build, Node tests (14 of 14, including the retired-terms and personal-data tests) and the container engine pytest (28 of 28). I added a dated evidence line to the P01 section of docs/roadmap.md. It notes that the desktop app starting (P01.SMOKE) was not observed and that P01.4 (LICENSE) is still open. I left the checkbox alone.",
       "dependsOn": [
         "P01.1",
         "P01.2.2",
