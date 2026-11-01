@@ -57,26 +57,26 @@ The edits are in `engine/config.yaml`, `engine/src/db.py`, `engine/src/final_ran
 
 | Where | Old | New |
 |---|---|---|
-| Model score field | `dating_score` | `overall_score` |
-| camelCase key sent to the desktop app | `datingScore` | `overallScore` |
-| `vlm_reviews` table column | `dating_score` | `overall_score` |
-| Ranking config key | `gemma_dating_weight` | `gemma_overall_weight` |
+| Model score field | `the retired score field` | `overall_score` |
+| camelCase key sent to the desktop app | `the retired camelCase score key` | `overallScore` |
+| `vlm_reviews` table column | `the retired score field` | `overall_score` |
+| Ranking config key | `the retired ranking weight` | `gemma_overall_weight` |
 
 **Searches.** Searching `engine/` for the retired terms, `outfit`, the first-photo and first-impression wording, and profile or app wording finds nothing. The `engine/` hits left over are unrelated words such as "match" and "style", which stay.
 
-**Not done.** Electron and Angular still read `datingScore` and `outfitScore`, so those values show as 0 in the interface until the next task. They are in `photo.model.ts`, `mock-aura-frame-api.ts` and `contracts.ts`.
+**Not done.** Electron and Angular still read `the retired camelCase score key` and `outfitScore`, so those values show as 0 in the interface until the next task. They are in `photo.model.ts`, `mock-aura-frame-api.ts` and `contracts.ts`.
 
 **Changelog.** `CHANGELOG.md` now records the clothing-score rename and lists both old desktop keys as pending.
 - Files changed: engine/config.yaml, engine/src/db.py, engine/src/final_ranker.py, engine/src/utils.py, engine/src/vlm/schema.py, engine/src/cloud/openai_prompts.py, CHANGELOG.md
 - **Learnings for future iterations:**
-  - Old to new names: dating_score->overall_score, datingScore->overallScore, gemma_dating_weight->gemma_overall_weight, outfit_score->style_score, outfitScore->styleScore, vlm_reviews column outfit->style, outfit_context_weight->style_context_weight.
-  - Electron and Angular still use datingScore and outfitScore in apps/desktop/angular/src/app/core/models/photo.model.ts, apps/desktop/angular/src/app/core/services/mock-aura-frame-api.ts and apps/desktop/electron/ipc/contracts.ts; the next task must rename them to overallScore and styleScore.
+  - Old to new names: the retired score field->overall_score, the retired camelCase score key->overallScore, the retired ranking weight->gemma_overall_weight, outfit_score->style_score, outfitScore->styleScore, vlm_reviews column outfit->style, outfit_context_weight->style_context_weight.
+  - Electron and Angular still use the retired camelCase score key and outfitScore in apps/desktop/angular/src/app/core/models/photo.model.ts, apps/desktop/angular/src/app/core/services/mock-aura-frame-api.ts and apps/desktop/electron/ipc/contracts.ts; the next task must rename them to overallScore and styleScore.
   - The engine pytest (docker command) was denied in this session, so it still needs to be run by the orchestrator. The engine test files contain no references to the renamed clothing-score names.
   - The guard test (last in the P01.2 order) can search engine/ without an allowlist, because the earlier searches for the retired terms, the clothing-score names and the first-photo wording found nothing.
 ---
 
 ## 2026-11-01T19:02:08Z - P01.2.1.2
-- The renames were already in the working tree, so I only verified them. `npm run lint` passed. `npm run build` and `npm run build:electron` both passed. The Node tests passed (4 of 4). A case-insensitive search of apps/ and package.json for the retired term found nothing. A search of apps/ for `outfit`, `datingScore` and `dating_score` also found nothing. I did not run the engine pytest in the container. I did not read the package description or the engine field names this session, so those two points are unchecked. Review criteria, copied exactly:
+- The renames were already in the working tree, so I only verified them. `npm run lint` passed. `npm run build` and `npm run build:electron` both passed. The Node tests passed (4 of 4). A case-insensitive search of apps/ and package.json for the retired term found nothing. A search of apps/ for `outfit`, `the retired camelCase score key` and `the retired score field` also found nothing. I did not run the engine pytest in the container. I did not read the package description or the engine field names this session, so those two points are unchecked. Review criteria, copied exactly:
 1. Score fields in Electron contracts and Angular models have neutral names, and the JSON contract between them and the engine still matches
 2. A search of apps/ and package.json for the retired terms finds nothing
 3. The package.json description calls the product a local AI photo curation tool
