@@ -69,7 +69,7 @@ docker compose config --quiet
 
 Python runs only in containers: there is no host interpreter, no `.venv` and no `engine:*` npm script. Run the engine tests with the container command in `docs/testing.md`.
 
-Planned, not yet present: `./start.sh`. See `docs/operations.md`.
+`./start.sh` starts the Compose stack (it does not open the window yet). See `docs/operations.md`.
 
 ## Preferred Claude Code Workflow
 

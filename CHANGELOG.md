@@ -21,6 +21,13 @@
   `/photos`, with data and models in named volumes. `bash scripts/check.sh --integration` proves the
   isolation on a synthetic folder, using the image without PyTorch, no GPU and no model. The PyTorch image,
   GPU access and a served model have not been run, and the desktop app does not use the stack yet (P02.4).
+- `start.sh` starts, inspects and stops the container stack: `--cpu`, `--rebuild`, `--backend-only`,
+  `--provider local|none`, `--status`, `--logs [service]` and `--stop`. It checks Docker, Compose, the GPU
+  and the model files, warns when Docker has less than 10 GB, generates a new session token per start and
+  passes it only through the environment, and never downloads a model. Exit codes are 0, 1 (prerequisite),
+  2 (invalid arguments) and 3 (health check). It is tested with stubbed tools only, not against a real
+  Docker daemon. It does not open the desktop window yet, and `--fetch-models`, `--codex-login` and
+  `--provider codex` say that they are not available yet.
 
 ### Changed
 

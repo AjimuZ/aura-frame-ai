@@ -14,7 +14,7 @@ A failing check is named in the summary and gives exit 1. A check whose files do
 
 | Option | Runs |
 | --- | --- |
-| `--node` | Lint, Angular build, Electron build, `node --test "tests/**/*.test.cjs"` |
+| `--node` | Lint, Angular build, Electron build, `bash -n start.sh`, `node --test "tests/**/*.test.cjs"` |
 | `--engine` | Engine tests in the throwaway container below. Fails if Docker is missing |
 | `--compose` | `docker compose config --quiet`, with and without the `local` profile and the GPU overlay, then the static policy in `scripts/compose-policy.cjs`. Starts nothing |
 | `--integration` | `--compose`, then starts the stack on a synthetic folder and tests its isolation from inside. See [below](#container-isolation) |
@@ -36,6 +36,7 @@ Results from 2026-11-01 on the reference PC.
 | Engine tests, container | See below | Pass, 27 of 27, in 1.65 s, without the torch stack |
 | Compose configuration and policy | `bash scripts/check.sh --compose` | Pass, exit 0 |
 | Container isolation | `bash scripts/check.sh --integration` | Pass, all assertions hold, with the `core` stage of `api`, no GPU and no model |
+| `start.sh` contract | `node --test tests/start-sh.test.cjs` | Pass, 11 of 11, with stubbed `docker`, `nvidia-smi`, `curl` and `uname`. Covers exit codes 2, 1 and 3, the token never being an argument, the model guidance, `MSYS_NO_PATHCONV=1` and the memory warning. Gap: not run against a real Docker daemon |
 | Design system color check | See [Design system](design-system.md#verification) | **Fails:** 13 literals outside the token file, fixed in P06 |
 | Electron 33 to 45 breaking changes | Not checked | Gap: sessions have no web access, so upstream release notes could not be read. P01.SMOKE is what observes the app running |
 | Angular unit tests | None exist | Gap |

@@ -103,6 +103,7 @@ if [ "$run_node" -eq 1 ]; then
   run_check "lint" npm run lint
   run_check "angular build" npm run build:angular
   run_check "electron build" npm run build:electron
+  run_check "start.sh syntax" bash -n start.sh
   if compgen -G "tests/*.test.cjs" >/dev/null; then
     run_check "node tests" node_tests
   else

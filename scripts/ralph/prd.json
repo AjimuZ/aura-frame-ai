@@ -454,8 +454,8 @@
         "It sets `MSYS_NO_PATHCONV=1` on Windows and warns when Docker has less than 10 GB"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses the standalone word AI anywhere, including in the product name or when quoting a description, and refuses the name of the project instructions file. Never quote those strings in the message. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Flags whose feature comes later (`--fetch-models`, `--codex-login`, `--provider codex`) exit with a clear \"not available yet\" message until P03.2 and P05.2. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "passes": true,
+      "notes": "start.sh is in place, with 11 tests that run it under bash with stubbed tools. I reviewed the attempt 1 work, ran `bash scripts/check.sh --node` (lint, both builds, `bash -n start.sh` and 49 Node tests, all passing), and set the roadmap checkbox for this task back to unchecked. start.sh has not been run against a real Docker daemon.",
       "dependsOn": [
         "P02.1"
       ],

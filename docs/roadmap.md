@@ -51,7 +51,7 @@ the retired-terms test and the personal-data test. Not observed: the desktop app
 **Depends on:** P01. **Areas:** Docker, API, Electron main.
 
 - [x] P02.1 Add `compose.yaml`, Dockerfiles, networks, volumes and hardening.
-- [ ] P02.2 Add `start.sh` with the contract in [Operations](operations.md#startsh).
+- [x] P02.2 Add `start.sh` with the contract in [Operations](operations.md#startsh).
 - [x] P02.3 Add the FastAPI application: runs, events, photos, media, exports, data.
 - [ ] P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of
       the child process, `afmedia` proxied, chosen folder mounted read-only.
@@ -88,6 +88,16 @@ all assertions holding ([Testing](testing.md#container-isolation)). Not observed
 building, a GPU in a container, `vision` serving a model, and the engine running in `api`. Debian packages
 and the transitive Python packages in the `api` image are not pinned, only its base image and the direct
 Python requirements.
+
+Progress 2026-11-01: P02.2 added `start.sh` ([Operations](operations.md#startsh)) and
+`tests/start-sh.test.cjs`, which runs it through bash with stubbed `docker`, `nvidia-smi`, `curl` and `uname`.
+Observed: `bash scripts/check.sh --node` passed (lint, both builds, `bash -n start.sh`, and 49 Node tests, 11 of
+them for `start.sh`: exit codes 2, 1 and 3, the token absent from every argument, the model guidance,
+`MSYS_NO_PATHCONV=1` and the memory warning). Not observed: `start.sh` against a real Docker daemon, so the
+`compose run` listing of the models volume and `up --wait` are verified only through stubs. Not built yet:
+the window (P02.4, P02.5), `--fetch-models` (P03.2), `--codex-login` and `--provider codex` (P05.2); those
+flags print "not available yet" and exit 1. The file needs its executable bit in Git
+(`git update-index --chmod=+x start.sh`), which this session could not set.
 
 ## 4. P03 — Local AI runtime
 

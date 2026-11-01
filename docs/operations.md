@@ -1,7 +1,9 @@
 # Operations
 
-Status: **partly implemented** ([P02](roadmap.md)). `compose.yaml` exists, and the desktop app does not
-use it yet. `start.sh` does not exist yet, so its contract below is planned. To run the current code, see
+Status: **partly implemented** ([P02](roadmap.md)). `compose.yaml` and `start.sh` exist, and the desktop app
+does not use the stack yet. Of the `start.sh` contract below, the services, the checks, the token and the
+exit codes are implemented. The window, `--fetch-models`, `--codex-login` and `--provider codex` are
+planned, and the script says so (see [Not available yet](#not-available-yet)). To run the current code, see
 [Running the current code](#running-the-current-code).
 
 ## Compose stack
@@ -71,6 +73,38 @@ Contract:
 - The API port binds only to `127.0.0.1`. The default is `8420`, and users do not need it.
 - It holds no secrets. It reads configuration from the environment and `config.yaml`.
 - On Windows it sets `MSYS_NO_PATHCONV=1`, so that Git Bash does not rewrite container paths.
+
+Behaviour as implemented:
+
+- Arguments are checked first, so exit `2` never depends on the host. Two action flags together
+  (`--status`, `--logs`, `--stop`, `--fetch-models`, `--codex-login`) are invalid.
+- Prerequisites (exit `1`): the Docker CLI, a reachable daemon, Compose v2, and `nvidia-smi` unless
+  `--cpu`. Docker memory under 10 GB only warns. A failed image build also exits `1`.
+- Provider: without `--provider`, `local` is used when both model files are in the `models` volume, and
+  `none` otherwise, with an explanation. `--provider local` with missing files exits `1`. The files are
+  listed read-only through a throwaway `vision` container, which downloads no model.
+- Start: `docker compose up -d --build --wait`, with `--profile local` only when the local provider runs
+  and `compose.gpu.yaml` only without `--cpu`. `--rebuild` first builds the images without the cache.
+  Then the script asks the gateway for `/health` with the token. Failing either gives exit `3`.
+- The token is 64 hex characters from `/dev/urandom`. Compose reads it from the environment, `curl` reads it
+  from a configuration on stdin, and it is never printed. `--backend-only` also writes it to
+  `data/session-token`, readable by the user only and ignored by Git.
+- `--status`, `--logs [service]` and `--stop` only run the matching `docker compose` command.
+  `--stop` keeps the volumes.
+
+### Not available yet
+
+These flags are valid, but their feature comes later. Each prints a "not available yet" message and exits
+`1` without calling Docker or downloading anything:
+
+| Flag | Planned in |
+| --- | --- |
+| `--fetch-models` | P03.2 |
+| `--codex-login`, `--provider codex` | P05.2 |
+
+The window is not launched either: the desktop app does not use the services until P02.4, and its container
+build comes in P02.5. After a start, the script prints that, leaves the services running, and `--stop` ends
+them. `--rebuild` rebuilds the images only.
 
 ## First start
 

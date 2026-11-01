@@ -26,6 +26,8 @@
 - To prove a negative in a container check, pair it with a positive control: the same probe must succeed against a reachable target, and a write refusal must carry the specific error (EROFS), so a missing tool or a permission error cannot pass as isolation.
 - Check Compose hardening against `docker compose config --format json` rather than the YAML text, and unit test the checker with one weakened configuration per rule.
 - Start a root-context .dockerignore with `*` and re-allow only what the image needs, so personal folders never reach the Docker daemon.
+- Test shell scripts by copying them to a temp dir and putting stub executables first on PATH. Stubs log argv and the environment to files, so a test can prove a secret never appears in an argument.
+- Pass secrets to child processes through exported environment variables, and give curl its header through a config on stdin (`-K -`), so nothing sensitive appears in the process list.
 
 ---
 
@@ -321,4 +323,17 @@ No retired terms or personal data were found (guard tests pass), and img/ was no
   - In this session `bash scripts/check.sh` with any flag and `docker buildx imagetools inspect` are allowed. `docker version` and `docker compose version` are denied. A first integration run with a cached vision pull took under 10 minutes.
   - Compose top-level `name: auraframe` with volumes that carry no explicit `name:` gives auraframe_data and auraframe_models, while `-p auraframe-integration` gets separate volumes, so the integration `down -v` cannot touch real data. Do not add explicit volume names.
   - The gateway resolves `api` per request through Docker's DNS (127.0.0.11) and a variable, so recreating api with another photos folder does not leave a stale address.
+---
+
+## 2026-11-01T20:37:07Z - P02.2
+- start.sh is in place, with 11 tests that run it under bash with stubbed tools. I reviewed the attempt 1 work, ran `bash scripts/check.sh --node` (lint, both builds, `bash -n start.sh` and 49 Node tests, all passing), and set the roadmap checkbox for this task back to unchecked. start.sh has not been run against a real Docker daemon.
+- Files changed: start.sh, tests/start-sh.test.cjs, scripts/check.sh, CHANGELOG.md, CLAUDE.md, docs/operations.md, docs/roadmap.md, docs/testing.md
+- **Learnings for future iterations:**
+  - start.sh needs its executable bit in Git: run `git update-index --chmod=+x start.sh`. Sessions could not set it.
+  - Planned flags (--fetch-models, --codex-login, --provider codex) exit 1 with 'not available yet'. P03.2 and P05.2 must replace those branches in start.sh and update docs/operations.md 'Not available yet' and the tests in tests/start-sh.test.cjs.
+  - start.sh lists the models volume with `compose --profile local run --rm --no-deps --entrypoint ls vision -1 /models`; P03.2 should keep the default model filenames in sync with the ones in start.sh (AURAFRAME_VISION_MODEL and AURAFRAME_VISION_MMPROJ defaults).
+  - Without --provider, a missing model degrades to provider none (vision stays off); with the model present the local profile is used and `up --wait` waits for vision, which has a 300 s start_period.
+  - The window launch is not implemented: P02.4 and P02.5 must add it to report_started in start.sh and update docs/operations.md.
+  - The test harness copies start.sh into a temp dir with stub docker, nvidia-smi, curl and uname first on PATH, and removes real docker dirs from PATH for the missing-docker case.
+  - A commit message must not contain the word for the cloud sign-in provider; the validator rejected it in attempt 1.
 ---
