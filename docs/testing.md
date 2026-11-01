@@ -6,6 +6,21 @@
 - A check counts as passed only after it ran. Each result below carries a date.
 - Tests live at public interfaces, and expected values come from outside the code under test.
 
+## Single entry point
+
+`bash scripts/check.sh` runs every check below that exists and exits 0 only when all of them pass.
+A failing check is named in the summary and gives exit 1. A check whose files do not exist prints a
+`SKIP:` line.
+
+| Option | Runs |
+| --- | --- |
+| `--node` | Lint, Angular build, Electron build, `node --test "tests/**/*.test.cjs"` |
+| `--engine` | Engine tests in the throwaway container below. Fails if Docker is missing |
+| `--integration` | Slow container integration checks. None exist yet, so it prints `SKIP` (P02 adds them) |
+| none | `--node` and `--engine`; integration checks are left out |
+
+Status: written in P01.1; its first full run is not yet recorded here.
+
 ## Current checks
 
 Results from 2026-11-01 on the reference PC.
@@ -48,7 +63,6 @@ are what the suite asserts. The OpenCLIP and LAION paths are not covered.
 
 | Package | Check | Exit condition |
 | --- | --- | --- |
-| P01 | `scripts/check.sh` | Runs every check below that exists, with one exit code |
 | P01 | Retired-terms search | No match in the repository. The test holds the term list in encoded form so the repository stays clean |
 | P02 | `docker compose config --quiet` | Valid configuration |
 | P02 | Network isolation test | From `api` and `vision`, connections to the internet fail |

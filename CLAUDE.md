@@ -63,11 +63,12 @@ npm run lint
 npm run build:angular
 npm run build:electron
 npm run test:profiles
+bash scripts/check.sh              # all checks; --node, --engine, --integration select subsets
 ```
 
 `npm run engine:test` needs Python 3.12, which this PC lacks, and `.venv` is broken. Run the engine tests with the container command in `docs/testing.md`.
 
-Planned, not yet present: `./start.sh`, `docker compose`, `scripts/check.sh`. See `docs/operations.md`.
+Planned, not yet present: `./start.sh`, `docker compose`. See `docs/operations.md`.
 
 ## Preferred Claude Code Workflow
 

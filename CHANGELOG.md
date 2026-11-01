@@ -13,6 +13,8 @@
 
 ### Added
 
+- `scripts/check.sh`, one entry point for lint, builds, Node tests and the containerized engine tests,
+  with `--node`, `--engine` and `--integration` subsets and visible SKIP lines.
 - Documentation index, requirements, roadmap with exit checks, testing guide with dated results, risks,
   repository assessment with verified defects, Claude Code guide with the approved skills, and nine
   decision records.
