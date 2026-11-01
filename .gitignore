@@ -1,0 +1,55 @@
+# Personal photo inputs and generated analysis data
+/img/
+/data/
+/thumbnails/
+
+# Local SQLite databases and write-ahead-log sidecars
+*.db
+*.db-wal
+*.db-shm
+
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python caches and tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node, Angular, Electron, and packaging output
+node_modules/
+dist/
+dist-electron/
+electron-dist/
+out/
+build/
+release/
+.angular/
+.electron-cache/
+*.blockmap
+*.asar
+
+# Local Claude Code state and hook output
+.claude/settings.local.json
+.claude/logs/
+.claude/backups/
+
+# Logs and local editor/OS noise
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Intentionally do not ignore image extensions globally. Synthetic or
+# placeholder assets under docs/screenshots/ must remain versionable.
+.ajimu-autopilot/

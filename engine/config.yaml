@@ -1,0 +1,245 @@
+# AuraFrame AI engine configuration.
+# All thresholds, weights, and paths live here so nothing sensitive is hardcoded.
+# Paths are relative to the repository root and may be overridden via the desktop UI
+# or with the --data-root CLI flag (which redirects working/thumbs/db/output).
+
+model:
+  provider: "ollama"
+  # Configurable local model name. Default primary, with a lighter fallback used when
+  # the primary is missing or fails. These are local Ollama tags, never cloud models.
+  name: "gemma4:12b"
+  fallback_name: "gemma3:4b"
+  ollama_url: "http://localhost:11434"
+  use_vision: true
+  request_timeout_seconds: 120
+  max_retries: 2
+  # Max tokens for the JSON verdict. The schema is small; this only caps runaway output.
+  num_predict: 768
+
+input:
+  photos_dir: "./data/input_originali"
+  include_subfolders: true
+  supported_extensions: [".jpg", ".jpeg", ".png", ".webp", ".heic"]
+
+output:
+  base_dir: "./data/output"
+  working_dir: "./data/working"
+  reports_dir: "./data/reports"
+  thumbs_dir: "./data/working/thumbs"
+  db_path: "./data/working/auraframe.db"
+  top_final_count: 6
+  top_review_count: 50
+  # Number of strongest candidates forwarded to the local VLM (was 150 indiscriminate).
+  vlm_candidate_count: 70
+  thumbnail_size: 512
+
+filters:
+  min_width: 800
+  min_height: 800
+  blur_threshold: 120
+  min_brightness: 35
+  max_brightness: 230
+  # Aspect-ratio sanity: reject extreme panoramas / slivers outside this range.
+  min_aspect_ratio: 0.4
+  max_aspect_ratio: 2.6
+  # Perceptual-hash Hamming distance under which two photos count as near-duplicates.
+  phash_distance: 5
+  max_group_faces_for_main_photo: 1
+  max_group_faces_allowed: 4
+
+# Composite face-quality score weights (interpretable, sum ~= 1.0). No identity is used.
+face:
+  size_weight: 0.25
+  centrality_weight: 0.20
+  clarity_weight: 0.25
+  eyes_weight: 0.15
+  frontality_weight: 0.15
+  min_detection_confidence: 0.5
+
+ranking:
+  technical_weight: 0.22
+  gemma_dating_weight: 0.22
+  face_clarity_weight: 0.15
+  aesthetic_weight: 0.08
+  naturalness_weight: 0.08
+  outfit_context_weight: 0.10
+  diversity_weight: 0.10
+  recency_weight: 0.05
+
+# Pipeline presets toggle the heavier stages and the candidate budget. The selected
+# preset overrides the matching keys above. "balanced" is the default.
+presets:
+  fast:
+    embeddings: false
+    aesthetic: false
+    vlm: false
+    vlm_candidate_count: 40
+  balanced:
+    embeddings: true
+    aesthetic: true
+    vlm: true
+    vlm_candidate_count: 70
+  quality:
+    embeddings: true
+    aesthetic: true
+    vlm: true
+    vlm_candidate_count: 120
+
+embeddings:
+  enabled: true
+  # ViT-L/14 (OpenAI) so whole-frame embeddings (768-dim) match the LAION aesthetic
+  # predictor's input space. Heavier and slower on CPU than ViT-B/32; switch both back
+  # together if you disable the aesthetic predictor. cluster_distance may need retuning.
+  model: "ViT-L-14-quickgelu"
+  pretrained: "openai"
+  cluster_distance: 0.12
+
+aesthetic:
+  enabled: true
+  # Optional local weights for the LAION aesthetic predictor MLP. If absent, the engine
+  # falls back to a neutral score (no automatic download).
+  weights_path: "./data/models/aesthetic_predictor.pth"
+
+privacy:
+  modify_originals: false
+  # Master cloud switch. MUST be true (together with openai.enabled) for any image to
+  # leave the machine. Default false: the app is local-first and never uploads by default.
+  allow_cloud_api: false
+  debug_raw_ai_response: false
+  # Mask absolute paths in emitted logs (filename only) for privacy-safe auditing.
+  mask_paths_in_logs: true
+
+# Local Minimal Gate: the local pipeline only removes objectively unusable photos and
+# adds soft flags for everything else. "When in doubt, keep it" — borderline photos are
+# preserved for the optional OpenAI review rather than discarded on weak technical signals.
+local_gate:
+  mode: "minimal"            # minimal | strict (legacy aggressive rejection)
+  reject_policy: "extreme_only"
+  when_in_doubt: "keep_for_openai"
+
+  hard_reject:
+    corrupted_file: true
+    unsupported_format: true
+    exact_duplicates: true
+    extreme_near_duplicates: false   # near-dups are kept as duplicate_candidate, not rejected
+    fully_black_image: true
+    fully_white_image: true
+    extremely_low_resolution: true
+    extreme_blur: true
+    non_photographic_image: true
+
+  soft_flags_only:
+    face_not_detected: true
+    small_face: true
+    group_photo: true
+    low_light: true
+    medium_blur: true
+    selfie: true
+    old_photo: true
+    odd_composition: true
+    low_local_score: true
+
+  thresholds:
+    min_width_hard_reject: 400
+    min_height_hard_reject: 400
+    extreme_blur_threshold: 35
+    possible_blur_threshold: 120
+    extreme_dark_brightness: 10
+    possible_dark_brightness: 35
+    extreme_bright_brightness: 245
+    possible_bright_brightness: 230
+    small_face_score: 25
+    low_local_score: 40
+    exact_duplicate_hash_distance: 0
+    near_duplicate_hash_distance: 3
+
+# OpenAI Quality Mode: OPTIONAL parallel cloud review. OFF by default. Only resized,
+# EXIF-stripped, anonymized image copies are sent (never originals/paths/filenames/geo).
+# No Batch API. An internal budget guard caps spend. Disable any time via enabled: false.
+openai:
+  enabled: false
+  mode: "quality_sync"
+  use_batch_api: false
+
+  api_key_env: "OPENAI_API_KEY"
+
+  budget:
+    max_usd: 16.00
+    soft_stop_usd: 14.50
+    hard_stop_usd: 15.80
+    absolute_max_usd: 16.00
+
+  # Per-stage primary models. NOTE: verify these IDs exist on your account; on a
+  # "model not found" error the matching fallback below is used automatically.
+  models:
+    broad_scan: "gpt-5.4-mini"
+    quality_review: "gpt-5.4-mini"
+    premium_review: "gpt-5.4"
+    final_judge: "gpt-5.5"
+
+  fallback_models:
+    broad_scan: "gpt-4.1-mini"
+    quality_review: "gpt-4.1-mini"
+    premium_review: "gpt-4.1"
+    final_judge: "gpt-4.1"
+
+  images:
+    strip_exif: true
+    convert_to_jpeg: true
+    broad_scan_max_px: 512
+    quality_review_max_px: 1024
+    premium_review_max_px: 1024
+    final_judge_max_px: 1024
+    broad_scan_detail: "low"
+    quality_review_detail: "high"
+    premium_review_detail: "high"
+    final_judge_detail: "high"
+    jpeg_quality_broad_scan: 80
+    jpeg_quality_quality_review: 88
+    jpeg_quality_premium_review: 90
+    jpeg_quality_final_judge: 90
+
+  limits:
+    broad_scan_max_photos: 4000
+    quality_review_max_photos: 1000
+    premium_review_max_photos: 200
+    final_judge_max_photos: 40
+
+  concurrency:
+    max_parallel_requests: 4
+    retry_attempts: 2
+    retry_backoff_seconds: 3
+    request_timeout_seconds: 90
+    respect_rate_limit_headers: true
+
+  privacy:
+    send_originals: false
+    send_exif: false
+    send_file_names: false
+    send_file_paths: false
+    send_geo_metadata: false
+    save_raw_response: false
+    delete_temp_images_after_request: true
+
+  output:
+    save_openai_scores: true
+    save_openai_reasons: true
+    save_openai_debug: false
+
+  # Cost estimation table (USD per 1,000,000 tokens). VERIFY against the live OpenAI
+  # pricing page before relying on estimates; unknown models fall back to default_pricing.
+  # Image tokens are approximated by detail level in openai_cost_estimator.py.
+  pricing:
+    default_pricing: { input_per_1m: 2.00, output_per_1m: 8.00 }
+    models:
+      "gpt-5.4-mini": { input_per_1m: 0.50, output_per_1m: 2.00 }
+      "gpt-5.4": { input_per_1m: 3.00, output_per_1m: 12.00 }
+      "gpt-5.5": { input_per_1m: 5.00, output_per_1m: 20.00 }
+      "gpt-4.1-mini": { input_per_1m: 0.40, output_per_1m: 1.60 }
+      "gpt-4.1": { input_per_1m: 2.00, output_per_1m: 8.00 }
+    # Assumed completion tokens per response, per stage (small strict JSON verdicts).
+    assumed_output_tokens:
+      broad_scan: 60
+      quality_review: 160
+      premium_review: 200
+      final_judge: 1200

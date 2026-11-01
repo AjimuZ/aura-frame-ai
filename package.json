@@ -1,0 +1,73 @@
+{
+  "name": "aura-frame-ai",
+  "version": "1.0.0",
+  "description": "Local AI Photo Curator for Dating Profiles - a privacy-first desktop tool that ranks personal photos locally.",
+  "private": true,
+  "author": "Azim",
+  "license": "MIT",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "ng": "ng",
+    "start:angular": "ng serve",
+    "build:angular": "ng build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "watch:electron": "tsc -p tsconfig.electron.json --watch",
+    "build": "npm run build:angular && npm run build:electron",
+    "electron": "electron .",
+    "start": "concurrently -k -n NG,ELECTRON -c blue,magenta \"npm:start:angular\" \"npm:electron:dev\"",
+    "electron:dev": "wait-on tcp:4200 && npm run build:electron && cross-env AURA_DEV=1 electron .",
+    "package": "npm run build && electron-builder",
+    "lint": "eslint \"apps/desktop/**/*.ts\"",
+    "engine:index": "py -3.12 engine/main.py index",
+    "engine:analyze": "py -3.12 engine/main.py analyze",
+    "engine:gemma": "py -3.12 engine/main.py gemma-review",
+    "engine:export": "py -3.12 engine/main.py export-final",
+    "engine:test": "py -3.12 -m pytest engine/tests",
+    "test:profiles": "npm run build:electron && node --test tests/profile-store.test.cjs"
+  },
+  "dependencies": {
+    "@angular/animations": "^20.0.0",
+    "@angular/common": "^20.0.0",
+    "@angular/compiler": "^20.0.0",
+    "@angular/core": "^20.0.0",
+    "@angular/forms": "^20.0.0",
+    "@angular/platform-browser": "^20.0.0",
+    "@angular/router": "^20.0.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.8.0",
+    "zone.js": "~0.15.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^20.0.0",
+    "@angular/cli": "^20.0.0",
+    "@angular/compiler-cli": "^20.0.0",
+    "@angular-eslint/builder": "^20.0.0",
+    "@angular-eslint/eslint-plugin": "^20.0.0",
+    "@angular-eslint/eslint-plugin-template": "^20.0.0",
+    "@angular-eslint/template-parser": "^20.0.0",
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "eslint": "^9.0.0",
+    "typescript": "~5.8.0",
+    "typescript-eslint": "^8.0.0",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.auraframe.ai",
+    "productName": "AuraFrame AI",
+    "files": [
+      "dist-electron/**/*",
+      "dist/aura-frame/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

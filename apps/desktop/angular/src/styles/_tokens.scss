@@ -1,0 +1,37 @@
+// AuraFrame Coral Night - official design tokens.
+// Dark navy background with coral pink primary actions. Soft, premium, photographic.
+:root {
+  --af-bg-main: #2d2f42;
+  --af-bg-surface: #36384d;
+  --af-bg-elevated: #404259;
+  --af-bg-deep: #262839;
+
+  --af-primary: #d46c7f;
+  --af-primary-hover: #f6798c;
+  --af-primary-soft: #e4a2ad;
+  --af-primary-muted: #895164;
+
+  --af-text-main: #ffffff;
+  --af-text-muted: #f3d8dd;
+  --af-text-soft: #f7e6ea;
+
+  --af-border-soft: rgba(243, 216, 221, 0.14);
+  --af-border-primary: rgba(212, 108, 127, 0.38);
+
+  --af-shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.22);
+  --af-shadow-primary: 0 0 0 3px rgba(212, 108, 127, 0.22);
+
+  --af-success: #8fd6b5;
+  --af-warning: #f0b86e;
+  --af-danger: #d46c7f;
+
+  // Spacing and radius scale used across the app shell and components.
+  --af-radius-sm: 8px;
+  --af-radius-md: 12px;
+  --af-radius-lg: 18px;
+  --af-space-xs: 4px;
+  --af-space-sm: 8px;
+  --af-space-md: 16px;
+  --af-space-lg: 24px;
+  --af-space-xl: 32px;
+}

@@ -1,0 +1,82 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "newProjectRoot": "apps/desktop",
+  "projects": {
+    "aura-frame": {
+      "projectType": "application",
+      "root": "apps/desktop/angular",
+      "sourceRoot": "apps/desktop/angular/src",
+      "prefix": "af",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "outputPath": "dist/aura-frame",
+            "index": "apps/desktop/angular/src/index.html",
+            "browser": "apps/desktop/angular/src/main.ts",
+            "polyfills": ["zone.js"],
+            "tsConfig": "tsconfig.app.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "apps/desktop/angular/src/assets",
+                "output": "assets"
+              }
+            ],
+            "styles": ["apps/desktop/angular/src/styles.scss"],
+            "scripts": [],
+            "baseHref": "./"
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "1mb",
+                  "maximumError": "2mb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "8kb",
+                  "maximumError": "16kb"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 4200
+          },
+          "configurations": {
+            "production": {
+              "buildTarget": "aura-frame:build:production"
+            },
+            "development": {
+              "buildTarget": "aura-frame:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": [
+              "apps/desktop/angular/src/**/*.ts",
+              "apps/desktop/angular/src/**/*.html"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

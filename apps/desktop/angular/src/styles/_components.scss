@@ -1,0 +1,157 @@
+// Shared visual components: badges, chips, progress bar, log panel, stepper, empty state.
+
+.af-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--af-primary);
+  color: var(--af-text-main);
+}
+
+.af-badge--muted {
+  background: var(--af-bg-elevated);
+  color: var(--af-text-muted);
+}
+
+.af-badge--success {
+  background: rgba(143, 214, 181, 0.18);
+  color: var(--af-success);
+}
+
+.af-badge--warning {
+  background: rgba(240, 184, 110, 0.18);
+  color: var(--af-warning);
+}
+
+.af-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  background: rgba(243, 216, 221, 0.1);
+  color: var(--af-text-muted);
+  border: 1px solid var(--af-border-soft);
+}
+
+.af-chip--active {
+  background: rgba(212, 108, 127, 0.16);
+  color: var(--af-text-main);
+  border-color: var(--af-border-primary);
+  cursor: pointer;
+}
+
+.af-progress {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--af-bg-surface);
+  overflow: hidden;
+}
+
+.af-progress__bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--af-primary), var(--af-primary-hover));
+  transition: width 240ms ease;
+}
+
+.af-log {
+  background: var(--af-bg-deep);
+  border: 1px solid var(--af-border-soft);
+  border-radius: var(--af-radius-sm);
+  padding: var(--af-space-md);
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 12px;
+  color: var(--af-text-soft);
+  height: 240px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.af-log__line--warning {
+  color: var(--af-warning);
+}
+
+.af-log__line--error {
+  color: var(--af-primary-hover);
+}
+
+.af-stepper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--af-space-sm);
+}
+
+.af-step {
+  display: flex;
+  align-items: center;
+  gap: var(--af-space-sm);
+  padding: 10px 12px;
+  border-radius: var(--af-radius-sm);
+  background: var(--af-bg-surface);
+  border: 1px solid var(--af-border-soft);
+  color: var(--af-text-muted);
+}
+
+.af-step--active {
+  border-color: var(--af-border-primary);
+  color: var(--af-text-main);
+}
+
+.af-step--done {
+  color: var(--af-success);
+}
+
+.af-step__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--af-bg-elevated);
+}
+
+.af-step--active .af-step__dot {
+  background: var(--af-primary);
+}
+
+.af-step--done .af-step__dot {
+  background: var(--af-success);
+}
+
+.af-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--af-space-sm);
+  padding: var(--af-space-xl);
+  text-align: center;
+  color: var(--af-text-muted);
+  border: 1px dashed var(--af-border-soft);
+  border-radius: var(--af-radius-md);
+}
+
+.af-actions {
+  display: flex;
+  gap: var(--af-space-sm);
+  flex-wrap: wrap;
+}
+
+.af-score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  padding: 2px 8px;
+  border-radius: var(--af-radius-sm);
+  background: var(--af-primary);
+  color: var(--af-text-main);
+  font-weight: 700;
+  font-size: 13px;
+}

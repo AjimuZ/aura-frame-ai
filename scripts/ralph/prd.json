@@ -1,0 +1,1197 @@
+{
+  "project": "aura-frame-ai",
+  "branchName": "main",
+  "description": "Migrate AuraFrame AI from the current desktop code to the target in docs/architecture.md, following docs/roadmap.md. Tasks marked NEEDS THE OWNER cannot finish without a person.",
+  "userStories": [
+    {
+      "id": "P00.1",
+      "title": "Assess the repository, with evidence.",
+      "description": "Assess the repository, with evidence.",
+      "acceptanceCriteria": [
+        "docs/assessment.md lists the current behavior and each defect with run or read evidence"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": "Checked at setup on 2026-11-01. All file:line references in the assessment resolve except start.py, which is absent from the working tree (see P02.6). Re-run: D1, D2, D3, D6, D12, lint, builds and tests.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "1. P00 — Baseline and documentation",
+        "line": "P00.1 Assess the repository, with evidence."
+      }
+    },
+    {
+      "id": "P00.2",
+      "title": "Research the current state of the art for the pipeline, local models and Codex CLI.",
+      "description": "Research the current state of the art for the pipeline, local models and Codex CLI.",
+      "acceptanceCriteria": [
+        "docs/technology.md and docs/ai-providers.md record the choices with their sources"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": "Checked at setup on 2026-11-01 by reading the documents. The research itself was not repeated.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "1. P00 — Baseline and documentation",
+        "line": "P00.2 Research the current state of the art for the pipeline, local models and Codex CLI."
+      }
+    },
+    {
+      "id": "P00.3",
+      "title": "Replace all documentation with the new set.",
+      "description": "Replace all documentation with the new set.",
+      "acceptanceCriteria": [
+        "docs/README.md indexes the new set",
+        "A search of docs/ for the retired terms finds nothing"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": "Checked at setup on 2026-11-01: every indexed document exists, and the search finds no match in docs/.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "1. P00 — Baseline and documentation",
+        "line": "P00.3 Replace all documentation with the new set."
+      }
+    },
+    {
+      "id": "P00.4",
+      "title": "Review and install 10 Claude Code skills at user scope.",
+      "description": "Review and install 10 Claude Code skills at user scope.",
+      "acceptanceCriteria": [
+        "The 10 skills listed in docs/claude-code.md are installed at user scope, not in this repository"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": "Checked at setup on 2026-11-01 by listing the user skills folder. The recorded review was not repeated.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "1. P00 — Baseline and documentation",
+        "line": "P00.4 Review and install 10 Claude Code skills at user scope."
+      }
+    },
+    {
+      "id": "P00.5",
+      "title": "Make the first commit. The owner must authorize this.",
+      "description": "Make the first commit. The owner must authorize this.",
+      "acceptanceCriteria": [
+        "`git log` shows at least one commit on main",
+        "`git ls-files` lists nothing under img/, data/, thumbnails/, .venv/, node_modules/ or .ajimu-autopilot/, and no *.db file",
+        "A search of docs/ for the retired terms finds nothing, which closes the P00 exit check"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: the owner makes and authorizes the first commit before any run. The runner refuses to start without a commit and a remote. Once the commit exists, the preflight only has to verify these criteria. Retired terms, base64: ZGF0aW5n.",
+      "dependsOn": [],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "1. P00 — Baseline and documentation",
+        "line": "P00.5 Make the first commit. The owner must authorize this."
+      }
+    },
+    {
+      "id": "P01.1",
+      "title": "Add `scripts/check.sh` as the single entry point for all checks.",
+      "description": "Add `scripts/check.sh` as the single entry point for all checks.",
+      "acceptanceCriteria": [
+        "`bash scripts/check.sh` runs lint, the Angular and Electron builds, the Node tests in tests/ and the engine tests in the throwaway container from docs/testing.md",
+        "It exits 0 only when every sub-check passes, and a failing sub-check gives a non-zero exit and names the check",
+        "A check whose files do not exist yet prints a visible SKIP line instead of passing silently",
+        "`--node`, `--engine` and `--integration` select subsets, and the default leaves slow container integration checks out",
+        "It works in Git Bash on Windows (`MSYS_NO_PATHCONV=1`, `pwd -W`), needs no Python on the host and mounts only engine/, read-only",
+        "docs/testing.md and the command list in CLAUDE.md describe it as implemented"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": "The runner runs its four configured checks directly, so this script must stay equivalent to them.",
+      "dependsOn": [
+        "P00.5"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "P01.1 Add `scripts/check.sh` as the single entry point for all checks."
+      }
+    },
+    {
+      "id": "P01.2.1",
+      "title": "Remove the retired vocabulary and add the test that keeps it out",
+      "description": "Remove the retired product vocabulary from code, prompts, schemas, names, comments, tests and `package.json`. Rename `profile` to `library` and the AI fields to neutral names.",
+      "acceptanceCriteria": [
+        "tests/retired-terms.test.cjs scans `git ls-files -co --exclude-standard` output, holds its term list base64-encoded, and fails naming file and line",
+        "Matching is identifier-aware: snake_case and camelCase forms and any letter case match, while words that merely contain the letters, such as updating or validating, do not",
+        "A test proves the matcher catches a planted term in a temporary file",
+        "The test passes on the repository, including scripts/ralph/ and package.json",
+        "Score fields in the engine schema, database, config, reports, Electron contracts and Angular models have neutral names, and the JSON contract between them still matches",
+        "The local and cloud prompt texts describe general photograph judgment and contain no retired concept",
+        "The cloud flow gets vocabulary changes only and no new behavior",
+        "docs/assessment.md and CHANGELOG.md record the change"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Retired terms, base64: ZGF0aW5n. Never write them in plain text. No data migration is needed, because a rerun recreates the data (ADR 0001). The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
+      "dependsOn": [
+        "P01.1"
+      ],
+      "splitFrom": "P01.2",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "P01.2 Remove the retired product vocabulary from code, prompts, schemas, names, comments,"
+      }
+    },
+    {
+      "id": "P01.2.2",
+      "title": "Rename profile to library across Electron, Angular and the engine",
+      "description": "Remove the retired product vocabulary from code, prompts, schemas, names, comments, tests and `package.json`. Rename `profile` to `library` and the AI fields to neutral names.",
+      "acceptanceCriteria": [
+        "A case-insensitive search for `profile` in apps/, engine/ and package.json finds nothing",
+        "Bridge methods, IPC channels, contracts, preload, the mock API, Angular services, models and UI text use library, and Angular and Electron still agree at run time",
+        "The legacy migration is gone from the store, as the migration map in docs/architecture.md says",
+        "The store tests in tests/ pass against the renamed module, and `npm run test:profiles` becomes `npm run test:libraries`",
+        "docs/testing.md, docs/architecture.md, CLAUDE.md and CHANGELOG.md use the new names"
+      ],
+      "priority": 8,
+      "passes": false,
+      "notes": "Sessions cannot delete or move files: rm, mv and git rm are not available to them. Finish every other edit, then block with the exact list of files to remove; the supervising session removes them and the runner verifies the result. The runner scan refuses a deleted or renamed test file, so edit test files in place and never remove one. So tests/profile-store.test.cjs keeps its file name for now and only its content changes. Source files such as profile-store.ts and the profile-builder feature folder are renames, which fall under the rule above.",
+      "dependsOn": [
+        "P01.2.1"
+      ],
+      "splitFrom": "P01.2",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "P01.2 Remove the retired product vocabulary from code, prompts, schemas, names, comments,"
+      }
+    },
+    {
+      "id": "P01.3",
+      "title": "Remove the hard-coded personal name from code, mock data and tests.",
+      "description": "Remove the hard-coded personal name from code, mock data and tests.",
+      "acceptanceCriteria": [
+        "tests/personal-data.test.cjs fails on a user-home path in any tracked or unignored file",
+        "The same test reads the owner name from `git config user.name` at test time, so the name is never stored, and fails on any of its words of at least four letters",
+        "The test passes on the repository, with the LICENSE copyright line as its only possible exception",
+        "The default library has a neutral name in the store, the mock data and the tests, and the package.json author field holds no personal name",
+        "docs/assessment.md D5 and docs/security-privacy.md are updated"
+      ],
+      "priority": 9,
+      "passes": false,
+      "notes": "The hard-coded name is at the location given by assessment item D5. Do not copy it into any file.",
+      "dependsOn": [
+        "P01.2.2"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "P01.3 Remove the hard-coded personal name from code, mock data and tests."
+      }
+    },
+    {
+      "id": "P01.5",
+      "title": "Remove the broken `.venv`, and run Python only in containers.",
+      "description": "Remove the broken `.venv`, and run Python only in containers.",
+      "acceptanceCriteria": [
+        "The .venv directory does not exist",
+        "No npm script calls Python on the host, and engine scripts run in a container or are removed",
+        "README.md, docs/operations.md, docs/testing.md and CLAUDE.md describe Python in containers only, and assessment items D2, D3 and D4 are updated"
+      ],
+      "priority": 10,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: the owner deletes .venv from a terminal, because sessions cannot do it and it is ignored by Git. Until P02.4 lands, starting an analysis from the app fails; it must fail with a clear message.",
+      "dependsOn": [
+        "P01.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "P01.5 Remove the broken `.venv`, and run Python only in containers."
+      }
+    },
+    {
+      "id": "P01.6",
+      "title": "Upgrade Electron and `electron-builder` to supported versions.",
+      "description": "Upgrade Electron and `electron-builder` to supported versions.",
+      "acceptanceCriteria": [
+        "`electron` in package.json is on one of the three latest majors, checked with `npm view electron version`",
+        "`electron-builder` is on its current major, and package-lock.json matches",
+        "`npm run build`, `npm run lint` and the Node tests pass",
+        "`contextIsolation`, `sandbox`, the disabled `nodeIntegration`, the navigation lock, the CSP and the `afmedia` scheme are all still in place in the code",
+        "Assessment item D12, risk R14, docs/security-privacy.md, the migration map and CHANGELOG.md record the new version"
+      ],
+      "priority": 11,
+      "passes": false,
+      "notes": "Use exactly: `npm install --save-dev electron@<version> electron-builder@<version>`. This moves 12 majors, so read the upstream breaking changes that affect the protocol, sandbox and preload code.",
+      "dependsOn": [
+        "P01.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "P01.6 Upgrade Electron and `electron-builder` to supported versions."
+      }
+    },
+    {
+      "id": "P01.4",
+      "title": "Add the `LICENSE` file for the declared license, or change the declaration.",
+      "description": "Add the `LICENSE` file for the declared license, or change the declaration.",
+      "acceptanceCriteria": [
+        "A LICENSE file exists and matches the `license` field in package.json, or the declaration changed as the owner decided",
+        "The License section of README.md and assessment item D6 are updated",
+        "tests/personal-data.test.cjs still passes"
+      ],
+      "priority": 12,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: decide the license and the copyright holder. An MIT LICENSE needs a holder name, which conflicts with the rule of no personal name in tracked files unless the owner accepts that one exception.",
+      "dependsOn": [
+        "P01.3"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "P01.4 Add the `LICENSE` file for the declared license, or change the declaration."
+      }
+    },
+    {
+      "id": "P01.EXIT",
+      "title": "Verify the automated P01 exit checks",
+      "description": "Run and record the P01 exit checks that a session can run.",
+      "acceptanceCriteria": [
+        "`bash scripts/check.sh` passes",
+        "The retired-terms and personal-data tests pass",
+        "The P01 section of docs/roadmap.md gains a dated evidence line with what ran and its result"
+      ],
+      "priority": 13,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P01.1",
+        "P01.2.1",
+        "P01.2.2",
+        "P01.3",
+        "P01.5",
+        "P01.6"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "Exit: `scripts/check.sh` passes; the retired-terms test passes; no user path or personal name in tracked files."
+      }
+    },
+    {
+      "id": "P01.SMOKE",
+      "title": "Confirm that the desktop app starts on the supported Electron",
+      "description": "Manual check of the last P01 exit condition.",
+      "acceptanceCriteria": [
+        "After `npm run build`, `npx electron .` opens the window on the upgraded Electron with no error in the main process",
+        "docs/testing.md records the dated result"
+      ],
+      "priority": 14,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: a person has to look at the window.",
+      "dependsOn": [
+        "P01.6",
+        "P01.EXIT"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "Exit: the desktop app starts on a supported Electron version."
+      }
+    },
+    {
+      "id": "P02.3",
+      "title": "Add the FastAPI application: runs, events, photos, media, exports, data.",
+      "description": "Add the FastAPI application: runs, events, photos, media, exports, data.",
+      "acceptanceCriteria": [
+        "FastAPI serves the routes in the bridge mapping of docs/architecture.md: runs and runs/current, events over SSE, photos, media, exports, data, review and providers",
+        "A request without the session token, or with a foreign Host, is refused, and no CORS header is ever sent",
+        "Images are served by photo ID only, and no route accepts a path",
+        "A run starts the engine as a child process, and its JSONL events reach the SSE stream",
+        "Tests in engine/tests cover each route with synthetic images, and input is validated with Pydantic"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "Expected to be split by the preflight. Follow the fastapi guidance but add no telemetry. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P01.EXIT"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.3 Add the FastAPI application: runs, events, photos, media, exports, data."
+      }
+    },
+    {
+      "id": "P02.1",
+      "title": "Add `compose.yaml`, Dockerfiles, networks, volumes and hardening.",
+      "description": "Add `compose.yaml`, Dockerfiles, networks, volumes and hardening.",
+      "acceptanceCriteria": [
+        "`docker compose config --quiet` exits 0, and scripts/check.sh runs it",
+        "gateway, api and vision exist as in docs/architecture.md, and `backend` is `internal: true`",
+        "Only gateway publishes a port, bound to 127.0.0.1",
+        "All images are pinned by digest, services are non-root with `no-new-privileges` and capabilities dropped, and no Docker socket is mounted",
+        "Photos mount read-only at /photos, with data and models in named volumes",
+        "`bash scripts/check.sh --integration` proves that connections to the internet fail from api and vision, and that a write under /photos fails"
+      ],
+      "priority": 16,
+      "passes": false,
+      "notes": "The fetch-models service comes in P03.2 and codex in P05.1. Heavy GPU dependencies stay out of engine/requirements.txt, because the engine check installs that file on every run. Find digests with `docker buildx imagetools inspect`. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P02.3"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.1 Add `compose.yaml`, Dockerfiles, networks, volumes and hardening."
+      }
+    },
+    {
+      "id": "P02.2",
+      "title": "Add `start.sh` with the contract in [Operations](operations.md#startsh).",
+      "description": "Add `start.sh` with the contract in [Operations](operations.md#startsh).",
+      "acceptanceCriteria": [
+        "start.sh accepts every flag in docs/operations.md and exits 2 on an invalid argument, 1 on a failed prerequisite and 3 on a failed health check",
+        "A Node test in tests/ covers those exit codes with stubbed tools",
+        "The session token travels only through the environment, and a test proves it is never an argument",
+        "It never downloads a model, and with model files missing it explains `--fetch-models`",
+        "It sets `MSYS_NO_PATHCONV=1` on Windows and warns when Docker has less than 10 GB"
+      ],
+      "priority": 17,
+      "passes": false,
+      "notes": "Flags whose feature comes later (`--fetch-models`, `--codex-login`, `--provider codex`) exit with a clear \"not available yet\" message until P03.2 and P05.2. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P02.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.2 Add `start.sh` with the contract in [Operations](operations.md#startsh)."
+      }
+    },
+    {
+      "id": "P02.4",
+      "title": "Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of",
+      "description": "Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of the child process, `afmedia` proxied, chosen folder mounted read-only.",
+      "acceptanceCriteria": [
+        "Analysis handlers call the API over HTTP, and the bridge methods and IPC channels keep their signatures",
+        "A Node test with a fake HTTP server proves that main adds the token and that no IPC reply or event carries it",
+        "`afmedia` proxies thumbnails from the API by photo ID",
+        "The chosen folder is validated as an existing directory, and Docker runs through `spawn` with `shell: false` and the folder only in the environment"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P02.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of"
+      }
+    },
+    {
+      "id": "P02.5",
+      "title": "Build the desktop shell in a container, or record why the host fallback is needed.",
+      "description": "Build the desktop shell in a container, or record why the host fallback is needed.",
+      "acceptanceCriteria": [
+        "Either `./start.sh --rebuild` builds the app into release/ in the digest-pinned builder image, or docs/operations.md and a decision record state the exact failure and that the host fallback applies",
+        "Risk R15 records the outcome"
+      ],
+      "priority": 19,
+      "passes": false,
+      "notes": "Run it through `bash scripts/check.sh --integration`. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P02.2"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.5 Build the desktop shell in a container, or record why the host fallback is needed."
+      }
+    },
+    {
+      "id": "P02.6",
+      "title": "Remove `start.py` and the Python paths from Electron.",
+      "description": "Remove `start.py` and the Python paths from Electron.",
+      "acceptanceCriteria": [
+        "A search of apps/desktop/electron for `pythonExecutable`, `engineMain` and spawned Python finds nothing",
+        "No start.py exists, and the documents that describe it as present (assessment D4, README.md, docs/technology.md, docs/security-privacy.md, migration map) are corrected"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "start.py was already absent on 2026-11-01, although the assessment cites it, so only the Python paths and the documents remain.",
+      "dependsOn": [
+        "P02.4"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.6 Remove `start.py` and the Python paths from Electron."
+      }
+    },
+    {
+      "id": "P02.EXIT",
+      "title": "Verify the automated P02 exit checks",
+      "description": "Run and record the P02 exit checks that a session can run.",
+      "acceptanceCriteria": [
+        "`bash scripts/check.sh --integration` passes the network, read-only, token and Host checks",
+        "A test proves that the renderer has no Node, no network and only `window.auraFrame`, and cannot navigate away, with no new dependency",
+        "With `./start.sh --backend-only`, a synthetic folder completes a `fast` run through the API",
+        "The hook rules are reviewed as docs/claude-code.md asks, and the roadmap gains a dated evidence line"
+      ],
+      "priority": 21,
+      "passes": false,
+      "notes": "Sessions cannot edit .claude/settings.json. If the review finds a change there, report it for the owner. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P02.1",
+        "P02.2",
+        "P02.3",
+        "P02.4",
+        "P02.5",
+        "P02.6"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "Exit: the network, read-only, token and hardening checks in Testing pass."
+      }
+    },
+    {
+      "id": "P02.SMOKE",
+      "title": "Confirm the full desktop flow through the window",
+      "description": "Manual check of the P02 end-to-end exit condition.",
+      "acceptanceCriteria": [
+        "`./start.sh` opens the Electron window",
+        "A synthetic folder chosen in the native dialog completes a `fast` run end to end",
+        "Closing the window stops the services and keeps the data",
+        "docs/testing.md records the dated result"
+      ],
+      "priority": 22,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: a person has to use the window and the native dialog, unless Playwright is approved first.",
+      "dependsOn": [
+        "P02.EXIT"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "Exit: `./start.sh` opens the Electron window; a synthetic folder chosen in the native dialog completes a `fast` run end to end; closing the window stops the services."
+      }
+    },
+    {
+      "id": "P03.1",
+      "title": "Define the `VisionProvider` contract and implement the llama-server provider.",
+      "description": "Define the `VisionProvider` contract and implement the llama-server provider.",
+      "acceptanceCriteria": [
+        "`VisionProvider` matches the contract in docs/ai-providers.md, and the llama-server provider implements it",
+        "Tests against a fake server cover valid output, invalid output, timeout and a missing model",
+        "Input copies are 1,024 px JPEG at quality 90 with no EXIF, name or path",
+        "Retries, timeouts and limits are configurable and bounded, and a failed provider degrades to the prescore without stopping the run",
+        "Output is validated against a JSON Schema, and prompts carry a version"
+      ],
+      "priority": 23,
+      "passes": false,
+      "notes": "The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P02.EXIT"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "4. P03 — Local AI runtime",
+        "line": "P03.1 Define the `VisionProvider` contract and implement the llama-server provider."
+      }
+    },
+    {
+      "id": "P03.5",
+      "title": "Remove the Ollama client, its settings, UI texts and tests.",
+      "description": "Remove the Ollama client, its settings, UI texts and tests.",
+      "acceptanceCriteria": [
+        "A case-insensitive search for `ollama` in apps/, engine/, tests/ and package.json finds nothing",
+        "One provider check through `GET /api/providers` replaces the old check, in the bridge and in Settings",
+        "The CLAUDE.md rule about the legacy client and assessment item B2 are updated"
+      ],
+      "priority": 24,
+      "passes": false,
+      "notes": "Sessions cannot delete or move files: rm, mv and git rm are not available to them. Finish every other edit, then block with the exact list of files to remove; the supervising session removes them and the runner verifies the result. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
+      "dependsOn": [
+        "P03.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "4. P03 — Local AI runtime",
+        "line": "P03.5 Remove the Ollama client, its settings, UI texts and tests."
+      }
+    },
+    {
+      "id": "P03.2",
+      "title": "Add `fetch-models` with pinned revisions and SHA-256 checks.",
+      "description": "Add `fetch-models` with pinned revisions and SHA-256 checks.",
+      "acceptanceCriteria": [
+        "A `fetch-models` one-shot service exists on the egress network only, with models read-write and no photos mounted",
+        "A manifest pins each file to a repository revision and a SHA-256, for the default model and every bake-off candidate",
+        "A test with a local fake file proves that a hash mismatch fails and leaves no accepted file, and that pickle-based formats are refused",
+        "`./start.sh --fetch-models` runs it, and nothing else ever does"
+      ],
+      "priority": 25,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: sessions have no web access, so the revisions and SHA-256 values must be supplied in these notes. No model is downloaded by this task. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P02.2",
+        "P03.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "4. P03 — Local AI runtime",
+        "line": "P03.2 Add `fetch-models` with pinned revisions and SHA-256 checks."
+      }
+    },
+    {
+      "id": "P03.3",
+      "title": "Run the [bake-off](ai-providers.md#bake-off) on the reference PC, and record the results.",
+      "description": "Run the [bake-off](ai-providers.md#bake-off) on the reference PC, and record the results.",
+      "acceptanceCriteria": [
+        "Each candidate in docs/ai-providers.md has recorded accuracy, order stability, seconds per comparison, peak GPU memory and peak system memory on the reference PC",
+        "The photography subset of the benchmark runs in both candidate orders",
+        "Results are recorded in docs/testing.md or a linked report, with no personal data"
+      ],
+      "priority": 26,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: about 34 GB of model downloads must be requested explicitly, the gated dataset terms accepted on Hugging Face, and the .wslconfig memory setting decided (not applied on this PC, and it affects all of WSL).",
+      "dependsOn": [
+        "P03.2"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "4. P03 — Local AI runtime",
+        "line": "P03.3 Run the [bake-off](ai-providers.md#bake-off) on the reference PC, and record the results."
+      }
+    },
+    {
+      "id": "P03.4",
+      "title": "Confirm or replace the default in [ADR 0004](decisions/0004-default-local-model.md).",
+      "description": "Confirm or replace the default in [ADR 0004](decisions/0004-default-local-model.md).",
+      "acceptanceCriteria": [
+        "ADR 0004 becomes accepted or changes the default, by the rule stated there, citing the measurements",
+        "docs/ai-providers.md, the time estimate in docs/pipeline.md and risks R3, R6 and R7 reflect the result"
+      ],
+      "priority": 27,
+      "passes": false,
+      "notes": "The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
+      "dependsOn": [
+        "P03.3"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "4. P03 — Local AI runtime",
+        "line": "P03.4 Confirm or replace the default in [ADR 0004](decisions/0004-default-local-model.md)."
+      }
+    },
+    {
+      "id": "P03.EXIT",
+      "title": "Verify the P03 exit checks",
+      "description": "Record the P03 exit checks from the bake-off results.",
+      "acceptanceCriteria": [
+        "The recorded results show that the default model completes the benchmark with at least 0.5 GiB of GPU memory free at peak",
+        "The provider contract tests pass, and no Ollama reference remains in the code",
+        "The roadmap gains a dated evidence line"
+      ],
+      "priority": 28,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P03.1",
+        "P03.4",
+        "P03.5"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "4. P03 — Local AI runtime",
+        "line": "Exit: the default model completes the benchmark on the reference PC with at least 0.5 GiB of GPU memory free at peak; no Ollama reference remains in the code; provider contract tests pass."
+      }
+    },
+    {
+      "id": "P04.1",
+      "title": "New ingest: content-hash IDs, working copies, one decode, orientation applied once.",
+      "description": "New ingest: content-hash IDs, working copies, one decode, orientation applied once.",
+      "acceptanceCriteria": [
+        "A test with EXIF orientation 6 produces an upright working copy and thumbnail",
+        "Working copies have a long side of 1,536 px and thumbnails 512 px, and a test counts one decode of each original",
+        "The photo ID is the SHA-256 of the content, so a moved file with the same bytes keeps its results and an unchanged file is skipped",
+        "Only capture time, camera make and model are kept from EXIF, and a test proves GPS is not stored",
+        "Originals are opened read-only"
+      ],
+      "priority": 29,
+      "passes": false,
+      "notes": "Depends on the provider contract, not on the bake-off, which needs the owner. Closes B5, C1 and C3. Synthetic images only.",
+      "dependsOn": [
+        "P03.1",
+        "P03.5"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.1 New ingest: content-hash IDs, working copies, one decode, orientation applied once."
+      }
+    },
+    {
+      "id": "P04.2",
+      "title": "Sanity gate that rejects only objective failures.",
+      "description": "Sanity gate that rejects only objective failures.",
+      "acceptanceCriteria": [
+        "A smooth gradient and a black image with bright points both survive the gate",
+        "A corrupt file is recorded as unreadable and the run continues",
+        "A byte-identical copy, an unsupported format and an image under 256 px on the long side are rejected",
+        "Brightness and blur never reject, and screenshots and documents only get a flag"
+      ],
+      "priority": 30,
+      "passes": false,
+      "notes": "Closes A2.",
+      "dependsOn": [
+        "P04.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.2 Sanity gate that rejects only objective failures."
+      }
+    },
+    {
+      "id": "P04.3",
+      "title": "Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU.",
+      "description": "Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU.",
+      "acceptanceCriteria": [
+        "Q-ReAlign and SigLIP 2 run in GPU batches, and tests with fake models prove the batching and the stored 0 to 1 values",
+        "A missing model gives a clear error and an unknown value, and no score is ever invented",
+        "Only safetensors weights load, and the engine check stays fast because heavy dependencies live in a separate requirements file",
+        "No code path downloads a model"
+      ],
+      "priority": 31,
+      "passes": false,
+      "notes": "Sessions never download weights, so real-model verification happens in P04.MEASURE. Closes B5, B8, C2.",
+      "dependsOn": [
+        "P04.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.3 Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU."
+      }
+    },
+    {
+      "id": "P04.4",
+      "title": "Order-independent grouping, content tags and people signals with no identity.",
+      "description": "Order-independent grouping, content tags and people signals with no identity.",
+      "acceptanceCriteria": [
+        "A test proves that grouping gives the same groups for permuted input",
+        "Content tags come from the fixed list in docs/pipeline.md",
+        "People signals use MediaPipe Face Landmarker, a photo with no face has a penalty of zero, and no face vector is computed or stored"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": "Closes B10, D7. No identity recognition, no sensitive inference.",
+      "dependsOn": [
+        "P04.3"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.4 Order-independent grouping, content tags and people signals with no identity."
+      }
+    },
+    {
+      "id": "P04.5",
+      "title": "Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache.",
+      "description": "Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache.",
+      "acceptanceCriteria": [
+        "The shortlist takes top K group representatives, with a per-tag limit",
+        "With a fake provider, Swiss rounds equal `ceil(log2(K)) + 1`, each pair runs in both orders, and disagreement counts as a tie",
+        "Verdicts are cached by content hash, provider, model and prompt version, so a rerun makes no provider call",
+        "Bradley-Terry gives a rank and an uncertainty, with the prescore as a weak prior",
+        "With no provider the stage is skipped and the prescore decides"
+      ],
+      "priority": 33,
+      "passes": false,
+      "notes": "Absolute votes are never the ranking signal. Closes B6. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
+      "dependsOn": [
+        "P04.4"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.5 Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache."
+      }
+    },
+    {
+      "id": "P04.6",
+      "title": "Critique, diversity-aware selection, tiers, reports and exports.",
+      "description": "Critique, diversity-aware selection, tiers, reports and exports.",
+      "acceptanceCriteria": [
+        "Critique runs for finalists only, and a test proves it does not change the rank",
+        "Maximal marginal relevance with `lambda = 0.75` gives tiers of 10, 25, 50, 100 and a configurable final set, default 25",
+        "Exports are copies named `001_<original name>`, with CSV and HTML reports",
+        "Model text is always escaped in reports, proven by a test with markup in the text",
+        "Reranking twice gives the same result"
+      ],
+      "priority": 34,
+      "passes": false,
+      "notes": "Closes A3, A4, B3, B4, B7, B9.",
+      "dependsOn": [
+        "P04.5"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.6 Critique, diversity-aware selection, tiers, reports and exports."
+      }
+    },
+    {
+      "id": "P04.7",
+      "title": "Persist per-stage progress so resume really works.",
+      "description": "Persist per-stage progress so resume really works.",
+      "acceptanceCriteria": [
+        "A test kills a run in mid-stage, and the rerun repeats no finished work",
+        "Per-photo, per-stage state is persisted in SQLite",
+        "Pause, resume and cancel work through the API"
+      ],
+      "priority": 35,
+      "passes": false,
+      "notes": "Closes B1.",
+      "dependsOn": [
+        "P04.6"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.7 Persist per-stage progress so resume really works."
+      }
+    },
+    {
+      "id": "P04.8",
+      "title": "Remove the old gate, ranker, slots, OpenCLIP and LAION paths.",
+      "description": "Remove the old gate, ranker, slots, OpenCLIP and LAION paths.",
+      "acceptanceCriteria": [
+        "A search of engine/ finds no old gate, ranker, slot, OpenCLIP or LAION code",
+        "engine/requirements.txt drops what is no longer used, including the unused tqdm",
+        "docs/pipeline.md, docs/architecture.md and the assessment mark what is delivered"
+      ],
+      "priority": 36,
+      "passes": false,
+      "notes": "Sessions cannot delete or move files: rm, mv and git rm are not available to them. Finish every other edit, then block with the exact list of files to remove; the supervising session removes them and the runner verifies the result. Closes D8.",
+      "dependsOn": [
+        "P04.7"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.8 Remove the old gate, ranker, slots, OpenCLIP and LAION paths."
+      }
+    },
+    {
+      "id": "P04.EXIT",
+      "title": "Verify the automated P04 exit checks",
+      "description": "Run and record the regression corpus.",
+      "acceptanceCriteria": [
+        "Every case in the regression corpus table in docs/testing.md passes as a generated test",
+        "The resume and idempotence tests pass, and the roadmap gains a dated evidence line"
+      ],
+      "priority": 37,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.8"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "Exit: the regression corpus in Testing passes."
+      }
+    },
+    {
+      "id": "P04.MEASURE",
+      "title": "Measure the pipeline on the reference PC",
+      "description": "Measure the P04 exit conditions that need real models.",
+      "acceptanceCriteria": [
+        "A run on 2,000 synthetic images completes on the reference PC, with time and peak memory recorded",
+        "The benchmark score of the pipeline is recorded and is not below the scorer alone",
+        "ADR 0006 becomes accepted, or records why not"
+      ],
+      "priority": 38,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: needs scorer and judge weights, the gated dataset and the GPU. Compare against Q-Align as risk R8 says.",
+      "dependsOn": [
+        "P04.EXIT",
+        "P03.EXIT"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "Exit: a run on 2,000 synthetic images completes on the reference PC with recorded time and peak memory; the benchmark score of the pipeline is recorded and is not below the scorer alone."
+      }
+    },
+    {
+      "id": "P05.1",
+      "title": "Build the sidecar image, its config with tools and telemetry off, and its volumes.",
+      "description": "Build the sidecar image, its config with tools and telemetry off, and its volumes.",
+      "acceptanceCriteria": [
+        "A `codex` service exists under its own profile, on `backend` and `egress`, with a pinned CLI version",
+        "Its config matches the TOML in docs/ai-providers.md, with tools, history and telemetry off",
+        "It mounts only a tmpfs exchange and the credentials volume, and a test on the compose config proves no photos, data or Docker socket reach it",
+        "Without the profile the service does not start"
+      ],
+      "priority": 39,
+      "passes": false,
+      "notes": "The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P03.1",
+        "P02.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "P05.1 Build the sidecar image, its config with tools and telemetry off, and its volumes."
+      }
+    },
+    {
+      "id": "P05.2",
+      "title": "Implement the provider, opt-in, call cap and `--codex-login`.",
+      "description": "Implement the provider, opt-in, call cap and `--codex-login`.",
+      "acceptanceCriteria": [
+        "Tests with a fake CLI cover schema output, failure, the call cap, and no opt-in meaning no call",
+        "A data-shape test proves that what reaches the sidecar has no EXIF, file name or path",
+        "Opt-in is required both by `--provider codex` and per library in the UI, and the dialog states what is sent and the number of calls",
+        "`--codex-login` runs the device sign-in, and the API key reaches the sidecar only through stdin"
+      ],
+      "priority": 40,
+      "passes": false,
+      "notes": "No real call is made in tests. Off by default, and the local pipeline must keep working fully with it disabled. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "dependsOn": [
+        "P05.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "P05.2 Implement the provider, opt-in, call cap and `--codex-login`."
+      }
+    },
+    {
+      "id": "P05.3",
+      "title": "Check the upstream sandbox in Docker, and record the outcome.",
+      "description": "Check the upstream sandbox in Docker, and record the outcome.",
+      "acceptanceCriteria": [
+        "The result of the upstream sandbox inside Docker is recorded in docs/ai-providers.md, with the mode that was chosen and why"
+      ],
+      "priority": 41,
+      "passes": false,
+      "notes": "Run it through `bash scripts/check.sh --integration`. If the check needs a signed-in account, block and say so. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
+      "dependsOn": [
+        "P05.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "P05.3 Check the upstream sandbox in Docker, and record the outcome."
+      }
+    },
+    {
+      "id": "P05.4",
+      "title": "Measure the usage cost per comparison, and record it.",
+      "description": "Measure the usage cost per comparison, and record it.",
+      "acceptanceCriteria": [
+        "The usage cost per comparison is measured and recorded in docs/ai-providers.md, with the default for `codex.max_calls` reviewed"
+      ],
+      "priority": 42,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: needs the owner's account and synthetic images only, and spends the owner's plan or API usage.",
+      "dependsOn": [
+        "P05.2"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "P05.4 Measure the usage cost per comparison, and record it."
+      }
+    },
+    {
+      "id": "P05.5",
+      "title": "Remove `engine/src/cloud/`, after moving the image preparer into `providers/`",
+      "description": "Remove `engine/src/cloud/`, after moving the image preparer into `providers/` ([ADR 0007](decisions/0007-retire-openai-quality-mode.md)).",
+      "acceptanceCriteria": [
+        "engine/src/cloud/ no longer exists, and the image preparer lives in engine/src/providers/ with tests",
+        "The related CLI commands and the removed bridge methods in docs/architecture.md are gone, and the key field serves the sidecar",
+        "ADR 0007 becomes accepted, question Q1 in docs/risks.md closes, and the CLAUDE.md rule on the legacy flow is updated"
+      ],
+      "priority": 43,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: ADR 0007 requires the owner to confirm before this removal. The dedicated test file for the old flow must also be removed by the owner or the supervising session in its own commit, because the runner scan refuses it. Sessions cannot delete or move files: rm, mv and git rm are not available to them. Finish every other edit, then block with the exact list of files to remove; the supervising session removes them and the runner verifies the result. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
+      "dependsOn": [
+        "P05.2"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "P05.5 Remove `engine/src/cloud/`, after moving the image preparer into `providers/`"
+      }
+    },
+    {
+      "id": "P05.EXIT",
+      "title": "Verify the P05 exit checks",
+      "description": "Run and record the P05 exit checks.",
+      "acceptanceCriteria": [
+        "The contract and data-shape tests pass",
+        "Without opt-in the sidecar is not running, and no call can happen",
+        "A real run with the owner's account completes on synthetic images, and the roadmap gains a dated evidence line"
+      ],
+      "priority": 44,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: the real run uses the owner's account.",
+      "dependsOn": [
+        "P05.2",
+        "P05.3",
+        "P05.4",
+        "P05.5"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "Exit: the contract and data-shape tests pass; without opt-in the sidecar is not running and no call can happen; a real run with the owner's account completes on synthetic images."
+      }
+    },
+    {
+      "id": "P06.1",
+      "title": "Add non-color tokens and shared primitives on the existing palette.",
+      "description": "Add non-color tokens and shared primitives on the existing palette.",
+      "acceptanceCriteria": [
+        "Non-color tokens and the shared primitives in docs/design-system.md exist, with no palette value changed in `_tokens.scss`",
+        "The Angular build and lint pass"
+      ],
+      "priority": 45,
+      "passes": false,
+      "notes": "Use `python <skills folder>/ajimu-pixel-ui/scripts/check_colors.py` for the color check.",
+      "dependsOn": [
+        "P02.EXIT"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "7. P06 — Interface",
+        "line": "P06.1 Add non-color tokens and shared primitives on the existing palette."
+      }
+    },
+    {
+      "id": "P06.2",
+      "title": "Apply them to layout, navigation and every screen.",
+      "description": "Apply them to layout, navigation and every screen.",
+      "acceptanceCriteria": [
+        "`check_colors.py` reports no color literal outside the token file, which closes D11",
+        "Primary button labels use the corrected token pair, which closes D9",
+        "Layout, navigation and every screen use the shared primitives, with focus visible on every control"
+      ],
+      "priority": 46,
+      "passes": false,
+      "notes": "Expected to be split by the preflight, one group of screens per task.",
+      "dependsOn": [
+        "P06.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "7. P06 — Interface",
+        "line": "P06.2 Apply them to layout, navigation and every screen."
+      }
+    },
+    {
+      "id": "P06.3.1",
+      "title": "Add the pixel icon sprite",
+      "description": "Add the pixel icon sprite and, if approved, a pixel title font.",
+      "acceptanceCriteria": [
+        "The pixel icon sprite replaces the current icons, using only color tokens, and every icon-only control has an accessible name"
+      ],
+      "priority": 47,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P06.1"
+      ],
+      "splitFrom": "P06.3",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "7. P06 — Interface",
+        "line": "P06.3 Add the pixel icon sprite and, if approved, a pixel title font."
+      }
+    },
+    {
+      "id": "P06.3.2",
+      "title": "Decide on the pixel title font",
+      "description": "Add the pixel icon sprite and, if approved, a pixel title font.",
+      "acceptanceCriteria": [
+        "The owner decision on the pixel title font is recorded, and question Q5 in docs/risks.md closes",
+        "If approved, the font is added with its license recorded and small text stays in the regular font"
+      ],
+      "priority": 48,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: decide whether the pixel title font is wanted.",
+      "dependsOn": [
+        "P06.1"
+      ],
+      "splitFrom": "P06.3",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "7. P06 — Interface",
+        "line": "P06.3 Add the pixel icon sprite and, if approved, a pixel title font."
+      }
+    },
+    {
+      "id": "P06.4",
+      "title": "Build the review flow: alternates, A/B compare, stored decisions.",
+      "description": "Build the review flow: alternates, A/B compare, stored decisions.",
+      "acceptanceCriteria": [
+        "The review screen shows ranks, reasons and alternates, and offers A/B comparison",
+        "Accept, reject and replace decisions persist through the API and override the pipeline",
+        "Model text is escaped, and missing scores display as unknown",
+        "Tests cover the decision logic with the mock API"
+      ],
+      "priority": 49,
+      "passes": false,
+      "notes": "Requirements F3, F5, F6, Q7.",
+      "dependsOn": [
+        "P06.2",
+        "P04.7"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "7. P06 — Interface",
+        "line": "P06.4 Build the review flow: alternates, A/B compare, stored decisions."
+      }
+    },
+    {
+      "id": "P06.EXIT",
+      "title": "Verify the P06 exit checks",
+      "description": "Run and record the P06 exit checks.",
+      "acceptanceCriteria": [
+        "All checks in the verification section of docs/design-system.md pass: contrast, focus and tab order, reduced motion, minimum window size and 200% zoom",
+        "The interface tests and the end-to-end test in docs/testing.md pass, and the roadmap gains a dated evidence line"
+      ],
+      "priority": 50,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: Playwright is a new dependency and needs approval (docs/claude-code.md), and visual checks need a person until it is.",
+      "dependsOn": [
+        "P06.2",
+        "P06.3.1",
+        "P06.4"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "7. P06 — Interface",
+        "line": "Exit: all checks in Design system pass; the end-to-end test passes."
+      }
+    },
+    {
+      "id": "P07.1",
+      "title": "Remove the \"planned\" marks from what was delivered, and fix what changed.",
+      "description": "Remove the \"planned\" marks from what was delivered, and fix what changed.",
+      "acceptanceCriteria": [
+        "Each \"planned\" mark on delivered behavior is removed, and the documents match the code",
+        "What was not delivered stays marked as planned"
+      ],
+      "priority": 51,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P01.4",
+        "P01.SMOKE",
+        "P02.SMOKE",
+        "P03.EXIT",
+        "P04.MEASURE",
+        "P05.EXIT",
+        "P06.3.2",
+        "P06.EXIT"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "8. P07 — Release",
+        "line": "P07.1 Remove the \"planned\" marks from what was delivered, and fix what changed."
+      }
+    },
+    {
+      "id": "P07.2",
+      "title": "Add a project summary for a portfolio, written only from delivered behavior.",
+      "description": "Add a project summary for a portfolio, written only from delivered behavior.",
+      "acceptanceCriteria": [
+        "The summary states only delivered, verified behavior, and links its evidence"
+      ],
+      "priority": 52,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P07.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "8. P07 — Release",
+        "line": "P07.2 Add a project summary for a portfolio, written only from delivered behavior."
+      }
+    },
+    {
+      "id": "P07.3",
+      "title": "Add real screenshots made from synthetic photos.",
+      "description": "Add real screenshots made from synthetic photos.",
+      "acceptanceCriteria": [
+        "Screenshots made from synthetic photos are committed under docs/screenshots/ and linked from README.md",
+        "No personal photo, name or path appears in any of them"
+      ],
+      "priority": 53,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: needs a person, or the approved Playwright setup, to capture the window.",
+      "dependsOn": [
+        "P07.1"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "8. P07 — Release",
+        "line": "P07.3 Add real screenshots made from synthetic photos."
+      }
+    },
+    {
+      "id": "P07.EXIT",
+      "title": "Verify a clean clone",
+      "description": "Run the P07 exit check.",
+      "acceptanceCriteria": [
+        "A clean clone runs on the reference PC by following the documentation alone, and the dated result is recorded"
+      ],
+      "priority": 54,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: a person has to follow the documentation on a clean clone.",
+      "dependsOn": [
+        "P07.1",
+        "P07.2",
+        "P07.3"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "8. P07 — Release",
+        "line": "Exit: a clean clone runs on the reference PC by following the documentation alone."
+      }
+    },
+    {
+      "id": "P07.4",
+      "title": "Tag version 2.0.0, after authorization by the owner.",
+      "description": "Tag version 2.0.0, after authorization by the owner.",
+      "acceptanceCriteria": [
+        "Tag 2.0.0 exists on the verified commit"
+      ],
+      "priority": 55,
+      "passes": false,
+      "notes": "NEEDS THE OWNER: the owner authorizes and creates the tag. The runner and its sessions never tag.",
+      "dependsOn": [
+        "P07.EXIT"
+      ],
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "8. P07 — Release",
+        "line": "P07.4 Tag version 2.0.0, after authorization by the owner."
+      }
+    }
+  ]
+}

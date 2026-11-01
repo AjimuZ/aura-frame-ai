@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "sourceMap": true,
+    "outDir": "dist-electron",
+    "rootDir": "apps/desktop/electron"
+  },
+  "include": ["apps/desktop/electron/**/*.ts"]
+}

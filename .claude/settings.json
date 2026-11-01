@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "default",
+    "deny": [
+      "Read(/img/**)",
+      "Edit(/img/**)",
+      "Write(/img/**)",
+      "Read(/data/input_originali/**)",
+      "Edit(/data/input_originali/**)",
+      "Write(/data/input_originali/**)",
+      "Read(/data/working/**)",
+      "Edit(/data/working/**)",
+      "Write(/data/working/**)",
+      "Read(/data/output/**)",
+      "Edit(/data/output/**)",
+      "Write(/data/output/**)",
+      "Read(/data/reports/**)",
+      "Edit(/data/reports/**)",
+      "Write(/data/reports/**)",
+      "Read(/thumbnails/**)",
+      "Edit(/thumbnails/**)",
+      "Write(/thumbnails/**)",
+      "Read(**/.env*)",
+      "Edit(**/.env*)",
+      "Write(**/.env*)",
+      "Bash(git commit*)",
+      "Bash(git push*)",
+      "Bash(git tag*)",
+      "Bash(git clean*)",
+      "Bash(git reset --hard*)",
+      "Bash(git checkout --*)",
+      "Bash(git restore*)",
+      "PowerShell(git commit*)",
+      "PowerShell(git push*)",
+      "PowerShell(git tag*)",
+      "PowerShell(git clean*)",
+      "PowerShell(git reset --hard*)",
+      "PowerShell(git checkout --*)",
+      "PowerShell(git restore*)",
+      "mcp__*"
+    ]
+  },
+  "disableSkillShellExecution": true,
+  "enabledPlugins": {
+    "example-skills@anthropic-agent-skills": false,
+    "voltagent-core-dev@voltagent-subagents": false,
+    "voltagent-dev-exp@voltagent-subagents": false,
+    "voltagent-infra@voltagent-subagents": false,
+    "voltagent-lang@voltagent-subagents": false,
+    "voltagent-qa-sec@voltagent-subagents": false
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-NonInteractive",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-tool-use.ps1"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-NonInteractive",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/format-changed-file.ps1"
+            ],
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell|Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-NonInteractive",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/audit-change.ps1"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-NonInteractive",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/notify.ps1"
+            ],
+            "async": true,
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "matcher": "project_settings",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe",
+            "args": [
+              "-NoProfile",
+              "-NonInteractive",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/audit-change.ps1"
+            ],
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+

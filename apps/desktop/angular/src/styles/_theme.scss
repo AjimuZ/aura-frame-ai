@@ -1,0 +1,52 @@
+// Base theme: global element styling for the AuraFrame Coral Night look.
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--af-bg-main);
+  color: var(--af-text-main);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--af-text-main);
+  margin: 0 0 var(--af-space-sm);
+  font-weight: 600;
+}
+
+p {
+  color: var(--af-text-soft);
+}
+
+a {
+  color: var(--af-primary-hover);
+  text-decoration: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--af-bg-elevated);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

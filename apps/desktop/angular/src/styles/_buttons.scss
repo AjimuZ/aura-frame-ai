@@ -1,0 +1,115 @@
+// Button styles for AuraFrame Coral Night.
+
+.af-button-primary {
+  background: var(--af-primary);
+  color: var(--af-text-main);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    transform 120ms ease,
+    box-shadow 160ms ease;
+
+  &:hover {
+    background: var(--af-primary-hover);
+    box-shadow: var(--af-shadow-primary);
+  }
+
+  &:active {
+    transform: translateY(1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--af-primary-hover);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+.af-button-secondary {
+  background: var(--af-bg-surface);
+  color: var(--af-text-muted);
+  border: 1px solid var(--af-border-soft);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+
+  &:hover {
+    background: rgba(212, 108, 127, 0.12);
+    border-color: var(--af-border-primary);
+    color: var(--af-text-main);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--af-primary-hover);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.af-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--af-text-muted);
+  border: 1px solid var(--af-border-soft);
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+
+  &:hover {
+    background: rgba(212, 108, 127, 0.12);
+    color: var(--af-text-main);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--af-primary-hover);
+    outline-offset: 2px;
+  }
+}
+
+.af-button-danger {
+  background: var(--af-danger);
+  color: var(--af-text-main);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.08);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--af-danger);
+    outline-offset: 2px;
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}

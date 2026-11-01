@@ -1,0 +1,75 @@
+// Card and photo-card styles for AuraFrame Coral Night.
+
+.af-card {
+  background: var(--af-bg-surface);
+  border: 1px solid var(--af-border-soft);
+  border-radius: var(--af-radius-md);
+  padding: var(--af-space-lg);
+  box-shadow: var(--af-shadow-soft);
+}
+
+.af-card--elevated {
+  background: var(--af-bg-elevated);
+}
+
+.af-stat-card__label {
+  color: var(--af-text-muted);
+  font-size: 13px;
+}
+
+.af-stat-card__value {
+  font-size: 30px;
+  font-weight: 700;
+  margin-top: var(--af-space-xs);
+}
+
+.af-photo-card {
+  background: var(--af-bg-surface);
+  border: 1px solid var(--af-border-soft);
+  border-radius: var(--af-radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.af-photo-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--af-shadow-soft);
+  border-color: var(--af-border-primary);
+}
+
+.af-photo-card__thumb {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  background: var(--af-bg-deep);
+  display: block;
+}
+
+.af-photo-card__body {
+  padding: var(--af-space-sm) var(--af-space-md) var(--af-space-md);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-photo-card__name {
+  font-size: 13px;
+  color: var(--af-text-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-photo-card--selected {
+  border-color: var(--af-primary-hover);
+  box-shadow: var(--af-shadow-primary);
+}
+
+.af-photo-card--rejected {
+  opacity: 0.55;
+  filter: saturate(0.6);
+}

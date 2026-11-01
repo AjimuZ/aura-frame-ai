@@ -1,0 +1,48 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AuraFrame AI logo">
+  <defs>
+    <linearGradient id="afBody" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#363850"/>
+      <stop offset="1" stop-color="#222438"/>
+    </linearGradient>
+    <radialGradient id="afLens" cx="0.42" cy="0.38" r="0.75">
+      <stop stop-color="#3a3c54"/>
+      <stop offset="0.55" stop-color="#262839"/>
+      <stop offset="1" stop-color="#1c1e2c"/>
+    </radialGradient>
+    <linearGradient id="afRing" x1="120" y1="120" x2="400" y2="412" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F6798C"/>
+      <stop offset="1" stop-color="#D46C7F"/>
+    </linearGradient>
+    <linearGradient id="afHeart" x1="196" y1="250" x2="320" y2="430" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7B3BE"/>
+      <stop offset="0.5" stop-color="#F6798C"/>
+      <stop offset="1" stop-color="#D46C7F"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Body -->
+  <rect x="40" y="56" width="432" height="400" rx="86" fill="url(#afBody)" stroke="#171826" stroke-width="6"/>
+
+  <!-- Flash dot -->
+  <circle cx="406" cy="138" r="22" fill="url(#afRing)"/>
+  <circle cx="399" cy="131" r="7" fill="#FCE3E8" opacity="0.85"/>
+
+  <!-- Camera ring -->
+  <circle cx="244" cy="266" r="158" fill="none" stroke="url(#afRing)" stroke-width="30"/>
+
+  <!-- Lens -->
+  <circle cx="244" cy="266" r="126" fill="url(#afLens)"/>
+  <ellipse cx="200" cy="212" rx="58" ry="34" fill="#ffffff" opacity="0.10"/>
+  <circle cx="316" cy="338" r="10" fill="#F6798C" opacity="0.8"/>
+
+  <!-- Heart -->
+  <path d="M244 372
+           C244 372 168 322 168 268
+           C168 240 190 222 214 222
+           C231 222 241 232 244 240
+           C247 232 257 222 274 222
+           C298 222 320 240 320 268
+           C320 322 244 372 244 372 Z"
+        fill="url(#afHeart)"/>
+  <ellipse cx="288" cy="256" rx="14" ry="10" fill="#ffffff" opacity="0.9"/>
+</svg>
