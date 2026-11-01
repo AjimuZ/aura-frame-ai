@@ -18,6 +18,13 @@ const SLOW_REQUEST_TIMEOUT_MS = 300_000;
 const STREAM_IDLE_TIMEOUT_MS = 45_000;
 const MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
 const MAX_EVENT_CHARS = 1024 * 1024;
+// Thumbnails are 512 px on the long side, so a real answer stays far below this.
+const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
+// A grid asks for all its thumbnails at once, and the gateway has 256 connections, of which each proxied request
+// uses two. Past this many, the other requests wait in this client instead of starving the API calls.
+const MAX_MEDIA_REQUESTS = 8;
+// What the API serves and the renderer can show. SVG is left out because it can carry script.
+const MEDIA_CONTENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const UNREACHABLE_MESSAGE = 'The analysis service is not reachable.';
 const TIMEOUT_MESSAGE = 'The analysis service did not answer in time.';
@@ -52,6 +59,14 @@ export interface ApiClientOptions {
   // Supplies the Authorization header, read per request and never stored or returned, and says whether a
   // request may be sent at all. One object, so the token cannot be wired without its gate.
   session: Pick<ComposeStack, 'authorizationHeader' | 'isUp'>;
+  // Limit on one whole media exchange. Injected so a test can use a short one.
+  mediaTimeoutMs?: number;
+}
+
+// One image from the API. `contentType` is one of MEDIA_CONTENT_TYPES, without parameters.
+export interface MediaFile {
+  contentType: string;
+  bytes: Buffer;
 }
 
 // The options of one run. A folder is deliberately absent: the API analyzes its mounted photos root.
@@ -130,6 +145,8 @@ function createSseParser(dispatch: (data: string) => void): (chunk: string) => b
 
 export class ApiClient {
   private readonly port: number;
+  private mediaRequests = 0;
+  private readonly mediaQueue: (() => void)[] = [];
 
   // Throws RangeError when the port is not a valid TCP port.
   constructor(private readonly options: ApiClientOptions) {
@@ -189,6 +206,18 @@ export class ApiClient {
 
   async exportPhotos(libraryId: string, ids: string[]): Promise<void> {
     await this.call('POST', libraryPath(libraryId, '/exports'), { ids }, SLOW_REQUEST_TIMEOUT_MS);
+  }
+
+  // Returns the generated thumbnail of one photo. It always asks for that variant, so this client cannot fetch an
+  // original. Rejects with ApiClientError while the services are not up, and as fetchMedia describes.
+  async getThumbnail(libraryId: string, photoId: string): Promise<MediaFile> {
+    const path = `${libraryPath(libraryId, `/media/${encodeURIComponent(photoId)}`)}?variant=thumbnail`;
+    await this.acquireMediaSlot();
+    try {
+      return await this.fetchMedia(path);
+    } finally {
+      this.releaseMediaSlot();
+    }
   }
 
   // Follows the library's event stream and calls `onEvent` for each well formed JSON object, in order.
@@ -260,7 +289,7 @@ export class ApiClient {
 
   // Builds a request with the token and the Host header. Each request uses its own connection (no agent).
   // Throws ApiClientError while the services are not up, because the token cannot work then and sending it
-  // would only hand it to whatever else listens on the port. Both callers run this inside a Promise executor,
+  // would only hand it to whatever else listens on the port. Every caller runs this inside a Promise executor,
   // so the throw becomes their rejection.
   private open(method: string, path: string, accept: string, payload?: string): http.ClientRequest {
     if (!this.options.session.isUp()) {
@@ -316,6 +345,70 @@ export class ApiClient {
         });
       });
       request.end(payload);
+    });
+  }
+
+  // Resolves when a media request may be sent. The caller must call releaseMediaSlot afterwards.
+  private async acquireMediaSlot(): Promise<void> {
+    if (this.mediaRequests < MAX_MEDIA_REQUESTS) {
+      this.mediaRequests += 1;
+      return;
+    }
+    await new Promise<void>((resolve) => this.mediaQueue.push(resolve));
+  }
+
+  // Hands the slot to the oldest waiting request, which keeps the count unchanged, or frees it.
+  private releaseMediaSlot(): void {
+    const next = this.mediaQueue.shift();
+    if (next) next();
+    else this.mediaRequests -= 1;
+  }
+
+  // Sends one media request and resolves to its image. The gate is read here, when the request is really sent, so
+  // one that waited for a slot cannot go out after the services stopped. Rejects with ApiClientError for a refused
+  // connection, any status but 200, a type outside MEDIA_CONTENT_TYPES, an answer over MAX_MEDIA_BYTES or holding
+  // the token, a broken answer, and an exchange that outlasts its limit, even if bytes keep arriving.
+  private fetchMedia(path: string): Promise<MediaFile> {
+    return new Promise((resolve, reject) => {
+      const request = this.open('GET', path, [...MEDIA_CONTENT_TYPES].join(', '));
+      const fail = (error: ApiClientError): void => {
+        clearTimeout(deadline);
+        reject(error);
+        request.destroy();
+      };
+      const deadline = setTimeout(
+        () => fail(new ApiClientError('timeout', TIMEOUT_MESSAGE)),
+        this.options.mediaTimeoutMs ?? REQUEST_TIMEOUT_MS,
+      );
+      request.on('error', () => fail(new ApiClientError('unreachable', UNREACHABLE_MESSAGE)));
+      request.on('response', (response) => {
+        const contentType = (response.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+        if (response.statusCode !== 200 || !MEDIA_CONTENT_TYPES.has(contentType)) {
+          fail(new ApiClientError('refused', REFUSED_MESSAGE, response.statusCode));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        response.on('data', (chunk: Buffer) => {
+          size += chunk.length;
+          if (size > MAX_MEDIA_BYTES) {
+            fail(badResponse());
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.on('error', () => fail(new ApiClientError('unreachable', UNREACHABLE_MESSAGE)));
+        response.on('end', () => {
+          clearTimeout(deadline);
+          const bytes = Buffer.concat(chunks);
+          if (bytes.includes(this.secret())) {
+            reject(badResponse());
+            return;
+          }
+          resolve({ contentType, bytes });
+        });
+      });
+      request.end();
     });
   }
 

@@ -125,6 +125,18 @@ dialog. Still open in P02.4: the `afmedia` proxy (P02.4.3), `export:photo` (it r
 in the stack module, which runs without a GPU, and the status left at "Starting..." when a restart is refused
 during a cancel ([Operations](operations.md#running-the-current-code)). So P02.4 stays unchecked.
 
+Progress 2026-11-01: P02.4.3 added `apps/desktop/electron/media-proxy.ts` and `tests/media-proxy.test.cjs`. The
+`afmedia` handler in `main.ts` now asks the API for a thumbnail by photo ID through `ApiClient.getThumbnail`, behind
+the same gate as every other request, and the file-url pipe builds its URL from IDs. `photos:get` drops `filePath`
+and `thumbnailPath` and adds `hasThumbnail`. Details: [Bridge mapping](architecture.md#bridge-mapping). Observed:
+`bash scripts/check.sh --node` passed (lint, both builds, `bash -n start.sh`, and 107 Node tests: 106 passed, 1
+skipped, the symlink case). Not run: the engine container tests (no engine file changed), `--compose` and
+`--integration`. Not observed: the proxy against the real API or gateway, or an image displayed in a running Electron.
+These items are still open in P02.4 and are not delivered: `export:photo`, `DELETE .../data` when a library is deleted,
+and the status left at "Starting..." when a restart is refused during a cancel (P02.4.4); connecting `/exports` to the
+API's export folder and `compose.gpu.yaml` in the stack module (P02.4.5). Showing earlier results before a run and the
+token from `start.sh` belong to P02.WINDOW. So P02.4 stays unchecked until P02.4.5 passes.
+
 ## 4. P03 — Local AI runtime
 
 **Depends on:** P02. **Areas:** providers, models.

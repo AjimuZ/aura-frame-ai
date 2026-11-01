@@ -277,6 +277,20 @@ async function setPaused(backend: AnalysisBackend, libraryId: string, paused: bo
   statuses.set(libraryId, await (paused ? backend.api.pauseRun(libraryId) : backend.api.resumeRun(libraryId)));
 }
 
+// Returns a stored photo record in the bridge shape, under the requested library. Its paths stay in main: the renderer
+// only learns whether a thumbnail exists, and `afmedia` finds it by photo ID.
+function toBridgePhoto(libraryId: string, record: Record<string, unknown>): PhotoItem {
+  const thumbnailPath = record['thumbnailPath'];
+  const photo: Record<string, unknown> = {
+    ...record,
+    libraryId,
+    hasThumbnail: typeof thumbnailPath === 'string' && thumbnailPath !== '',
+  };
+  delete photo['filePath'];
+  delete photo['thumbnailPath'];
+  return photo as unknown as PhotoItem;
+}
+
 // Rethrows an API failure as a plain Error with its fixed message, the only part that crosses IPC.
 async function guarded<T>(action: () => Promise<T>): Promise<T> {
   try {
@@ -385,7 +399,7 @@ export function registerAnalysisIpc(
     assertLibrary(libraries, libraryId);
     try {
       const records = await api.listPhotos(libraryId);
-      return records.map((photo) => ({ ...photo, libraryId }) as unknown as PhotoItem);
+      return records.map((record) => toBridgePhoto(libraryId, record));
     } catch {
       return [];
     }

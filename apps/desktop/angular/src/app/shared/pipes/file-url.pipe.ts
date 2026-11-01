@@ -1,18 +1,14 @@
-// Converts a local thumbnail path into a URL the renderer can display.
-// In Electron, local files are served via the privileged `afmedia` scheme (Chromium
-// blocks raw file:// images on http(s) pages). Returns '' for missing paths.
+// Converts a photo ID into the URL that displays its thumbnail.
+// In Electron, main answers the privileged `afmedia` scheme by asking the API for that photo,
+// so the renderer holds no path and no token. Returns '' when either ID is missing.
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({ name: 'fileUrl', standalone: true })
 export class FileUrlPipe implements PipeTransform {
-  transform(path: string | null | undefined, libraryId: string | null | undefined): string {
-    if (!path || !libraryId) {
+  transform(photoId: string | null | undefined, libraryId: string | null | undefined): string {
+    if (!photoId || !libraryId) {
       return '';
     }
-    if (/^(afmedia|https?|data|blob):/.test(path)) {
-      return path;
-    }
-    const normalized = path.replace(/\\/g, '/');
-    return `afmedia://media/?libraryId=${encodeURIComponent(libraryId)}&path=${encodeURIComponent(normalized)}`;
+    return `afmedia://media/?libraryId=${encodeURIComponent(libraryId)}&photoId=${encodeURIComponent(photoId)}`;
   }
 }

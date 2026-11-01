@@ -159,6 +159,7 @@ test('the real main process sends nothing before a start, and its quit paths sto
   process.env.AURAFRAME_PORT = String(server.address().port);
 
   const handlers = new Map();
+  const schemes = new Map();
   const app = newFakeApp();
   app.whenReady = () => Promise.resolve();
   app.getPath = () => root;
@@ -187,7 +188,7 @@ test('the real main process sends nothing before a start, and its quit paths sto
       BrowserWindow: FakeWindow,
       dialog: { showErrorBox: (title, message) => errors.push({ title, message }) },
       ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
-      protocol: { registerSchemesAsPrivileged() {}, handle() {} },
+      protocol: { registerSchemesAsPrivileged() {}, handle: (scheme, handler) => schemes.set(scheme, handler) },
       safeStorage: { isEncryptionAvailable: () => false },
       shell: {},
     },
@@ -202,6 +203,10 @@ test('the real main process sends nothing before a start, and its quit paths sto
   assert.equal(await handlers.get('review:get')({}, activeLibraryId), null);
   assert.equal((await handlers.get('analysis:status')({}, activeLibraryId)).step, 'idle');
   await assert.rejects(handlers.get('data:clear')({}, activeLibraryId), /not reachable/);
+  const thumbnail = await schemes.get('afmedia')(
+    new Request(`afmedia://media/?libraryId=${activeLibraryId}&photoId=IMG_0123456789`),
+  );
+  assert.equal(thumbnail.status, 404);
   assert.deepEqual(requests, []);
 
   app.quit();

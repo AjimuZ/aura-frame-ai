@@ -28,8 +28,8 @@ import { PHOTO_SLOT_LABELS, type PhotoSlot } from '../../core/models';
             @if (slot.photo) { <af-score-badge [score]="slot.photo.finalScore" /> }
           </div>
           @if (slot.photo; as photo) {
-            @if (photo.thumbnailPath) {
-              <img [src]="photo.thumbnailPath | fileUrl: photo.libraryId" [alt]="photo.fileName" style="width:100%; aspect-ratio:4/5; object-fit:cover;" />
+            @if (photo.hasThumbnail) {
+              <img [src]="photo.id | fileUrl: photo.libraryId" [alt]="photo.fileName" style="width:100%; aspect-ratio:4/5; object-fit:cover;" />
             } @else {
               <div style="aspect-ratio:4/5; background:var(--af-bg-deep); display:flex; align-items:center; justify-content:center; color:var(--af-text-muted);">No preview</div>
             }

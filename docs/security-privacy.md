@@ -93,6 +93,10 @@ Verified on 2026-11-01 by reading the source.
   this session, and it stops at the next start or stop. Before that, reads return their fallbacks and writes are
   refused. Tested with a fake server and a fake Docker in `tests/analysis-http.test.cjs` and
   `tests/quit-handling.test.cjs`; not observed against a real Docker or a running Electron.
+- `afmedia` requests a thumbnail from the API by photo ID, behind the same gate, and can never ask for an original
+  (`apps/desktop/electron/media-proxy.ts`). The photo list reaches the window without `filePath` or `thumbnailPath`.
+  Tested with a fake server in `tests/media-proxy.test.cjs`; not observed against the real API or in a running
+  Electron.
 - HTML reports escape every value, including AI text (`engine/src/generate_report.py`).
 - The engine makes no network calls except to the configured AI endpoint.
 - The OpenAI flow is off by default and sends resized copies with EXIF stripped and orientation

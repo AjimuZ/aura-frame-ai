@@ -90,7 +90,7 @@ with the same package set as the engine tests, and the integration check uses it
 
 Not observed yet: the `full` stage building, a GPU in a container, `vision` serving a model, and the
 engine running in `api`. The `/exports` mount exists, but the API still writes exports under `/data`
-until P02.4 connects it.
+until P02.4.5 connects it.
 
 ## Storage
 
@@ -157,7 +157,7 @@ against a fake HTTP server only:
 
 - `startAnalysis`, `pauseAnalysis`, `resumeAnalysis`, `cancelAnalysis`, `getAnalysisStatus`, `onProgress`,
   `getPhotos`, `exportFinalSet`, `clearGeneratedData`, `getReviewSession` and `saveReviewSession` use the routes
-  above. Channels and shapes are unchanged.
+  above. Channels are unchanged, and so are the shapes except for `getPhotos` (see the thumbnails item below).
 - `startAnalysis` runs `docker compose up -d --wait` with the folder in the environment (not `--no-deps api`,
   and without `compose.gpu.yaml`), and resolves before the run starts. Its outcome arrives as events.
 - The client only talks to `127.0.0.1`, adds the token and the Host header, and follows no redirect. Refusals
@@ -170,12 +170,22 @@ against a fake HTTP server only:
   (`quit-handling.ts`). `down` runs only after an `up` in flight has ended, and a new start is refused until then.
   The wait on quit is bounded to 10 minutes; see [Operations](operations.md#running-the-current-code) for what
   may remain after that. On macOS, closing the last window stops the services and the app stays open.
+- Thumbnails (P02.4.3, `media-proxy.ts`): the file-url pipe builds `afmedia://media/?libraryId=<id>&photoId=<id>`.
+  Main checks the method, host and path, both ID patterns, that the library is registered, and that no other
+  parameter is present, then requests `GET /api/libraries/{id}/media/{photo_id}?variant=thumbnail` through
+  `ApiClient`, so the gate above applies. Only a 200 with `image/jpeg`, `image/png` or `image/webp`, at most 16 MiB and
+  within 30 seconds, is passed on, with fixed headers. At most 8 media requests run at once, because the gateway has 256
+  connections. Everything else, including the time before a start, is the same 404.
+- `getPhotos` no longer returns `filePath` or `thumbnailPath`. It returns `hasThumbnail`, so the window can still
+  show its "No preview" placeholder. The chosen host folder still reaches the window through the library state, as it
+  has to for the folder picker.
 
-Not done yet: `afmedia` still reads host paths (P02.4.3). `exportPhoto` still reads a host `photos.json`
-that no longer exists. `deleteLibrary` does not call `DELETE /api/libraries/{id}/data`, so the library's data
-stays in the volume. `checkOllama` and `getOpenAiStatus` return their fixed "unable to probe" answers instead of
-`GET /api/providers`. `estimateOpenAiCost`, `startOpenAiQuality` and `exportOpenAiResults` keep their channels
-but do nothing. The window receives no token from `start.sh`, so main's own token replaces it at the first run.
+Not done yet: `exportPhoto` still reads a host `photos.json`
+that no longer exists, and `deleteLibrary` does not call `DELETE /api/libraries/{id}/data`, so the library's data
+stays in the volume (both P02.4.4). `checkOllama` and `getOpenAiStatus` return their fixed "unable to probe" answers
+instead of `GET /api/providers` (P03.5). `estimateOpenAiCost`, `startOpenAiQuality` and `exportOpenAiResults` keep
+their channels but do nothing (P05.5). The window receives no token from `start.sh`, so main's own token replaces it
+at the first run (P02.WINDOW).
 
 ## Library data layout
 

@@ -4,7 +4,6 @@
 // through validated IPC channels defined in the ipc/ modules.
 
 import { app, BrowserWindow, dialog, protocol } from 'electron';
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { registerFilesystemIpc } from './ipc/filesystem.ipc';
 import { registerAnalysisIpc, disposeAnalysisIpc, isAnalysisRunning } from './ipc/analysis.ipc';
@@ -14,6 +13,7 @@ import { LibraryRegistryStore } from './ipc/library-store';
 import { registerLibrariesIpc } from './ipc/libraries.ipc';
 import { ApiClient, gatewayPort } from './api-client';
 import { ComposeStack } from './compose-stack';
+import { handleMediaRequest } from './media-proxy';
 import { installQuitHandling } from './quit-handling';
 
 const isDev = process.env['AURA_DEV'] === '1';
@@ -24,43 +24,14 @@ const SERVICES_LEFT_MESSAGE =
   'be running, or may still come up, with your photo folder mounted read-only. To stop them, run ' +
   '"./start.sh --stop" from the project folder.';
 
-// A privileged custom scheme so the renderer can display local thumbnails without
-// exposing the filesystem or weakening webSecurity. Must be declared before app ready.
+// A privileged custom scheme so the renderer can display thumbnails without seeing a
+// path or the token, or weakening webSecurity. Must be declared before app ready.
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'afmedia',
     privileges: { standard: true, secure: true, supportFetchAPI: true, bypassCSP: false },
   },
 ]);
-
-const MIME_BY_EXT: Record<string, string> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-};
-
-// Serves a local image file, but only if it resolves inside the working directory.
-// This keeps the trust boundary narrow: originals and arbitrary paths are not exposed.
-function handleMediaRequest(libraries: LibraryRegistryStore, request: Request): Response {
-  const libraryId = new URL(request.url).searchParams.get('libraryId') ?? '';
-  const requested = new URL(request.url).searchParams.get('path') ?? '';
-  try {
-    const resolved = libraries.resolveWorkingFile(libraryId, requested);
-    if (
-      !resolved ||
-      !fs.existsSync(resolved) ||
-      !fs.statSync(resolved).isFile()
-    ) {
-      return new Response('Not found', { status: 404 });
-    }
-    const mime = MIME_BY_EXT[path.extname(resolved).toLowerCase()] ?? 'application/octet-stream';
-    return new Response(fs.readFileSync(resolved), { headers: { 'content-type': mime } });
-  } catch {
-    return new Response('Not found', { status: 404 });
-  }
-}
 
 // Builds the main application window with a narrow, sandboxed trust boundary.
 function createWindow(): BrowserWindow {
@@ -106,15 +77,15 @@ void app.whenReady().then(() => {
   try {
     const libraries = new LibraryRegistryStore(dataRoot());
     libraries.initialize();
-    protocol.handle('afmedia', (request) => handleMediaRequest(libraries, request));
+    const stack = new ComposeStack({ composeDir: repoRoot() });
+    const api = new ApiClient({ port: gatewayPort(process.env), session: stack });
+    protocol.handle('afmedia', (request) => handleMediaRequest({ api, libraries }, request));
     registerSettingsIpc();
     registerFilesystemIpc(libraries);
     registerLibrariesIpc(libraries, isAnalysisRunning);
 
     const window = createWindow();
     hardenNavigation(window);
-    const stack = new ComposeStack({ composeDir: repoRoot() });
-    const api = new ApiClient({ port: gatewayPort(process.env), session: stack });
     registerAnalysisIpc(() => BrowserWindow.getAllWindows(), libraries, { api, stack });
 
     app.on('activate', () => {

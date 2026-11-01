@@ -518,11 +518,60 @@
         "`afmedia` proxies thumbnails from the API by photo ID"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": "Every media request must go through the same gate as the other API calls from P02.4.2: before the stack has started in this session, send no request and no token, and answer as for a missing thumbnail. `conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails and the review findings are lost. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders.",
+      "passes": true,
+      "notes": "`afmedia` now proxies thumbnails from the API by photo ID, and the renderer gets neither a path nor the token. This attempt changed documents only and kept the earlier code as it was.\n\n**Delivered change (from earlier attempts, kept):**\n- `apps/desktop/electron/media-proxy.ts` validates the method, host, path, both ID patterns, the registered library and the exact parameter count. It then calls `ApiClient.getThumbnail`.\n- The request goes through the same `ApiClient.open` gate as every other API call. Before the stack has started in this session, or after a stop, no request and no token leave main, and the answer is the same 404 as a missing thumbnail.\n- Only a 200 with `image/jpeg`, `image/png` or `image/webp` is passed on, at most 16 MiB and within the time limit, with fixed headers. At most 8 media requests run at once.\n- The file-url pipe builds its URL from IDs. `photos:get` drops `filePath` and `thumbnailPath` and adds `hasThumbnail`.\n\n**This attempt (documents only):**\n- The P02.4.3 note in `docs/roadmap.md` now ends by listing the items still open in P02.4 with their owners, so P02.4 stays unchecked until P02.4.5 passes. The owners are P02.4.4 for `export:photo`, `DELETE .../data` and the \"Starting...\" status, P02.4.5 for `/exports` and `compose.gpu.yaml`, and P02.WINDOW for earlier results and the token from `start.sh`.\n- I also removed that note's sentence saying the four P02.4 criteria were covered, because it pointed the other way.\n- `docs/architecture.md:92-93` and `docs/operations.md:30` now point at P02.4.5.\n- The \"Not done yet\" paragraph in `docs/architecture.md` names P02.4.4, P03.5, P05.5 and P02.WINDOW.\n- I did not edit the P02.4 checkbox or add a roadmap line.\n\n**Observed:** `bash scripts/check.sh --node` passed after the last edit: lint, Angular build, Electron build, `bash -n start.sh`, and 107 Node tests (106 passed, 1 skipped). The skipped one is the symlink case, because this Windows session may not create symlinks.\n\n**Not run:** the engine container tests (no engine file changed), `--compose` and `--integration`.\n\n**Not observed:** the proxy against the real API or gateway, or an image displayed in a running Electron. Tests use a fake HTTP server and a stand-in for Electron, so runtime behavior of the protocol stays unverified until P01.SMOKE or the first real run.\n\n**Still open:** until a run starts the services, the app shows no thumbnails, including those of earlier runs (P02.WINDOW).",
       "dependsOn": [
         "P02.1",
         "P02.4.2"
+      ],
+      "splitFrom": "P02.4",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of"
+      }
+    },
+    {
+      "id": "P02.4.4",
+      "title": "P02.4.4 Electron main: single-photo export, library deletion and a refused start",
+      "description": "Finish the bridge handlers left outside the API, as the Bridge mapping in docs/architecture.md describes. `export:photo` still reads a host `photos.json` that no longer exists. `libraries:delete` leaves the library's data in the volume. A start refused while a cancel is finishing leaves the window at \"Starting...\" until a refresh. IPC channels and signatures stay the same.",
+      "acceptanceCriteria": [
+        "`export:photo` finds the photo by ID through `ApiClient`, maps its stored path under `/photos` to the library's chosen host folder, refuses a path that resolves outside that folder, and copies the original through the native save dialog, and a Node test with a fake server and a temporary folder proves the copy and the refusal",
+        "`libraries:delete` calls `DELETE /api/libraries/{id}/data` through `ApiClient` before the library leaves the registry, and a fake-server test proves the route and the token",
+        "While the services are not up in this session, `export:photo` and `libraries:delete` send nothing, and a test proves it. A deletion in that state is either refused with a fixed message or tells the person that the data stays in the volume, so the data is never left behind silently",
+        "After `analysis:start` is refused, the window shows the refusal and no longer shows \"Starting...\", without a refresh, and a Node test covers it"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. No stored path and no token may appear in an IPC reply, an event or an error message. Keep the check that refuses a destination equal to the original.",
+      "dependsOn": [
+        "P02.1",
+        "P02.4.3"
+      ],
+      "splitFrom": "P02.4",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of"
+      }
+    },
+    {
+      "id": "P02.4.5",
+      "title": "P02.4.5 Export folder and GPU overlay in the stack started by Electron main",
+      "description": "Connect the `/exports` mount that compose already declares, so copies and reports reach the host folder that the output and reports buttons open, and make the stack module use `compose.gpu.yaml` when a GPU is available, as `start.sh` does. Today the API writes under `/data` and the stack module runs without a GPU.",
+      "acceptanceCriteria": [
+        "`POST /api/libraries/{id}/exports` writes its copies under the `/exports` mount instead of `/data`, keeps every safety rule of `engine/api/exports.py` (copy only, no symlink followed, nothing copied unless every ID passes), and the engine tests prove it",
+        "The host folder behind `/exports` reaches compose only through `AURAFRAME_EXPORTS_DIR` in the child environment of `ComposeStack`, after validation in main, and a fake-spawn test proves the environment and that the folder is absent from the arguments",
+        "`fs:openOutputFolder` and `fs:openReportsFolder` open host folders that hold that library's copies and reports, and a test proves the paths agree with what the stack mounts",
+        "`ComposeStack` adds `-f compose.gpu.yaml` when `nvidia-smi -L` succeeds, run through `spawn` with `shell: false`, and leaves it out otherwise, and a fake-spawn test proves both cases",
+        "docs/architecture.md, docs/operations.md and docs/testing.md say where exports and reports go, and no document still says that the API does not write to `/exports`"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. The API runs as uid 10001: keep the Linux note in docs/operations.md accurate, and make an unwritable folder a clear error rather than a silent failure.",
+      "dependsOn": [
+        "P02.1",
+        "P02.4.4"
       ],
       "splitFrom": "P02.4",
       "source": {
@@ -565,12 +614,38 @@
       "dependsOn": [
         "P02.4.1",
         "P02.4.2",
-        "P02.4.3"
+        "P02.4.3",
+        "P02.4.4",
+        "P02.4.5"
       ],
       "source": {
         "path": "docs/roadmap.md",
         "section": "3. P02 — Container stack",
         "line": "P02.6 Remove `start.py` and the Python paths from Electron."
+      }
+    },
+    {
+      "id": "P02.WINDOW",
+      "title": "`./start.sh` opens the window and shares its session token",
+      "description": "Make `./start.sh` run the window as docs/operations.md promises in its contract and its Development section, using the shell from P02.5 or its recorded host fallback. Today the script prints that the window is not launched, and the window brings its own token, so earlier results stay hidden until a run starts the services.",
+      "acceptanceCriteria": [
+        "`./start.sh` without `--backend-only` starts the services, then runs the window in the foreground, and passes the session token to it only through the environment, and `tests/start-sh.test.cjs` proves it with stubs",
+        "When the window closes, or on Ctrl+C, the script stops the services and keeps the data, and `tests/start-sh.test.cjs` proves it with stubs",
+        "Electron main uses a token inherited from the environment, or from the ignored `data/session-token` in development, instead of generating its own, and a test proves it. Without one, main behaves as it does today and sends nothing before a start",
+        "With an inherited token, main's request gate is open from launch, so earlier results show without a new run, and a fake-server test proves it. A 401 or 403 from the gateway closes the gate again, and the window reports that the services are unavailable",
+        "docs/operations.md and the message in `start.sh` no longer say that the window is not launched, and the changelog no longer lists earlier results as open"
+      ],
+      "priority": 20,
+      "passes": false,
+      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. The token must never appear in an argument, an IPC reply, an event or a log line.",
+      "dependsOn": [
+        "P02.5",
+        "P02.4.5"
+      ],
+      "source": {
+        "reference": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "Exit: `./start.sh` opens the Electron window; a synthetic folder chosen in the native dialog completes a `fast` run end to end; closing the window stops the services."
       }
     },
     {
@@ -596,7 +671,10 @@
         "P02.3.3",
         "P02.4.1",
         "P02.4.2",
-        "P02.4.3"
+        "P02.4.3",
+        "P02.4.4",
+        "P02.4.5",
+        "P02.WINDOW"
       ],
       "source": {
         "reference": "docs/roadmap.md",

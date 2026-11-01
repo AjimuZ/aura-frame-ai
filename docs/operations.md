@@ -27,7 +27,7 @@ AURAFRAME_API_TOKEN=<at least 16 characters> AURAFRAME_PHOTOS_DIR=<folder> \
 - `vision` does not become healthy until its model files are in the `models` volume, which nothing fills
   yet (P03.2). Until then, run without the profile.
 - On Linux, create the exports folder first, writable by uid 10001. Docker otherwise creates it as root.
-  The API does not write there yet (P02.4).
+  The API does not write there yet (P02.4.5).
 - Image builds do not download model files.
 
 ## Prerequisites

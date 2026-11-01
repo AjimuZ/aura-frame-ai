@@ -20,8 +20,8 @@ import { PHOTO_SLOT_LABELS, type PhotoItem } from '../../../core/models';
       (click)="cardClick.emit(photo())"
     >
       <div style="position:relative;">
-        @if (photo().thumbnailPath) {
-          <img class="af-photo-card__thumb" [src]="photo().thumbnailPath | fileUrl: photo().libraryId" [alt]="photo().fileName" />
+        @if (photo().hasThumbnail) {
+          <img class="af-photo-card__thumb" [src]="photo().id | fileUrl: photo().libraryId" [alt]="photo().fileName" />
         } @else {
           <div class="af-photo-card__thumb" style="display:flex; align-items:center; justify-content:center; color:var(--af-text-muted);">No preview</div>
         }

@@ -39,10 +39,15 @@
   is sent to no one until this session has started the services. Closing the window or quitting the app stops
   the services it started and keeps the data, after waiting for a start in progress. If Docker has not finished
   within 10 minutes, a dialog says what may still be running and the app exits. This has been tested with a fake
-  server and a fake Docker only, not against the real services. Still open: thumbnails, exporting a single photo,
+  server and a fake Docker only, not against the real services. Still open: exporting a single photo,
   removing a deleted library's data from the volume, and showing earlier results before a run starts the
   services. A new start while a cancel is finishing is refused, and the status stays at "Starting..." until it is
   refreshed. The final set is copied into the data volume, so the output folder button does not show it yet.
+- Thumbnails now come from the containerised engine. The window asks for a thumbnail by photo ID, and Electron main
+  fetches it from the API with the session token, so the window holds no photo path and no token. Until this
+  session has started the services, nothing is sent and the thumbnail counts as missing. Originals cannot be
+  requested this way. This has been tested with a fake server only, not against the real services or in a running
+  window.
 
 ### Changed
 

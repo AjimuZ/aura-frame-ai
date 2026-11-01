@@ -50,8 +50,8 @@ export interface GemmaPhotoReview {
 export interface PhotoItem {
   libraryId: string;
   id: string;
-  filePath: string;
-  thumbnailPath: string;
+  // Whether a thumbnail was generated. The renderer asks for it by ID and never holds a path.
+  hasThumbnail: boolean;
   fileName: string;
 
   width: number;

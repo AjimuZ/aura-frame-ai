@@ -69,8 +69,8 @@ type Filter =
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:12px;">
           @for (photo of compared(); track photo.id) {
             <div>
-              @if (photo.thumbnailPath) {
-                <img [src]="photo.thumbnailPath | fileUrl: photo.libraryId" [alt]="photo.fileName" style="width:100%; border-radius:12px;" />
+              @if (photo.hasThumbnail) {
+                <img [src]="photo.id | fileUrl: photo.libraryId" [alt]="photo.fileName" style="width:100%; border-radius:12px;" />
               }
               <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
                 <af-score-badge [score]="photo.finalScore" />
@@ -97,8 +97,8 @@ type Filter =
 
         <aside class="af-card" style="position:sticky; top:0;">
           @if (selected(); as photo) {
-            @if (photo.thumbnailPath) {
-              <img [src]="photo.thumbnailPath | fileUrl: photo.libraryId" [alt]="photo.fileName" style="width:100%; border-radius:12px;" />
+            @if (photo.hasThumbnail) {
+              <img [src]="photo.id | fileUrl: photo.libraryId" [alt]="photo.fileName" style="width:100%; border-radius:12px;" />
             }
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
               <af-score-badge [score]="photo.finalScore" />

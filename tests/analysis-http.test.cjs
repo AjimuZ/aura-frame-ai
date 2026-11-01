@@ -241,7 +241,7 @@ test('requests flow after a successful start and stop again once the services ar
   await invoke('analysis:start', LIBRARY_ID, config);
   await waitFor(() => !isAnalysisRunning(), 'the run to end');
   assert.deepEqual(await invoke('photos:get', LIBRARY_ID), [
-    { id: PHOTO_ID, fileName: 'synthetic.jpg', libraryId: LIBRARY_ID },
+    { id: PHOTO_ID, fileName: 'synthetic.jpg', libraryId: LIBRARY_ID, hasThumbnail: false },
   ]);
 
   await disposeAnalysisIpc();
@@ -250,6 +250,26 @@ test('requests flow after a successful start and stop again once the services ar
   await assert.rejects(invoke('data:clear', LIBRARY_ID), /not reachable/);
   assert.equal((await invoke('analysis:status', LIBRARY_ID)).step, 'idle');
   assert.equal(api.requests.length, served);
+});
+
+test('the photo list reaches the renderer without any stored path', async (t) => {
+  const { api, invoke, config } = await setup(t);
+  const thumbnailPath = '/data/libraries/synthetic/working/thumbs/0123456789abcdef.jpg';
+  const filePath = '/photos/synthetic-folder/synthetic.jpg';
+  api.routes.set('GET /photos', (res) =>
+    api.send(res, 200, [
+      { id: PHOTO_ID, fileName: 'synthetic.jpg', filePath, thumbnailPath },
+      { id: 'IMG_ABCDEF0123', fileName: 'other.jpg', filePath, thumbnailPath: '' },
+    ]),
+  );
+  api.status = { ...api.status, step: 'done', running: false, message: 'Finished' };
+  await invoke('analysis:start', LIBRARY_ID, config);
+  await waitFor(() => !isAnalysisRunning(), 'the run to end');
+
+  assert.deepEqual(await invoke('photos:get', LIBRARY_ID), [
+    { id: PHOTO_ID, fileName: 'synthetic.jpg', libraryId: LIBRARY_ID, hasThumbnail: true },
+    { id: 'IMG_ABCDEF0123', fileName: 'other.jpg', libraryId: LIBRARY_ID, hasThumbnail: false },
+  ]);
 });
 
 test('every API request carries the token and Host header, and no reply or event carries the token', async (t) => {
@@ -274,7 +294,7 @@ test('every API request carries the token and Host header, and no reply or event
   await waitFor(() => !isAnalysisRunning(), 'the run to end');
 
   const photos = await invoke('photos:get', LIBRARY_ID);
-  assert.deepEqual(photos, [{ id: PHOTO_ID, fileName: 'synthetic.jpg', libraryId: LIBRARY_ID }]);
+  assert.deepEqual(photos, [{ id: PHOTO_ID, fileName: 'synthetic.jpg', libraryId: LIBRARY_ID, hasThumbnail: false }]);
   assert.deepEqual(await invoke('review:get', LIBRARY_ID), SESSION);
   await invoke('review:save', LIBRARY_ID, { ...SESSION, unexpected: 'dropped' });
   await invoke('export:finalSet', LIBRARY_ID, [PHOTO_ID]);

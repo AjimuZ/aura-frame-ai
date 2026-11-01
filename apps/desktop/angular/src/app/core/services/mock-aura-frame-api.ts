@@ -41,8 +41,7 @@ function samplePhoto(index: number, libraryId: string): PhotoItem {
   return {
     libraryId,
     id: `SAMPLE_${String(index + 1).padStart(4, '0')}`,
-    filePath: `sample/photo_${index + 1}.jpg`,
-    thumbnailPath: '',
+    hasThumbnail: false,
     fileName: `photo_${index + 1}.jpg`,
     width: 1200,
     height: 1500,

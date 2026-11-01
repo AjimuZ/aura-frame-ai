@@ -34,6 +34,9 @@
 - When a teardown can overlap a long-running start, have the teardown await the in-flight start, and record that a stop was requested so the late success cannot mark the service as up.
 - For an async Electron quit, always call preventDefault in before-quit, guard against repeats, bound the work, and leave with app.exit, which emits no further quit event.
 - When a test's fake cannot prove a wire contract, also compare the client with the real server's routes and models, and report that as read, not run.
+- Any new request from Electron main to the API goes through `ApiClient.open`, so it cannot bypass the session gate or attach the token on its own.
+- Handlers that answer the renderer take their backend by injection (`MediaProxyBackend`), so a Node test can run them with a fake server and no Electron.
+- When leaving work open in a progress note, name the roadmap task that owns each leftover, so the parent item's unchecked state can be explained.
 
 ---
 
@@ -389,4 +392,37 @@ The P02.4.2 checkbox and scripts/ralph/prd.json were left alone.
   - `startAnalysis` runs a full `up -d --wait` without `compose.gpu.yaml`, unlike the `--no-deps api` target flow in docs/architecture.md, so real runs have no GPU until the stack module adds the overlay.
   - Not observed yet: the client against the real gateway and API, and File > Exit, the dialog and `app.exit` in a running Electron. P01.SMOKE or the first real run should check them.
   - During a quit wait from File > Exit the window stays open and shows no progress. This is not in the docs yet.
+---
+
+## 2026-11-01T23:25:09Z - P02.4.3
+- `afmedia` now proxies thumbnails from the API by photo ID, and the renderer gets neither a path nor the token. This attempt changed documents only and kept the earlier code as it was.
+
+**Delivered change (from earlier attempts, kept):**
+- `apps/desktop/electron/media-proxy.ts` validates the method, host, path, both ID patterns, the registered library and the exact parameter count. It then calls `ApiClient.getThumbnail`.
+- The request goes through the same `ApiClient.open` gate as every other API call. Before the stack has started in this session, or after a stop, no request and no token leave main, and the answer is the same 404 as a missing thumbnail.
+- Only a 200 with `image/jpeg`, `image/png` or `image/webp` is passed on, at most 16 MiB and within the time limit, with fixed headers. At most 8 media requests run at once.
+- The file-url pipe builds its URL from IDs. `photos:get` drops `filePath` and `thumbnailPath` and adds `hasThumbnail`.
+
+**This attempt (documents only):**
+- The P02.4.3 note in `docs/roadmap.md` now ends by listing the items still open in P02.4 with their owners, so P02.4 stays unchecked until P02.4.5 passes. The owners are P02.4.4 for `export:photo`, `DELETE .../data` and the "Starting..." status, P02.4.5 for `/exports` and `compose.gpu.yaml`, and P02.WINDOW for earlier results and the token from `start.sh`.
+- I also removed that note's sentence saying the four P02.4 criteria were covered, because it pointed the other way.
+- `docs/architecture.md:92-93` and `docs/operations.md:30` now point at P02.4.5.
+- The "Not done yet" paragraph in `docs/architecture.md` names P02.4.4, P03.5, P05.5 and P02.WINDOW.
+- I did not edit the P02.4 checkbox or add a roadmap line.
+
+**Observed:** `bash scripts/check.sh --node` passed after the last edit: lint, Angular build, Electron build, `bash -n start.sh`, and 107 Node tests (106 passed, 1 skipped). The skipped one is the symlink case, because this Windows session may not create symlinks.
+
+**Not run:** the engine container tests (no engine file changed), `--compose` and `--integration`.
+
+**Not observed:** the proxy against the real API or gateway, or an image displayed in a running Electron. Tests use a fake HTTP server and a stand-in for Electron, so runtime behavior of the protocol stays unverified until P01.SMOKE or the first real run.
+
+**Still open:** until a run starts the services, the app shows no thumbnails, including those of earlier runs (P02.WINDOW).
+- Files changed: CHANGELOG.md, apps/desktop/angular/src/app/core/models/photo.model.ts, apps/desktop/angular/src/app/core/services/mock-aura-frame-api.ts, apps/desktop/angular/src/app/features/library-builder/library-builder.component.ts, apps/desktop/angular/src/app/features/review/review.component.ts, apps/desktop/angular/src/app/shared/components/photo-card/photo-card.component.ts, apps/desktop/angular/src/app/shared/pipes/file-url.pipe.ts, apps/desktop/electron/api-client.ts, apps/desktop/electron/ipc/analysis.ipc.ts, apps/desktop/electron/ipc/contracts.ts, apps/desktop/electron/main.ts, apps/desktop/electron/media-proxy.ts, docs/architecture.md, docs/operations.md, docs/roadmap.md, docs/security-privacy.md, docs/testing.md, tests/analysis-http.test.cjs, tests/media-proxy.test.cjs, tests/quit-handling.test.cjs
+- **Learnings for future iterations:**
+  - `ApiClient.getThumbnail` always asks for `variant=thumbnail`. A later feature that needs an original must not reuse it: P02.4.4 maps the stored path to the host folder instead.
+  - `photos:get` no longer returns `filePath`, so P02.4.4 has to read the stored path in main through `ApiClient.listPhotos`, which still returns the raw records, and must keep it out of IPC replies and errors.
+  - `docs/operations.md:209-210` still describes the "Starting..." gap without naming P02.4.4, and P02.4.4 should remove it when fixed. P02.4.5 must clear `docs/architecture.md:92-93` and `docs/operations.md:30`.
+  - `docs/roadmap.md:98` still says the window belongs to P02.4 and P02.5. It is a dated progress note and was left as it is; P02.WINDOW now owns launching the window.
+  - `resolveWorkingFile` in the library store no longer has a caller in `main.ts` and I did not check for others. A later cleanup can check whether it can go.
+  - Not observed yet: the proxy against the real gateway and API, and an image shown in a running Electron. P01.SMOKE or the first real run should check them.
 ---
