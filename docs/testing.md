@@ -37,6 +37,7 @@ Results from 2026-11-01 on the reference PC.
 | Compose configuration and policy | `bash scripts/check.sh --compose` | Pass, exit 0 |
 | Container isolation | `bash scripts/check.sh --integration` | Pass, all assertions hold, with the `core` stage of `api`, no GPU and no model |
 | `start.sh` contract | `node --test tests/start-sh.test.cjs` | Pass, 11 of 11, with stubbed `docker`, `nvidia-smi`, `curl` and `uname`. Covers exit codes 2, 1 and 3, the token never being an argument, the model guidance, `MSYS_NO_PATHCONV=1` and the memory warning. Gap: not run against a real Docker daemon |
+| Electron compose stack | `node --test tests/compose-stack.test.cjs` | Pass, 8 of 9 and 1 skipped (the symlink case, when the OS refuses symlinks). Uses a fake `spawn`: checks the argv, `shell: false`, the folder and token only in `env`, and the token absent from replies and events. Gap: not run against a real Docker daemon |
 | Design system color check | See [Design system](design-system.md#verification) | **Fails:** 13 literals outside the token file, fixed in P06 |
 | Electron 33 to 45 breaking changes | Not checked | Gap: sessions have no web access, so upstream release notes could not be read. P01.SMOKE is what observes the app running |
 | Angular unit tests | None exist | Gap |

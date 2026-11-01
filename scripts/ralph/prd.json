@@ -474,8 +474,8 @@
         "The per-session token is generated in Electron main and never appears in any IPC reply or event"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "Reviewed the attempt 1 work and kept it. Electron main now has apps/desktop/electron/compose-stack.ts. It validates the photo folder as an absolute, existing directory with symlinks resolved. It runs `docker compose -p auraframe -f compose.yaml up -d --wait` and `down` through spawn with shell: false. The folder and the token reach docker only in the child environment (AURAFRAME_PHOTOS_DIR, AURAFRAME_API_TOKEN). The per-session token is 32 random bytes as hex, generated in main, and appears in no event or return value; the only way to read it is `authorizationHeader()`, for main's own HTTP client. Spawn and the token generator are injectable. I corrected one wrong count in docs/testing.md (8 of 9, not 7 of 8). Observed this session: `npm run lint` clean; `npm run build:electron` clean; `node --test \"tests/**/*.test.cjs\"` gave 58 tests, 57 passed, 0 failed, 1 skipped. The skipped test is the symlink case, because this Windows session may not create symlinks. Not run: the engine pytest container command, the Angular build, and anything against a real Docker daemon. The module is not called from main.ts yet, so P02.4 stays open until P02.4.2 and P02.4.3. The roadmap checkbox is untouched; only a dated progress note was added.",
       "dependsOn": [
         "P02.1"
       ],

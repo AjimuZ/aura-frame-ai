@@ -28,6 +28,10 @@
   2 (invalid arguments) and 3 (health check). It is tested with stubbed tools only, not against a real
   Docker daemon. It does not open the desktop window yet, and `--fetch-models`, `--codex-login` and
   `--provider codex` say that they are not available yet.
+- Electron main has a module that starts and stops the container stack for a chosen photo folder. It checks
+  that the folder is an existing directory, runs Docker without a shell, and passes the folder and a fresh
+  per-session token only through the environment, so neither appears in a command line, event or reply.
+  The window does not use it yet (P02.4.2, P02.4.3), and it has been tested with a fake Docker only.
 
 ### Changed
 

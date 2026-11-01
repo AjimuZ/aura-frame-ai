@@ -99,6 +99,17 @@ the window (P02.4, P02.5), `--fetch-models` (P03.2), `--codex-login` and `--prov
 flags print "not available yet" and exit 1. The file needs its executable bit in Git
 (`git update-index --chmod=+x start.sh`), which this session could not set.
 
+Progress 2026-11-01: P02.4.1 added `apps/desktop/electron/compose-stack.ts` and `tests/compose-stack.test.cjs`.
+The module validates the chosen folder (absolute, existing, a directory, symlinks resolved), runs
+`docker compose -p auraframe ... up -d --wait` and `down` through `spawn` with `shell: false`, and passes the
+folder and the per-session token only in the child environment (`AURAFRAME_PHOTOS_DIR`,
+`AURAFRAME_API_TOKEN`). The token (32 random bytes, hex) is generated in main, has no getter other than
+`authorizationHeader()` for main's own HTTP client, and appears in no event or return value. Observed: lint,
+`build:electron` and the Node tests pass (57 passed, 1 skipped; the skipped one is the symlink test, because
+this Windows session may not create symlinks). Not observed: a real Docker daemon. Not built yet: the IPC
+wiring, the HTTP client and the `afmedia` proxy (P02.4.2, P02.4.3); the module is not called from `main.ts`
+yet, so P02.4 stays unchecked.
+
 ## 4. P03 — Local AI runtime
 
 **Depends on:** P02. **Areas:** providers, models.

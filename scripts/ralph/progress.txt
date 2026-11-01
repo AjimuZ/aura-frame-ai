@@ -28,6 +28,8 @@
 - Start a root-context .dockerignore with `*` and re-allow only what the image needs, so personal folders never reach the Docker daemon.
 - Test shell scripts by copying them to a temp dir and putting stub executables first on PATH. Stubs log argv and the environment to files, so a test can prove a secret never appears in an argument.
 - Pass secrets to child processes through exported environment variables, and give curl its header through a config on stdin (`-K -`), so nothing sensitive appears in the process list.
+- Give Electron main modules that touch the OS (spawn, token generation) injectable dependencies, so Node tests can load the compiled dist-electron CJS and assert exact argv and options with a fake.
+- Pass secrets and user-chosen paths to child processes only through the env option, never argv, with shell: false. Test the absence of both from argv, events and return values.
 
 ---
 
@@ -336,4 +338,16 @@ No retired terms or personal data were found (guard tests pass), and img/ was no
   - The window launch is not implemented: P02.4 and P02.5 must add it to report_started in start.sh and update docs/operations.md.
   - The test harness copies start.sh into a temp dir with stub docker, nvidia-smi, curl and uname first on PATH, and removes real docker dirs from PATH for the missing-docker case.
   - A commit message must not contain the word for the cloud sign-in provider; the validator rejected it in attempt 1.
+---
+
+## 2026-11-01T20:42:56Z - P02.4.1
+- Reviewed the attempt 1 work and kept it. Electron main now has apps/desktop/electron/compose-stack.ts. It validates the photo folder as an absolute, existing directory with symlinks resolved. It runs `docker compose -p auraframe -f compose.yaml up -d --wait` and `down` through spawn with shell: false. The folder and the token reach docker only in the child environment (AURAFRAME_PHOTOS_DIR, AURAFRAME_API_TOKEN). The per-session token is 32 random bytes as hex, generated in main, and appears in no event or return value; the only way to read it is `authorizationHeader()`, for main's own HTTP client. Spawn and the token generator are injectable. I corrected one wrong count in docs/testing.md (8 of 9, not 7 of 8). Observed this session: `npm run lint` clean; `npm run build:electron` clean; `node --test "tests/**/*.test.cjs"` gave 58 tests, 57 passed, 0 failed, 1 skipped. The skipped test is the symlink case, because this Windows session may not create symlinks. Not run: the engine pytest container command, the Angular build, and anything against a real Docker daemon. The module is not called from main.ts yet, so P02.4 stays open until P02.4.2 and P02.4.3. The roadmap checkbox is untouched; only a dated progress note was added.
+- Files changed: apps/desktop/electron/compose-stack.ts, tests/compose-stack.test.cjs, CHANGELOG.md, docs/roadmap.md, docs/testing.md
+- **Learnings for future iterations:**
+  - P02.4.2 should build a ComposeStack in main.ts with composeDir set to the repository root (the directory that holds compose.yaml). Its HTTP client should use stack.authorizationHeader() and send it to http://127.0.0.1:18420 (the gateway). Never put the token in an IPC reply or event.
+  - ComposeStack.start(folder) throws FolderValidationError for a bad folder and resolves to false when docker fails. The IPC layer must turn both into a fixed error code without echoing the path. StackEvent carries only a type and a reason (docker-missing or docker-failed).
+  - stop() runs `compose down` without the folder, so the volumes survive. The token env is set for down as well, because compose.yaml may require it for interpolation.
+  - The compose module uses stdio: 'ignore', so docker output is discarded. If P02.4.x wants diagnostics, add a bounded and sanitized capture and keep the token and folder out of it.
+  - The symlink test skips on Windows when symlinks are not permitted. The Node suite is now 58 tests (57 pass, 1 skipped).
+  - The module's project name and env names (auraframe, AURAFRAME_PHOTOS_DIR, AURAFRAME_API_TOKEN) must stay in sync with compose.yaml and start.sh. start.sh can report_started with the window launch when P02.4/P02.5 wire it up.
 ---
