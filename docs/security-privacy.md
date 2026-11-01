@@ -81,7 +81,7 @@ Verified on 2026-11-01 by reading the source.
 - **Electron 33.4.11 is out of support.** Its Chromium has had no fixes from this release line since
   April 2025. Tracked in [assessment](assessment.md#environment-and-repository) and P01.6.
 - HTML reports escape every value, including AI text (`engine/src/generate_report.py`).
-- `start.py` and the engine make no network calls except to the configured AI endpoint.
+- The engine makes no network calls except to the configured AI endpoint.
 - The OpenAI flow is off by default and sends resized copies with EXIF stripped and orientation
   applied (`engine/src/cloud/openai_image_preparer.py`).
 - Weights for the aesthetic predictor load with `weights_only=True`.

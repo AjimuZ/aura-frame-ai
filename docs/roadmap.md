@@ -35,7 +35,7 @@ P00.1–P00.4 evidence (2026-11-01): see [assessment](assessment.md), [testing](
       tests and `package.json`. Rename `profile` to `library` and the AI fields to neutral names.
 - [x] P01.3 Remove the hard-coded personal name from code, mock data and tests.
 - [ ] P01.4 Add the `LICENSE` file for the declared license, or change the declaration.
-- [ ] P01.5 Remove the broken `.venv`, and run Python only in containers.
+- [x] P01.5 Remove the broken `.venv`, and run Python only in containers.
 - [ ] P01.6 Upgrade Electron and `electron-builder` to supported versions.
 
 Exit: `scripts/check.sh` passes; the retired-terms test passes; no user path or personal name in

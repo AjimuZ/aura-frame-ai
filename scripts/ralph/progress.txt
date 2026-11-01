@@ -12,6 +12,8 @@
 - Keep test files at their existing path when renaming their subject; change content only, because the runner refuses deleted or renamed test files.
 - Read personal identifiers such as the Git user name at test time and never store them in a file.
 - Build test inputs for guard tests at run time, such as a Windows path from separator pieces, so the guard file does not trigger its own patterns.
+- When removing a runtime path, replace it with an explicit, single-source error message constant so callers fail clearly instead of silently or by crashing.
+- After deleting a file or script, grep the docs for it and correct any statement that still calls it 'in use'.
 
 ---
 
@@ -159,4 +161,16 @@ The default library name was already neutral from P01.2.2, so the remaining code
   - I could not read `git config user.name` in this session, so whether the owner-name check had real words to match is unverified. The orchestrator's run of the test will show it.
   - The package.json author field is removed rather than set to a neutral value. npm accepts a missing author.
   - Only lint, build:electron and the Node test glob were run. scripts/check.sh and the engine pytest were not.
+---
+
+## 2026-11-01T19:24:08Z - P01.5
+- Python no longer runs on the host. `.venv` is absent from the repository root, which I confirmed with a root listing (`ls -a`). The five `engine:*` npm scripts that called the host interpreter are removed from package.json. `paths.ts` no longer looks up a host interpreter. In `analysis.ipc.ts`, `analysis:start` and `openai:start` now fail with a clear message ("The analysis engine is not available yet. Python no longer runs on this computer; …") until P02.4, and no process is spawned. Engine-backed actions that change data (`export:finalSet`, `data:clear`, `review:save`, `export:openaiResults`) reject with the same message. Read-only probes (`ollama:check`, `review:get`, `openai:estimate`, `openai:status`) report no result. The engine-backed code paths that remain (e.g. `analysis:pause`/`resume`/`cancel` and `disposeAnalysisIpc`) are inert because `child` and `runningLibraryId` are never set. README.md, docs/operations.md, docs/testing.md and CLAUDE.md now describe Python in containers only. Assessment items D2, D3 and D4 are marked resolved. I fixed two documents that still called `start.py` "in use" (docs/technology.md and docs/security-privacy.md). This session I also reverted the roadmap checkbox that an earlier attempt had ticked, since the orchestrator ticks it. Checks I ran: `npm run lint` passed, `npm run build:electron` passed, and `node --test "tests/**/*.test.cjs"` passed 11 of 11. Not run: the container engine pytest (no engine code changed), `npm run build` (the Angular build), and `bash scripts/check.sh --node`. A grep outside node_modules and generated folders found no remaining host-Python references except the `.gitignore` entry for `.venv`, the changelog and CLAUDE.md notes, and the roadmap and ADR entries that describe removing `start.py`.
+- Files changed: package.json, apps/desktop/electron/ipc/paths.ts, apps/desktop/electron/ipc/analysis.ipc.ts, README.md, CLAUDE.md, CHANGELOG.md, docs/operations.md, docs/testing.md, docs/assessment.md, docs/technology.md, docs/security-privacy.md, docs/roadmap.md
+- **Learnings for future iterations:**
+  - `.venv` is absent and `start.py` is neither tracked nor on disk; `.gitignore` still lists `.venv/`, which is harmless and was left alone.
+  - analysis.ipc.ts keeps the pause/resume/cancel handlers and the `child` variable, but they are inert until P02.4 reconnects the engine; P02.4 should replace `runEngineJson` and `probeEngineJson` with calls to the containerised API and remove the dead process handling.
+  - `runEngineJson` rejects with ENGINE_UNAVAILABLE_MESSAGE for data-changing actions; `probeEngineJson` resolves to [] so read-only status calls fall back to their existing 'unable to probe' results.
+  - docs/roadmap.md P01.5 checkbox is left unticked on purpose; an earlier attempt had ticked it and this session reverted that.
+  - Not run this session: the container engine pytest, the Angular build (`npm run build`) and `bash scripts/check.sh --node`. Lint, the Electron build and all 11 Node tests passed.
+  - Remaining `start.py` mentions in docs/roadmap.md, docs/architecture.md and the ADRs are plan or history text (P02.6 and the replacement table) and were left alone.
 ---

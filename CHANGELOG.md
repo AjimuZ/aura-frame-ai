@@ -4,6 +4,12 @@
 
 ### Changed
 
+- Python now runs only in containers. The `engine:*` npm scripts that called Python on the host are
+  removed, and the Electron main process no longer looks for a host interpreter or a `.venv`. Until
+  P02.4 connects the containerised engine, starting an analysis from the app fails with the message
+  "The analysis engine is not available yet", and engine-backed read-only checks report no result.
+  Run the engine tests with the container command in `docs/testing.md`.
+
 - The documentation now describes AuraFrame AI as a general tool for finding beautiful photos of any
   subject. Application behavior has not changed yet.
 - The documentation now defines the target: an Electron desktop application whose services run in Docker,

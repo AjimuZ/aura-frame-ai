@@ -66,7 +66,7 @@ npm run test:libraries
 bash scripts/check.sh              # all checks; --node, --engine, --integration select subsets
 ```
 
-`npm run engine:test` needs Python 3.12, which this PC lacks, and `.venv` is broken. Run the engine tests with the container command in `docs/testing.md`.
+Python runs only in containers: there is no host interpreter, no `.venv` and no `engine:*` npm script. Run the engine tests with the container command in `docs/testing.md`.
 
 Planned, not yet present: `./start.sh`, `docker compose`. See `docs/operations.md`.
 

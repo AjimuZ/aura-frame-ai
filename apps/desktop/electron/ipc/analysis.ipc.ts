@@ -2,11 +2,9 @@
 // selected local library; originals remain read-only and outside the application data tree.
 
 import { BrowserWindow, ipcMain } from 'electron';
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as fs from 'node:fs';
-import * as os from 'node:os';
 import * as path from 'node:path';
-import * as readline from 'node:readline';
 import type {
   AnalysisConfig,
   AnalysisEvent,
@@ -17,19 +15,23 @@ import type {
   PhotoItem,
   ReviewSession,
 } from './contracts';
-import { engineConfig, engineMain, pythonExecutable, repoRoot } from './paths';
+import { engineConfig } from './paths';
 import { readOpenAiKey } from './settings.ipc';
 import type { LibraryRegistryStore } from './library-store';
 
 type WindowsProvider = () => BrowserWindow[];
-type EngineEvent = Omit<AnalysisEvent, 'libraryId'>;
 
 let child: ChildProcessWithoutNullStreams | null = null;
 let runningLibraryId: string | null = null;
 let getWindows: WindowsProvider = () => [];
 
-const VALID_PRESETS = new Set(['fast', 'balanced', 'quality']);
 const statuses = new Map<string, AnalysisStatus>();
+
+// Shown whenever an action needs the engine: Python no longer runs on the host, and the
+// containerised engine API is not wired to the desktop app until package P02.4.
+const ENGINE_UNAVAILABLE_MESSAGE =
+  'The analysis engine is not available yet. Python no longer runs on this computer; ' +
+  'the engine will run in a container once the engine service is connected to the app.';
 
 function idleStatus(libraryId: string): AnalysisStatus {
   return {
@@ -47,11 +49,6 @@ function statusFor(libraryId: string): AnalysisStatus {
   const current = statuses.get(libraryId) ?? idleStatus(libraryId);
   statuses.set(libraryId, current);
   return current;
-}
-
-function maskLog(message: string): string {
-  const home = os.homedir();
-  return home ? message.split(home).join('~') : message;
 }
 
 function broadcast(event: AnalysisEvent): void {
@@ -111,98 +108,16 @@ function applyEvent(event: AnalysisEvent): void {
   broadcast(event);
 }
 
-// Builds the environment overlay carrying the OpenAI API key to the engine child process.
-// The key comes from OS-encrypted storage or the ambient environment; it is never logged or
-// passed as a command-line argument.
-function openAiEnv(): NodeJS.ProcessEnv {
-  const key = readOpenAiKey() || process.env.OPENAI_API_KEY || '';
-  return key ? { OPENAI_API_KEY: key } : {};
+// Rejects for actions that change data and need the engine, so the renderer receives the
+// clear ENGINE_UNAVAILABLE_MESSAGE instead of a silent no-op. No process is started.
+function runEngineJson(_args: string[]): Promise<Record<string, unknown>[]> {
+  return Promise.reject(new Error(ENGINE_UNAVAILABLE_MESSAGE));
 }
 
-function handleLine(libraryId: string, line: string): void {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith('{')) {
-    if (trimmed) {
-      broadcast({ type: 'log', libraryId, level: 'info', message: maskLog(trimmed) });
-    }
-    return;
-  }
-  try {
-    const parsed = JSON.parse(trimmed) as EngineEvent;
-    applyEvent({ ...parsed, libraryId } as AnalysisEvent);
-  } catch {
-    broadcast({ type: 'log', libraryId, level: 'warning', message: maskLog(trimmed) });
-  }
-}
-
-function spawnAnalysis(
-  libraryId: string,
-  args: string[],
-  extraEnv: NodeJS.ProcessEnv = {},
-): ChildProcessWithoutNullStreams {
-  const proc = spawn(pythonExecutable(), [engineMain(), ...args], {
-    cwd: repoRoot(),
-    env: { ...process.env, PYTHONUNBUFFERED: '1', ...extraEnv },
-    shell: false,
-    windowsHide: true,
-  });
-
-  readline.createInterface({ input: proc.stdout }).on('line', (line) => handleLine(libraryId, line));
-  readline.createInterface({ input: proc.stderr }).on('line', (line) => {
-    if (line.trim()) {
-      broadcast({ type: 'log', libraryId, level: 'error', message: maskLog(line.trim()) });
-    }
-  });
-
-  proc.on('close', (code) => {
-    if (child === proc) {
-      child = null;
-      runningLibraryId = null;
-    }
-    const status = statusFor(libraryId);
-    if (status.running) {
-      applyEvent(
-        code === 0
-          ? { type: 'done', libraryId, message: 'Analysis finished.' }
-          : { type: 'error', libraryId, message: `Engine exited with code ${code}.` },
-      );
-    }
-  });
-
-  proc.on('error', (error) => {
-    child = null;
-    runningLibraryId = null;
-    applyEvent({ type: 'error', libraryId, message: `Could not start the engine: ${error.message}` });
-  });
-
-  return proc;
-}
-
-function runEngineJson(
-  args: string[],
-  extraEnv: NodeJS.ProcessEnv = {},
-): Promise<Record<string, unknown>[]> {
-  return new Promise((resolve) => {
-    const events: Record<string, unknown>[] = [];
-    const proc = spawn(pythonExecutable(), [engineMain(), ...args], {
-      cwd: repoRoot(),
-      env: { ...process.env, PYTHONUNBUFFERED: '1', ...extraEnv },
-      shell: false,
-      windowsHide: true,
-    });
-    readline.createInterface({ input: proc.stdout }).on('line', (line) => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith('{')) {
-        try {
-          events.push(JSON.parse(trimmed) as Record<string, unknown>);
-        } catch {
-          // Ignore non-JSON process noise.
-        }
-      }
-    });
-    proc.on('close', () => resolve(events));
-    proc.on('error', () => resolve(events));
-  });
+// Read-only probes resolve to no events when the engine is unavailable, so callers fall back
+// to their own "unable to probe" or empty result instead of failing.
+function probeEngineJson(_args: string[]): Promise<Record<string, unknown>[]> {
+  return Promise.resolve([]);
 }
 
 function validateFolder(input: unknown): string | null {
@@ -240,36 +155,9 @@ export function registerAnalysisIpc(
       applyEvent({ type: 'error', libraryId, message: 'Invalid or missing photo folder.' });
       return;
     }
-    const preset = VALID_PRESETS.has(config.preset) ? config.preset : 'balanced';
-    const status = statusFor(libraryId);
-    writeControl(libraries, libraryId, false, false);
-    Object.assign(status, {
-      libraryId,
-      step: 'indexing',
-      running: true,
-      paused: false,
-      current: 0,
-      total: 0,
-      message: 'Starting analysis...',
-      startedAt: new Date().toISOString(),
-      finishedAt: undefined,
-    });
-
-    const args = [
-      'analyze',
-      '--input',
-      folder,
-      '--config',
-      engineConfig(),
-      '--data-root',
-      libraries.libraryRoot(libraryId),
-      '--preset',
-      preset,
-    ];
-    if (!config.includeSubfolders) args.push('--no-subfolders');
-    if (config.runGemma) args.push('--gemma');
-    runningLibraryId = libraryId;
-    child = spawnAnalysis(libraryId, args);
+    // Validated input is accepted, but no process starts: the engine only runs in containers.
+    // TODO(P02.4): call the containerised engine API here, with the preset and options.
+    applyEvent({ type: 'error', libraryId, message: ENGINE_UNAVAILABLE_MESSAGE });
   });
 
   ipcMain.handle('analysis:pause', (_event, libraryId: string): void => {
@@ -328,7 +216,7 @@ export function registerAnalysisIpc(
 
   ipcMain.handle('ollama:check', async (): Promise<OllamaStatus> => {
     const activeId = libraries.getState().activeLibraryId;
-    const events = await runEngineJson([
+    const events = await probeEngineJson([
       'ollama-check', '--config', engineConfig(), '--data-root', libraries.libraryRoot(activeId),
     ]);
     const report = events.find((event) => event['type'] === 'ollama_check');
@@ -354,7 +242,7 @@ export function registerAnalysisIpc(
 
   ipcMain.handle('review:get', async (_event, libraryId: string): Promise<ReviewSession | null> => {
     assertLibrary(libraries, libraryId);
-    const events = await runEngineJson([
+    const events = await probeEngineJson([
       'load-review', '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId),
     ]);
     const result = events.find((event) => event['type'] === 'review_session');
@@ -379,7 +267,7 @@ export function registerAnalysisIpc(
   // Estimates OpenAI Quality Mode cost from the gated set (no API calls are made).
   ipcMain.handle('openai:estimate', async (_event, libraryId: string): Promise<OpenAiCostEstimate | null> => {
     assertLibrary(libraries, libraryId);
-    const events = await runEngineJson([
+    const events = await probeEngineJson([
       'openai-estimate', '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId),
     ]);
     const r = events.find((event) => event['type'] === 'openai_estimate');
@@ -397,10 +285,9 @@ export function registerAnalysisIpc(
   // Probes the OpenAI API (key/reachability/models). The key is injected via the environment.
   ipcMain.handle('openai:status', async (_event, libraryId: string): Promise<OpenAiStatus> => {
     assertLibrary(libraries, libraryId);
-    const events = await runEngineJson(
-      ['openai-check', '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId)],
-      openAiEnv(),
-    );
+    const events = await probeEngineJson([
+      'openai-check', '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId),
+    ]);
     const r = events.find((event) => event['type'] === 'openai_check');
     if (!r) return { hasKey: false, reachable: false, models: {}, message: 'Unable to probe OpenAI.' };
     return {
@@ -417,7 +304,7 @@ export function registerAnalysisIpc(
   // the API key is injected through the environment, never as an argument.
   ipcMain.handle(
     'openai:start',
-    (_event, libraryId: string, options: { budgetUsd?: number; stage?: string }): void => {
+    (_event, libraryId: string, _options: { budgetUsd?: number; stage?: string }): void => {
       assertLibrary(libraries, libraryId);
       if (isAnalysisRunning()) {
         throw new Error('An analysis is already running.');
@@ -427,28 +314,8 @@ export function registerAnalysisIpc(
         applyEvent({ type: 'error', libraryId, message: 'No OpenAI API key configured. Add it in Settings.' });
         return;
       }
-      writeControl(libraries, libraryId, false, false);
-      const status = statusFor(libraryId);
-      Object.assign(status, {
-        libraryId,
-        step: 'broad_scan',
-        running: true,
-        paused: false,
-        current: 0,
-        total: 0,
-        message: 'Starting OpenAI Quality Mode...',
-        startedAt: new Date().toISOString(),
-        finishedAt: undefined,
-      });
-      const args = [
-        'openai-quality', '--enable-cloud', '--config', engineConfig(),
-        '--data-root', libraries.libraryRoot(libraryId),
-      ];
-      const budget = Number(options?.budgetUsd);
-      if (Number.isFinite(budget) && budget > 0) args.push('--budget', String(budget));
-      if (options?.stage) args.push('--stage', String(options.stage));
-      runningLibraryId = libraryId;
-      child = spawnAnalysis(libraryId, args, { OPENAI_API_KEY: key });
+      // No process starts: the engine only runs in containers (see ENGINE_UNAVAILABLE_MESSAGE).
+      applyEvent({ type: 'error', libraryId, message: ENGINE_UNAVAILABLE_MESSAGE });
     },
   );
 

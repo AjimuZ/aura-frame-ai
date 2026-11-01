@@ -31,7 +31,6 @@ Results from 2026-11-01 on the reference PC.
 | Electron build | `npm run build:electron` | Pass, exit 0 |
 | Angular build | `npm run build:angular` | Pass, exit 0 |
 | Library store tests | `node --test "tests/*-store.test.cjs"` | Pass, 4 of 4 |
-| Engine tests, npm script | `npm run engine:test` | **Fails, exit 6:** no Python 3.12 runtime on this PC |
 | Engine tests, container | See below | Pass, 27 of 27, in 1.65 s, without the torch stack |
 | Design system color check | See [Design system](design-system.md#verification) | **Fails:** 13 literals outside the token file, fixed in P06 |
 | Angular unit tests | None exist | Gap |
@@ -42,7 +41,8 @@ does both.
 
 ### Engine tests in a throwaway container
 
-This leaves `.venv` and the host untouched, and mounts only `engine/`, read-only.
+Python runs only in containers, so this is the only way to run the engine tests. It leaves the host
+untouched, and mounts only `engine/`, read-only.
 
 ```bash
 docker run --rm -e PYTHONDONTWRITEBYTECODE=1 \

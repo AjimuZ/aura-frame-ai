@@ -125,15 +125,13 @@ Electron itself runs outside this limit, on the remaining system memory.
 
 ## Running the current code
 
-This is the legacy path until P02 lands.
+Python runs only in containers. No host interpreter and no virtual environment are used or needed.
 
 ```powershell
 npm install
-py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r engine/requirements.txt
 npm start
 ```
 
-On the reference PC this needs two fixes first: install Python 3.12, and recreate `.venv`, which
-points to an interpreter from another user account. See
-[assessment](assessment.md#environment-and-repository).
+The desktop window starts, but starting an analysis from the app fails with a clear message
+("The analysis engine is not available yet") until P02.4 connects the containerised engine. Run the
+engine tests with the container command in [Testing](testing.md#engine-tests-in-a-throwaway-container).

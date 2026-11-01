@@ -17,11 +17,6 @@
     "electron:dev": "wait-on tcp:4200 && npm run build:electron && cross-env AURA_DEV=1 electron .",
     "package": "npm run build && electron-builder",
     "lint": "eslint \"apps/desktop/**/*.ts\"",
-    "engine:index": "py -3.12 engine/main.py index",
-    "engine:analyze": "py -3.12 engine/main.py analyze",
-    "engine:gemma": "py -3.12 engine/main.py gemma-review",
-    "engine:export": "py -3.12 engine/main.py export-final",
-    "engine:test": "py -3.12 -m pytest engine/tests",
     "test:libraries": "npm run build:electron && node --test \"tests/*-store.test.cjs\""
   },
   "dependencies": {

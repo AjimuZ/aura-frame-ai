@@ -18,7 +18,7 @@ candidates and explains its choices. You decide. Originals are never changed.
 
 | Capability | Code today | Target |
 | --- | --- | --- |
-| Launch | Electron desktop app, `start.py` | Electron desktop app, services in Docker, `./start.sh` |
+| Launch | Electron desktop app, no engine connected yet | Electron desktop app, services in Docker, `./start.sh` |
 | Local AI | Ollama client | `llama-server`, Qwen3.8-27B by default |
 | Cloud AI | Optional direct OpenAI flow | Optional Codex CLI, off by default |
 | Subjects | Requires a face to reach the AI | Any subject |
@@ -62,7 +62,8 @@ See [AI providers](docs/ai-providers.md).
 
 ## Running the current code
 
-The legacy path until the container stack lands, needing Node.js and Python 3.12. See
+The legacy path until the container stack lands, needing Node.js only. Python runs only in
+containers, so starting an analysis from the app fails with a clear message until P02.4. See
 [Operations](docs/operations.md#running-the-current-code) and
 [Testing](docs/testing.md#current-checks).
 

@@ -1,4 +1,5 @@
-// Resolves repository, engine, and generated-data paths for the Electron main process.
+// Resolves repository, engine config, and generated-data paths for the Electron main process.
+// Python never runs on the host: the engine runs in containers only (see docs/operations.md).
 // The engine code lives next to the app (repoRoot); ALL generated data (DB, thumbnails,
 // working files, output, reports) lives under userData/AuraFrameAI so nothing is written
 // into the repository or any protected personal-data location.
@@ -17,24 +18,6 @@ export function dataRoot(): string {
   const root = path.join(app.getPath('userData'), 'AuraFrameAI');
   fs.mkdirSync(root, { recursive: true });
   return root;
-}
-
-// Returns the absolute path to the Python interpreter, preferring the local venv.
-export function pythonExecutable(): string {
-  const venv = path.join(repoRoot(), '.venv', 'Scripts', 'python.exe');
-  if (fs.existsSync(venv)) {
-    return venv;
-  }
-  const venvPosix = path.join(repoRoot(), '.venv', 'bin', 'python');
-  if (fs.existsSync(venvPosix)) {
-    return venvPosix;
-  }
-  return process.platform === 'win32' ? 'python' : 'python3';
-}
-
-// Returns the absolute path to the engine entry script.
-export function engineMain(): string {
-  return path.join(repoRoot(), 'engine', 'main.py');
 }
 
 // Returns the absolute path to the engine config file.

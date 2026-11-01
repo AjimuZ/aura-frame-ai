@@ -7,7 +7,7 @@ item marked "in use" exists in the code today.
 
 | Layer | Choice | License | Rationale | Alternatives rejected |
 | --- | --- | --- | --- | --- |
-| Services | Docker Compose, `start.sh` | Apache-2.0 | Owner decision, one command | Python launcher (`start.py`, in use): needs a local environment |
+| Services | Docker Compose, `start.sh` | Apache-2.0 | Owner decision, one command | Python launcher (`start.py`, no longer present): needs a local environment |
 | Desktop shell | Electron (in use), on a supported major version | MIT | Owner decision. Hardened window, native dialogs and OS key store already exist | Browser interface: rejected by the owner, see [ADR 0009](decisions/0009-electron-desktop-shell.md) |
 | Desktop build | `electron-builder` (in use), in the official builder image | MIT | No Node.js needed on the host | Host Node.js: kept as fallback and for development |
 | Interface | Angular, standalone components, Signals (in use) | MIT | Seven screens exist and reach the backend through one interface | Rewrite in another framework: no benefit |
