@@ -131,7 +131,7 @@
       ],
       "priority": 7,
       "passes": false,
-      "notes": "Retired terms, base64: ZGF0aW5n. Never write them in plain text. No data migration is needed, because a rerun recreates the data (ADR 0001). The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
+      "notes": "BLOCKED: P01.2.1.2: unknown dependency Add the retired-terms guard test; P01.2.1.3: unknown dependency Neutralize the retired vocabulary in the engine and the prompts\nRetired terms, base64: ZGF0aW5n. Never write them in plain text. No data migration is needed, because a rerun recreates the data (ADR 0001). The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
       "dependsOn": [
         "P01.1"
       ],
