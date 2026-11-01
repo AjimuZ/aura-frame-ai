@@ -1,4 +1,4 @@
-"""HTTP routes under /api: photos, media by photo ID, providers, generated data and review."""
+"""HTTP routes under /api: runs, events, exports, photos, media by photo ID, providers, data and review."""
 
 import json
 import sqlite3
@@ -6,13 +6,24 @@ from contextlib import closing
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Path as PathParam, Query
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Body, Path as PathParam, Query
+from fastapi.responses import FileResponse, StreamingResponse
 
 from src import db
 
 from .errors import ApiError
-from .models import ClearDataResponse, ProvidersResponse, ProviderStatus, ReviewSession
+from .exports import export_photos
+from .models import (
+    ClearDataResponse,
+    ExportRequest,
+    ExportResponse,
+    ProvidersResponse,
+    ProviderStatus,
+    ReviewSession,
+    RunRequest,
+    RunStatus,
+)
+from .runs import RunSupervisor
 from .storage import (
     IMAGE_MEDIA_TYPES,
     LIBRARY_ID_PATTERN,
@@ -67,14 +78,77 @@ def _provider_statuses() -> list[ProviderStatus]:
     ]
 
 
-def build_api_router(settings: ApiSettings) -> APIRouter:
-    """Build the /api router bound to `settings`.
+def build_api_router(settings: ApiSettings, runs: RunSupervisor) -> APIRouter:
+    """Build the /api router bound to `settings` and the run supervisor `runs`.
 
     No route takes a filesystem path: libraries and photos are addressed by validated IDs,
     and every file the media route returns is looked up in SQLite and then checked to lie
-    inside the photos root (originals) or the library's thumbnail directory.
+    inside the photos root (originals) or the library's thumbnail directory. The engine
+    command and its arguments are built server-side; a run request carries options only.
     """
     router = APIRouter(prefix="/api")
+
+    # Starts an engine run over the mounted photos root. Answers 202 with the initial status,
+    # or 409 when a run is already active. An empty body means the default options.
+    @router.post(
+        "/libraries/{library_id}/runs",
+        status_code=202,
+        response_model=RunStatus,
+        response_model_exclude_none=True,
+    )
+    def start_run(
+        library_id: LibraryId, options: Annotated[RunRequest, Body()] = RunRequest()
+    ) -> RunStatus:
+        return runs.start(library_id, options)
+
+    # Reports the latest run of the library, or an idle status when it never ran.
+    @router.get(
+        "/libraries/{library_id}/runs/current",
+        response_model=RunStatus,
+        response_model_exclude_none=True,
+    )
+    def get_run(library_id: LibraryId) -> RunStatus:
+        return runs.status(library_id)
+
+    # Pause, resume and cancel act on the active run through the engine's control file.
+    @router.post(
+        "/libraries/{library_id}/runs/current/pause",
+        response_model=RunStatus,
+        response_model_exclude_none=True,
+    )
+    def pause_run(library_id: LibraryId) -> RunStatus:
+        return runs.pause(library_id)
+
+    @router.post(
+        "/libraries/{library_id}/runs/current/resume",
+        response_model=RunStatus,
+        response_model_exclude_none=True,
+    )
+    def resume_run(library_id: LibraryId) -> RunStatus:
+        return runs.resume(library_id)
+
+    @router.post(
+        "/libraries/{library_id}/runs/current/cancel",
+        response_model=RunStatus,
+        response_model_exclude_none=True,
+    )
+    def cancel_run(library_id: LibraryId) -> RunStatus:
+        return runs.cancel(library_id)
+
+    # Streams the run's JSONL events as server-sent events. The stream replays what the run
+    # already produced and ends when the run does. Proxies must not buffer or cache it.
+    @router.get("/libraries/{library_id}/events")
+    def get_events(library_id: LibraryId) -> StreamingResponse:
+        return StreamingResponse(
+            runs.stream(library_id),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
+
+    # Copies the chosen photos into the library's output folder. Originals are only read.
+    @router.post("/libraries/{library_id}/exports", response_model=ExportResponse)
+    def post_export(library_id: LibraryId, request: ExportRequest) -> ExportResponse:
+        return ExportResponse(exported=export_photos(settings, library_id, request.ids))
 
     # Lists the analyzed photos of a library in the camelCase shape of the bridge.
     # A library with no database yet has no photos; that is an empty list, not an error.

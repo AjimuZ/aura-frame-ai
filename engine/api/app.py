@@ -1,6 +1,7 @@
 """FastAPI application factory: builds the guarded app, the health route and the /api routes."""
 
-from typing import Iterable
+from contextlib import asynccontextmanager
+from typing import AsyncIterator, Iterable
 
 from fastapi import FastAPI
 
@@ -8,6 +9,7 @@ from . import API_VERSION
 from .errors import install_error_handlers
 from .models import HealthResponse
 from .routes import build_api_router
+from .runs import RunSupervisor
 from .security import (
     install_request_guard,
     load_allowed_hosts_from_env,
@@ -28,16 +30,27 @@ def create_app(
     `settings` names the data and photos roots; when omitted they come from the environment.
     Raises ValueError for a short token or overlapping roots.
     """
+    resolved = settings or load_settings_from_env()
+    runs = RunSupervisor(resolved)
+
+    # Stops the engine child process when the server shuts down, so it never outlives the API.
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        yield
+        runs.shutdown()
+
     app = FastAPI(
         title="AuraFrame AI engine API",
         version=API_VERSION,
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
+        lifespan=lifespan,
     )
+    app.state.runs = runs
     install_request_guard(app, token, allowed_hosts)
     install_error_handlers(app)
-    app.include_router(build_api_router(settings or load_settings_from_env()))
+    app.include_router(build_api_router(resolved, runs))
 
     # Answers liveness only; it touches no photo, model or database.
     @app.get("/health", response_model=HealthResponse)

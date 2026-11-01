@@ -403,8 +403,8 @@
         "Tests in engine/tests cover each route with synthetic images, and input is validated with Pydantic"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "This attempt only fixed the documentation problems the review flagged. The code from the first attempt is unchanged. I ran `bash scripts/check.sh --engine` (the container pytest run, without torch): 182 passed, 1 warning, 0 failed. I did not run lint, the Angular and Electron builds, or the Node tests. The routes have not been run against the real engine pipeline, and the API is not served from a container yet. The edits were:\n- `CHANGELOG.md`: the two entries that said the tests \"have not been run yet\" now state the observed result.\n- `docs/roadmap.md`: the P02.3.2 paragraph no longer says the runs, events and exports routes are still to do. The P02.3.3 paragraph now gives the observed pytest result. The P02.3 checkbox is untouched.\n- `docs/architecture.md`: the \"Runs, events and exports\" section now says the tests pass in the container run.",
       "dependsOn": [
         "P01.EXIT",
         "P02.3.2"

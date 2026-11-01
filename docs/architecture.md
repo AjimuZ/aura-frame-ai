@@ -129,7 +129,8 @@ under `ng serve` stays too.
 ## Library data layout
 
 Written in `engine/api/storage.py`; the routes for photos, media, providers, data and review exist
-(P02.3.2), and the container that serves them does not yet.
+(P02.3.2), and so do those for runs, events and exports ([below](#runs-events-and-exports)). The
+container that serves them does not exist yet.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -154,6 +155,39 @@ Rules the routes follow:
   `shortlist` shape of the bridge, and `PUT` rejects unknown fields and oversized bodies.
 - `GET /api/providers` reports configuration only, with no probe: local scoring is `available`, the
   local vision model is `not_configured` and Codex is `disabled`. The real contract arrives with P03.
+
+## Runs, events and exports
+
+Written in `engine/api/runs.py` and `engine/api/exports.py` (P02.3.3); the container that serves them
+does not exist yet. Their tests (stub engine, synthetic images) pass in the container pytest run; the
+routes have not been run against the real engine.
+
+| Route | Behavior |
+| --- | --- |
+| `POST /api/libraries/{id}/runs` | Starts the engine and answers 202 with the status. 409 `run_in_progress` while any run is active, 409 `photos_unavailable` without a mounted folder, 503 `engine_unavailable` when the process cannot start |
+| `GET /api/libraries/{id}/runs/current` | The latest run of that library in the `AnalysisStatus` shape, or an idle status |
+| `POST /api/libraries/{id}/runs/current/pause`, `/resume`, `/cancel` | Write the engine's `working/control.json`. 409 `no_active_run` when that library has no running analysis |
+| `GET /api/libraries/{id}/events` | Server-sent events: the run's buffered JSONL events, then live ones. The stream ends with the run. 404 `no_run` before any run |
+| `POST /api/libraries/{id}/exports` | Body `{"ids": [...]}`. Copies the originals into `output/top_06_final_set/NN_<photo id>.<ext>` and answers `{"exported": n}` |
+
+Rules these routes follow:
+
+- A run body holds options only: `runGemma`, `preset` (`fast`, `balanced`, `quality`) and
+  `includeSubfolders`. There is no folder field, so a run always analyzes the mounted photos root, and
+  unknown fields are refused with HTTP 422. The engine command is the fixed `ApiSettings.engine_command`
+  plus arguments built on the server; the process starts without a shell and without the API token.
+  `runGemma` still reaches the legacy `--gemma` flag until package P03 replaces that review.
+- One run exists at a time across all libraries. Cancel gives the engine 30 seconds to stop on its own,
+  then kills it. A cancel left in `control.json` by an earlier run is cleared when a new run starts.
+- Events are the engine's JSONL lines. Lines that are not JSON objects with a lowercase `type`, or that
+  exceed 4096 bytes, are dropped. The photos root and data root paths are replaced by `<photos>` and
+  `<data>`, and each event gets the `libraryId`. At most 10000 events are kept per run, oldest first
+  dropped. If the engine exits without a `done` or `error` event, the API adds one. The engine's stderr
+  is not forwarded; it goes to the API container log.
+- Exports are validated before anything is copied: ids match the photo id pattern (1 to 500), are known
+  to the library, and point to an image file inside the photos root. Otherwise HTTP 422 and no file is
+  written. A symlinked output folder is refused with 409, and a symlinked destination file is replaced,
+  never followed. Originals are only read.
 
 ## Target repository layout
 

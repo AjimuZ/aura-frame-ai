@@ -3,7 +3,8 @@
 import os
 import re
 import shutil
-from dataclasses import dataclass
+import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -32,17 +33,27 @@ IMAGE_MEDIA_TYPES = {
 }
 
 
+# Returns the command prefix that starts the real engine CLI with the running interpreter.
+def _default_engine_command() -> tuple[str, ...]:
+    return (sys.executable, str(Path(__file__).resolve().parent.parent / "main.py"))
+
+
 @dataclass(frozen=True)
 class ApiSettings:
-    """Where the API reads photos and keeps generated data.
+    """Where the API reads photos and keeps generated data, and how it starts the engine.
 
     `photos_root` is the read-only mount of the person's folder. `data_root` is the writable
     volume. Both are stored resolved, and neither may contain the other, so removing generated
     data can never reach an original.
+
+    `engine_command` is the fixed argument prefix of the engine child process. The run route
+    appends its own validated arguments; no request ever supplies any part of the command.
+    Tests replace it with a stub script.
     """
 
     data_root: Path
     photos_root: Path
+    engine_command: tuple[str, ...] = field(default_factory=_default_engine_command)
 
     def __post_init__(self) -> None:
         data = self.data_root.resolve()
@@ -92,6 +103,11 @@ def library_config(settings: ApiSettings, library_id: str) -> dict[str, Any]:
 def library_db_file(settings: ApiSettings, library_id: str) -> Path:
     """Return the SQLite file of a library without creating it or its directories."""
     return Path(library_config(settings, library_id)["output"]["db_path"])
+
+
+def library_control_file(settings: ApiSettings, library_id: str) -> Path:
+    """Return the pause/cancel file the engine polls (`working/control.json`), without creating it."""
+    return Path(library_config(settings, library_id)["output"]["working_dir"]) / "control.json"
 
 
 def library_thumbs_dir(settings: ApiSettings, library_id: str) -> Path:

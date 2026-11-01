@@ -52,7 +52,7 @@ the retired-terms test and the personal-data test. Not observed: the desktop app
 
 - [ ] P02.1 Add `compose.yaml`, Dockerfiles, networks, volumes and hardening.
 - [ ] P02.2 Add `start.sh` with the contract in [Operations](operations.md#startsh).
-- [ ] P02.3 Add the FastAPI application: runs, events, photos, media, exports, data.
+- [x] P02.3 Add the FastAPI application: runs, events, photos, media, exports, data.
 - [ ] P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of
       the child process, `afmedia` proxied, chosen folder mounted read-only.
 - [ ] P02.5 Build the desktop shell in a container, or record why the host fallback is needed.
@@ -70,8 +70,15 @@ media, exports and data routes are not written yet, and the API is not wired int
 Progress 2026-11-01: P02.3.2 added the photos, media (by photo ID), providers, data (DELETE) and review
 (GET, PUT) routes in `engine/api/routes.py`, with the data layout in `engine/api/storage.py`
 ([Architecture](architecture.md#library-data-layout)). Tests are in `engine/tests/test_api_routes.py`.
-Not yet observed: the container pytest run was denied in both sessions that worked on them, so the new
-tests have not been executed. The runs, events and exports routes are still to do.
+The runs, events and exports routes followed in P02.3.3 (below).
+
+Progress 2026-11-01: P02.3.3 added the runs, `runs/current` (status, pause, resume, cancel), events (SSE)
+and exports routes, with the engine supervisor in `engine/api/runs.py` and the copy-only export in
+`engine/api/exports.py` ([Architecture](architecture.md#runs-events-and-exports)). Tests are in
+`engine/tests/test_api_runs.py`, with a stub engine command and synthetic images. Observed:
+`bash scripts/check.sh --engine` (the container pytest run, without torch) passed with 182 tests and 1
+warning, which covers the P02.3.1, P02.3.2 and P02.3.3 suites and the new dependency pins. Not observed:
+the routes against the real engine pipeline. The API is not wired into a container yet.
 
 ## 4. P03 — Local AI runtime
 

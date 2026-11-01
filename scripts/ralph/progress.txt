@@ -21,6 +21,8 @@
 - Take paths from stored records, never from requests. Validate IDs with a strict pattern, and resolve every stored path against its allowed root with is_relative_to before serving it.
 - Delete generated data by an explicit allowlist of subdirectories under a per-library root, unlink symlinks without following them, and refuse configurations where the writable root and the read-only photos root overlap.
 - Do not skip a test for an environment gap. Run it where the capability exists, or let it fail visibly.
+- Before writing 'not run' in the changelog or roadmap, try the project check script. When the result is known, record the exact count and command in those documents.
+- When a later subtask delivers what an earlier progress note called 'still to do', rewrite the earlier sentence in the same change.
 
 ---
 
@@ -268,4 +270,17 @@ The data layout is in `engine/api/storage.py`. Each library lives under `<AURAFR
   - Test pattern: build ApiSettings with tmp_path roots, write synthetic JPEGs with PIL, store rows through db.upsert_photo(db.connect(library_config(...))), then call the app through TestClient with base_url http://127.0.0.1:8000 and the bearer header.
   - Not yet done in P02.3: the runs, events and exports routes. The P02.3 checkbox stays for the orchestrator.
   - The symlink test now fails if the OS cannot create symlinks (it has no skip). It is meant for the Linux test container, not a Windows host.
+---
+
+## 2026-11-01T20:08:25Z - P02.3.3
+- This attempt only fixed the documentation problems the review flagged. The code from the first attempt is unchanged. I ran `bash scripts/check.sh --engine` (the container pytest run, without torch): 182 passed, 1 warning, 0 failed. I did not run lint, the Angular and Electron builds, or the Node tests. The routes have not been run against the real engine pipeline, and the API is not served from a container yet. The edits were:
+- `CHANGELOG.md`: the two entries that said the tests "have not been run yet" now state the observed result.
+- `docs/roadmap.md`: the P02.3.2 paragraph no longer says the runs, events and exports routes are still to do. The P02.3.3 paragraph now gives the observed pytest result. The P02.3 checkbox is untouched.
+- `docs/architecture.md`: the "Runs, events and exports" section now says the tests pass in the container run.
+- Files changed: engine/api/app.py, engine/api/models.py, engine/api/routes.py, engine/api/storage.py, engine/api/runs.py, engine/api/exports.py, engine/tests/test_api_runs.py, CHANGELOG.md, docs/architecture.md, docs/roadmap.md
+- **Learnings for future iterations:**
+  - `bash scripts/check.sh --engine` works in this session and runs the container pytest. It passed with 182 tests, 1 warning (an anyio deprecation inside starlette's testclient), so the earlier pins resolve with mediapipe and numpy.
+  - All of P02.3 (guard, read routes, runs, events, exports) is now covered by passing tests. What remains is P02.1 (container and compose) and P02.4 (Electron main as an HTTP client).
+  - The roadmap progress notes should record observed counts, not intentions. Do not write 'denied' or 'not run' once a check has been observed.
+  - The routes have not been exercised against the real engine pipeline. The first end-to-end run in the container should verify the engine command and arguments built by engine/api/runs.py.
 ---
