@@ -9,13 +9,20 @@ import * as path from 'node:path';
 import { registerFilesystemIpc } from './ipc/filesystem.ipc';
 import { registerAnalysisIpc, disposeAnalysisIpc, isAnalysisRunning } from './ipc/analysis.ipc';
 import { registerSettingsIpc } from './ipc/settings.ipc';
-import { dataRoot } from './ipc/paths';
+import { dataRoot, repoRoot } from './ipc/paths';
 import { LibraryRegistryStore } from './ipc/library-store';
 import { registerLibrariesIpc } from './ipc/libraries.ipc';
+import { ApiClient, gatewayPort } from './api-client';
+import { ComposeStack } from './compose-stack';
+import { installQuitHandling } from './quit-handling';
 
 const isDev = process.env['AURA_DEV'] === '1';
 const DEV_SERVER_URL = 'http://localhost:4200';
 const ANGULAR_DIST = path.join(__dirname, '..', 'dist', 'aura-frame', 'browser');
+const SERVICES_LEFT_MESSAGE =
+  'Docker did not finish in time, so the app is closing without confirmation. The analysis services may still ' +
+  'be running, or may still come up, with your photo folder mounted read-only. To stop them, run ' +
+  '"./start.sh --stop" from the project folder.';
 
 // A privileged custom scheme so the renderer can display local thumbnails without
 // exposing the filesystem or weakening webSecurity. Must be declared before app ready.
@@ -106,7 +113,9 @@ void app.whenReady().then(() => {
 
     const window = createWindow();
     hardenNavigation(window);
-    registerAnalysisIpc(() => BrowserWindow.getAllWindows(), libraries);
+    const stack = new ComposeStack({ composeDir: repoRoot() });
+    const api = new ApiClient({ port: gatewayPort(process.env), session: stack });
+    registerAnalysisIpc(() => BrowserWindow.getAllWindows(), libraries, { api, stack });
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -121,9 +130,8 @@ void app.whenReady().then(() => {
   }
 });
 
-app.on('window-all-closed', () => {
-  disposeAnalysisIpc();
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+// Quits only after Docker has stopped the services, so they do not keep the GPU after the window is gone.
+installQuitHandling(app, {
+  dispose: disposeAnalysisIpc,
+  onTimeout: () => dialog.showErrorBox('AuraFrame could not stop its services', SERVICES_LEFT_MESSAGE),
 });

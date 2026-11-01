@@ -268,8 +268,8 @@ report_started() {
     echo "start.sh: the session token is in ${TOKEN_FILE} (ignored by Git). Stop with './start.sh --stop'."
     return 0
   fi
-  echo "start.sh: the desktop window is not launched by this script yet: the app does not use the services" >&2
-  echo "start.sh: until P02.4, and its container build comes in P02.5. The services stay up; stop them with './start.sh --stop'." >&2
+  echo "start.sh: the desktop window is not launched by this script yet: its container build comes in P02.5." >&2
+  echo "start.sh: the services stay up; stop them with './start.sh --stop'." >&2
 }
 
 # show_status: prints the state and health of every service.

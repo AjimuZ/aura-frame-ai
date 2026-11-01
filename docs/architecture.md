@@ -2,8 +2,8 @@
 
 Status: **target architecture, partly implemented**. The [current state](#current-state-implemented)
 and the [migration map](#migration-map) show how the code gets there. The [container stack](#container-stack)
-exists, but the desktop app does not use it yet. Decision:
-[ADR 0009](decisions/0009-electron-desktop-shell.md).
+exists, and Electron main's analysis handlers call it over HTTP; see [Bridge mapping](#bridge-mapping) for
+what is still open. Decision: [ADR 0009](decisions/0009-electron-desktop-shell.md).
 
 ## Overview
 
@@ -152,11 +152,36 @@ under `ng serve` stays too.
 | `estimateOpenAiCost`, `startOpenAiQuality`, `exportOpenAiResults` | Removed: the provider setting of a normal run replaces them |
 | `clearGeneratedData`, `getReviewSession`, `saveReviewSession` | `/api/libraries/{id}/data`, `/api/libraries/{id}/review` |
 
+Implemented so far (P02.4.2), in `apps/desktop/electron/api-client.ts` and `ipc/analysis.ipc.ts`, and tested
+against a fake HTTP server only:
+
+- `startAnalysis`, `pauseAnalysis`, `resumeAnalysis`, `cancelAnalysis`, `getAnalysisStatus`, `onProgress`,
+  `getPhotos`, `exportFinalSet`, `clearGeneratedData`, `getReviewSession` and `saveReviewSession` use the routes
+  above. Channels and shapes are unchanged.
+- `startAnalysis` runs `docker compose up -d --wait` with the folder in the environment (not `--no-deps api`,
+  and without `compose.gpu.yaml`), and resolves before the run starts. Its outcome arrives as events.
+- The client only talks to `127.0.0.1`, adds the token and the Host header, and follows no redirect. Refusals
+  become fixed messages, and an answer or event that contains the token is dropped.
+- No request leaves main, and so no token, until `stack.start` has resolved true in this session, and none from
+  the next start or stop on. Meanwhile reads return their fallbacks (`[]`, `null`, last known status) and writes
+  are refused with the fixed "not reachable" message, so earlier results stay hidden until the next run. The gate
+  is in `ApiClient`, the only code that attaches the token.
+- Closing the window, File > Exit and `app.quit()` stop the services if this session started them
+  (`quit-handling.ts`). `down` runs only after an `up` in flight has ended, and a new start is refused until then.
+  The wait on quit is bounded to 10 minutes; see [Operations](operations.md#running-the-current-code) for what
+  may remain after that. On macOS, closing the last window stops the services and the app stays open.
+
+Not done yet: `afmedia` still reads host paths (P02.4.3). `exportPhoto` still reads a host `photos.json`
+that no longer exists. `deleteLibrary` does not call `DELETE /api/libraries/{id}/data`, so the library's data
+stays in the volume. `checkOllama` and `getOpenAiStatus` return their fixed "unable to probe" answers instead of
+`GET /api/providers`. `estimateOpenAiCost`, `startOpenAiQuality` and `exportOpenAiResults` keep their channels
+but do nothing. The window receives no token from `start.sh`, so main's own token replaces it at the first run.
+
 ## Library data layout
 
 Written in `engine/api/storage.py`; the routes for photos, media, providers, data and review exist
 (P02.3.2), and so do those for runs, events and exports ([below](#runs-events-and-exports)). The
-`api` container serves them; the desktop app is not connected yet (P02.4).
+`api` container serves them, and Electron main calls them ([Bridge mapping](#bridge-mapping)).
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -236,11 +261,15 @@ Verified on 2026-11-01. Details and defects are in the [assessment](assessment.m
 
 ```text
 Angular UI -> Electron renderer -> typed preload bridge -> Electron main process
-  -> Python engine as a child process (JSONL on stdout, one SQLite per library)
+  -> docker compose up with the chosen folder, then HTTP with the session token -> gateway -> api
+  -> Python engine as a child process of api (JSONL to SSE, one SQLite per library)
   -> OpenCV and MediaPipe measurements -> OpenCLIP and LAION aesthetic score on CPU
   -> Ollama HTTP client for local AI review
-  -> optional OpenAI API flow in engine/src/cloud/
+  -> optional OpenAI API flow in engine/src/cloud/, which the window can no longer start
 ```
+
+Electron main's side of this path has been tested with a fake server and a fake Docker only
+([Bridge mapping](#bridge-mapping)).
 
 ## Migration map
 
@@ -248,8 +277,8 @@ Angular UI -> Electron renderer -> typed preload bridge -> Electron main process
 | --- | --- | --- |
 | Electron | Done in P01: 45.2.1, a supported major version | P01 |
 | `apps/desktop/electron/ipc/library-store.ts` | Done in P01: libraries, without the legacy migration and hard-coded name | P01 |
-| `apps/desktop/electron/ipc/analysis.ipc.ts` | Same channels, HTTP to the API instead of a child process | P02 |
-| `apps/desktop/electron/ipc/paths.ts` | Python paths removed | P02 |
+| `apps/desktop/electron/ipc/analysis.ipc.ts` | Done in P02.4.2: same channels, HTTP to the API instead of a child process | P02 |
+| `apps/desktop/electron/ipc/paths.ts` | Done in P02.4.2: Python paths removed | P02 |
 | `apps/desktop/electron/main.ts`, `filesystem.ipc.ts`, `settings.ipc.ts`, `preload.ts` | Stay, with small changes | P02 |
 | `apps/desktop/angular/` | Stays. New design in P06 | P06 |
 | `start.py` | `start.sh` | P02 |

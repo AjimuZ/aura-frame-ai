@@ -66,6 +66,12 @@ Status: **target design**. The final section lists what the current code does to
 - A process on the same computer can reach `127.0.0.1:8420`. The session token limits this, but the
   application does not defend against malware already running on the computer, which could also read the
   token from the process environment.
+- Once this session's services are up, Electron main sends the token to that port until it stops them. A
+  process that takes the port after the gateway dies could receive the token during that time.
+- If Docker has not finished within 10 minutes of quitting, the app exits anyway and says so in a dialog.
+  The Docker command it was waiting for keeps running, and the services may stay or come up with the photo
+  folder mounted read-only until `./start.sh --stop`. Nothing stops them after a crash, a forced kill or, on
+  Windows, a system shutdown or log-off, because Electron emits no quit event for those.
 - Electron runs on the host, outside the container boundary. Its hardening and version support matter as
   much as the network design.
 - Everything in the `data` volume is readable by anyone with Docker access on this computer.
@@ -83,6 +89,10 @@ Verified on 2026-11-01 by reading the source.
   fails if one leaves the source. That test reads source only: the behavior has not yet been observed in
   the running app on this version. The legacy key storage uses the `safeStorage` synchronous calls, which
   the 45.2.1 type definitions mark as deprecated but still provide; P05 removes that flow.
+- Electron main sends no request, and so never the session token, until `docker compose up` has succeeded in
+  this session, and it stops at the next start or stop. Before that, reads return their fallbacks and writes are
+  refused. Tested with a fake server and a fake Docker in `tests/analysis-http.test.cjs` and
+  `tests/quit-handling.test.cjs`; not observed against a real Docker or a running Electron.
 - HTML reports escape every value, including AI text (`engine/src/generate_report.py`).
 - The engine makes no network calls except to the configured AI endpoint.
 - The OpenAI flow is off by default and sends resized copies with EXIF stripped and orientation

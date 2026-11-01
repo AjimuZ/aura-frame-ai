@@ -30,6 +30,10 @@
 - Pass secrets to child processes through exported environment variables, and give curl its header through a config on stdin (`-K -`), so nothing sensitive appears in the process list.
 - Give Electron main modules that touch the OS (spawn, token generation) injectable dependencies, so Node tests can load the compiled dist-electron CJS and assert exact argv and options with a fake.
 - Pass secrets and user-chosen paths to child processes only through the env option, never argv, with shell: false. Test the absence of both from argv, events and return values.
+- Put a gate on the object that supplies a credential, and check it in the one function that attaches that credential, so the credential cannot be wired without its gate.
+- When a teardown can overlap a long-running start, have the teardown await the in-flight start, and record that a stop was requested so the late success cannot mark the service as up.
+- For an async Electron quit, always call preventDefault in before-quit, guard against repeats, bound the work, and leave with app.exit, which emits no further quit event.
+- When a test's fake cannot prove a wire contract, also compare the client with the real server's routes and models, and report that as read, not run.
 
 ---
 
@@ -350,4 +354,39 @@ No retired terms or personal data were found (guard tests pass), and img/ was no
   - The compose module uses stdio: 'ignore', so docker output is discarded. If P02.4.x wants diagnostics, add a bounded and sanitized capture and keep the token and folder out of it.
   - The symlink test skips on Windows when symlinks are not permitted. The Node suite is now 58 tests (57 pass, 1 skipped).
   - The module's project name and env names (auraframe, AURAFRAME_PHOTOS_DIR, AURAFRAME_API_TOKEN) must stay in sync with compose.yaml and start.sh. start.sh can report_started with the window launch when P02.4/P02.5 wire it up.
+---
+
+## 2026-11-01T22:49:20Z - P02.4.2
+- Electron main's analysis handlers now call the API over HTTP, and the bridge methods and IPC channels are unchanged (preload.ts and contracts.ts have no diff). All six review findings are fixed in the tree.
+
+(1) No request and no token leave main until `stack.start` has resolved true in this session. The gate is `ComposeStack.isUp()`, checked in `ApiClient.open`, and it closes again at the next start or stop. Until then reads return `[]`, `null` or the last known status, and writes reject with the fixed "not reachable" message. The sentence accepting the exposure is not in docs/security-privacy.md.
+(2) `stack.stop` waits for an `up` in flight before it runs `down`. That `up` does not open the gate, and a new start is refused until the stop has finished.
+(3) quit-handling.ts covers closing the window, File > Exit and `app.quit()` through `before-quit`, without a quit loop, because it leaves through `app.exit`.
+(4) The wait on quit is bounded to 10 minutes. At the bound a dialog says the services may still be running or still come up with the photo folder mounted read-only, gives `./start.sh --stop`, and the app exits.
+(5) A failed cancel clears `run.cancelled`, including a cancel made during the start.
+(6) start.sh is reworded to match docs/operations.md and stays on stderr. tests/start-sh.test.cjs passes, with a new test for the message.
+
+This session I also corrected docs/architecture.md: 'Current state' still showed main driving a child process, and the migration map did not record the change. I read the engine API source and the client matches its routes, Host check and run fields; no request was exchanged with it.
+
+Observed: `bash scripts/check.sh --node` passed after the last edit: lint, Angular and Electron builds, `bash -n start.sh`, and 96 Node tests (95 passed, 1 skipped: the symlink case, because this Windows session may not create symlinks).
+
+Not run: the engine pytest container command (no engine file changed), and `--compose` and `--integration`.
+Not observed: the client against a real API, gateway or Docker, or a running Electron, including File > Exit, the dialog and the exit. Everything above was tested with a fake server, a fake Docker and a stand-in for Electron.
+
+Known gaps, recorded in the docs:
+- A restart while a cancel is finishing is refused, and the status stays at "Starting..." until refreshed.
+- Earlier results stay hidden until a run starts the services.
+- On File > Exit during a wait, the window stays open with no progress shown. This one is not written in the docs.
+- Still open in P02.4: the `afmedia` proxy, `export:photo`, `DELETE .../data` on library deletion, connecting `/exports`, and `compose.gpu.yaml` in the stack module.
+
+The P02.4.2 checkbox and scripts/ralph/prd.json were left alone.
+- Files changed: CHANGELOG.md, README.md, apps/desktop/electron/api-client.ts, apps/desktop/electron/compose-stack.ts, apps/desktop/electron/ipc/analysis.ipc.ts, apps/desktop/electron/ipc/paths.ts, apps/desktop/electron/main.ts, apps/desktop/electron/quit-handling.ts, docs/architecture.md, docs/assessment.md, docs/operations.md, docs/roadmap.md, docs/security-privacy.md, docs/testing.md, start.sh, tests/analysis-http.test.cjs, tests/compose-stack.test.cjs, tests/quit-handling.test.cjs, tests/start-sh.test.cjs
+- **Learnings for future iterations:**
+  - The token gate lives in `ApiClient.open`, through the `session` option (`authorizationHeader` and `isUp` on one object). P02.4.3 should send its `afmedia` proxy requests through this client, so they cannot bypass the gate.
+  - Until a run starts the services, the app shows no photos, including those of earlier runs. P02.4.3 or the window launch in P02.5 must decide when the stack comes up if earlier results should appear at launch.
+  - `ComposeStack.start` requires that no stop is running. `disposeAnalysisIpc` enforces this by refusing a start while its `disposal` promise is set, so any new caller of `stack.start` must go through the same check.
+  - `QUIT_WAIT_MS` is 10 minutes because `down` must follow an in-flight `up`, and a first image build takes minutes. The child is not killed because the compose plugin can outlive the docker process on Windows; that reason comes from a code comment and was not observed.
+  - `startAnalysis` runs a full `up -d --wait` without `compose.gpu.yaml`, unlike the `--no-deps api` target flow in docs/architecture.md, so real runs have no GPU until the stack module adds the overlay.
+  - Not observed yet: the client against the real gateway and API, and File > Exit, the dialog and `app.exit` in a running Electron. P01.SMOKE or the first real run should check them.
+  - During a quit wait from File > Exit the window stays open and shows no progress. This is not in the docs yet.
 ---

@@ -122,6 +122,63 @@ test('a failing or missing docker is reported as an outcome without details', as
   assert.deepEqual(missing.events.at(-1), { type: 'failed', reason: 'docker-missing' });
 });
 
+test('isUp holds only from a successful up until the next start or stop', async (t) => {
+  const root = temporaryRoot(t);
+  const { stack } = newStack();
+  assert.equal(stack.isUp(), false);
+  const starting = stack.start(root);
+  assert.equal(stack.isUp(), false, 'not while up is running');
+  await starting;
+  assert.equal(stack.isUp(), true);
+
+  const restarting = stack.start(root);
+  assert.equal(stack.isUp(), false, 'not while a second up may recreate the services');
+  await restarting;
+  assert.equal(stack.isUp(), true);
+
+  const stopping = stack.stop();
+  assert.equal(stack.isUp(), false, 'closed as soon as the stop begins');
+  await stopping;
+  assert.equal(stack.isUp(), false);
+
+  const failed = newStack({ stub: fakeSpawn(1) });
+  await failed.stack.start(root);
+  assert.equal(failed.stack.isUp(), false);
+});
+
+test('stop waits for an up in flight before it runs down, and that up does not count as started', async (t) => {
+  const root = temporaryRoot(t);
+  const calls = [];
+  const closers = [];
+  const spawn = (command, args) => {
+    calls.push(args.at(-1));
+    const listeners = {};
+    closers.push(() => listeners.close?.(0));
+    return {
+      on(event, listener) {
+        listeners[event] = listener;
+        return this;
+      },
+    };
+  };
+  const stack = new ComposeStack({ composeDir: '/repo', spawn, baseEnv: {} });
+
+  const starting = stack.start(root);
+  const stopping = stack.stop();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, ['--wait'], 'down must not be spawned yet');
+
+  closers[0]();
+  assert.equal(await starting, true);
+  assert.equal(stack.isUp(), false, 'a stop was requested behind this up');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(calls, ['--wait', 'down']);
+
+  closers[1]();
+  assert.equal(await stopping, true);
+  assert.equal(stack.isUp(), false);
+});
+
 test('the session token is 32 or more random bytes and differs per session', () => {
   const first = generateSessionToken();
   const second = generateSessionToken();

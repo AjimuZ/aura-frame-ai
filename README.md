@@ -62,8 +62,8 @@ See [AI providers](docs/ai-providers.md).
 
 ## Running the current code
 
-The legacy path until the container stack lands, needing Node.js only. Python runs only in
-containers, so starting an analysis from the app fails with a clear message until P02.4. See
+The path until the window is packaged, needing Node.js and Docker. Python runs only in containers, and
+starting an analysis from the app brings them up; this has been tested with a fake server only. See
 [Operations](docs/operations.md#running-the-current-code) and
 [Testing](docs/testing.md#current-checks).
 

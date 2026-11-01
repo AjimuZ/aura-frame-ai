@@ -1,13 +1,15 @@
-// Library-aware analysis IPC handlers. Every generated artifact is resolved through the
-// selected local library; originals remain read-only and outside the application data tree.
+// Library-aware analysis IPC handlers: each one is served by the engine API over HTTP, through the
+// main-only API client. The renderer sees the same channels and shapes, and never the session token.
 
 import { BrowserWindow, ipcMain } from 'electron';
-import type { ChildProcessWithoutNullStreams } from 'node:child_process';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { ApiClient, ApiClientError } from '../api-client';
+import type { RunOptions } from '../api-client';
+import { validatePhotoFolder } from '../compose-stack';
+import type { ComposeStack } from '../compose-stack';
 import type {
   AnalysisConfig,
   AnalysisEvent,
+  AnalysisPreset,
   AnalysisStatus,
   OllamaStatus,
   OpenAiCostEstimate,
@@ -15,23 +17,55 @@ import type {
   PhotoItem,
   ReviewSession,
 } from './contracts';
-import { engineConfig } from './paths';
 import { readOpenAiKey } from './settings.ipc';
 import type { LibraryRegistryStore } from './library-store';
 
 type WindowsProvider = () => BrowserWindow[];
 
-let child: ChildProcessWithoutNullStreams | null = null;
-let runningLibraryId: string | null = null;
+// What the handlers need from main. Injected, so a test can use a fake server and a fake Docker.
+export interface AnalysisBackend {
+  api: ApiClient;
+  stack: Pick<ComposeStack, 'start' | 'stop'>;
+  reconnectDelayMs?: number;
+}
+
+// The run this session owns, from the moment it is requested until its stream is over.
+interface ActiveRun {
+  libraryId: string;
+  // `starting` until the API accepted the run: Docker may need minutes to bring the services up.
+  phase: 'starting' | 'running';
+  cancelled: boolean;
+  pauseOnStart: boolean;
+  sawTerminalEvent: boolean;
+  abort: AbortController;
+}
+
+let activeRun: ActiveRun | null = null;
+// Set once this session asked Docker to start the services, so closing the window stops only what it started.
+let stackToStop: AnalysisBackend['stack'] | null = null;
+// Set while the services are being stopped, so that no new start can bring them back behind that stop.
+let disposal: Promise<void> | null = null;
 let getWindows: WindowsProvider = () => [];
 
 const statuses = new Map<string, AnalysisStatus>();
 
-// Shown whenever an action needs the engine: Python no longer runs on the host, and the
-// containerised engine API is not wired to the desktop app until package P02.4.
-const ENGINE_UNAVAILABLE_MESSAGE =
-  'The analysis engine is not available yet. Python no longer runs on this computer; ' +
-  'the engine will run in a container once the engine service is connected to the app.';
+const PRESETS = new Set<AnalysisPreset>(['fast', 'balanced', 'quality']);
+// Only what a local run emits. The legacy cloud events are not forwarded: no run can produce them here.
+const FORWARDED_EVENTS = new Set(['progress', 'photo_scored', 'log', 'done', 'error', 'local_gate_progress']);
+const PROGRESS_EVENTS = new Set(['progress', 'local_gate_progress']);
+
+// A connection that delivers no event this many times in a row counts as lost.
+const MAX_STREAM_ATTEMPTS = 5;
+const RECONNECT_DELAY_MS = 1000;
+
+const REQUEST_FAILED_MESSAGE = 'The request to the analysis service failed.';
+const STACK_FAILED_MESSAGE =
+  'The analysis services could not be started. Check that Docker is installed and running.';
+const CONTACT_LOST_MESSAGE = 'Lost contact with the analysis service.';
+const STOPPED_MESSAGE = 'The analysis stopped without reporting a result.';
+const STOPPING_MESSAGE = 'The analysis services are stopping.';
+// The legacy cloud flow has no API route, and it must not be extended before package P05 removes it.
+const CLOUD_UNAVAILABLE_MESSAGE = 'The cloud review mode is not available in this version.';
 
 function idleStatus(libraryId: string): AnalysisStatus {
   return {
@@ -59,12 +93,6 @@ function broadcast(event: AnalysisEvent): void {
   }
 }
 
-function writeControl(libraries: LibraryRegistryStore, libraryId: string, paused: boolean, cancel: boolean): void {
-  const working = libraries.workingDir(libraryId);
-  fs.mkdirSync(working, { recursive: true });
-  fs.writeFileSync(path.join(working, 'control.json'), JSON.stringify({ paused, cancel }), 'utf-8');
-}
-
 function applyEvent(event: AnalysisEvent): void {
   const status = statusFor(event.libraryId);
   if (event.type === 'progress') {
@@ -90,13 +118,6 @@ function applyEvent(event: AnalysisEvent): void {
       message: event.message,
       finishedAt: new Date().toISOString(),
     });
-  } else if (event.type === 'openai_progress') {
-    Object.assign(status, {
-      step: event.stage as AnalysisStatus['step'],
-      current: event.current,
-      total: event.total,
-      message: event.message,
-    });
   } else if (event.type === 'local_gate_progress') {
     Object.assign(status, {
       step: 'local_gate',
@@ -108,200 +129,327 @@ function applyEvent(event: AnalysisEvent): void {
   broadcast(event);
 }
 
-// Rejects for actions that change data and need the engine, so the renderer receives the
-// clear ENGINE_UNAVAILABLE_MESSAGE instead of a silent no-op. No process is started.
-function runEngineJson(_args: string[]): Promise<Record<string, unknown>[]> {
-  return Promise.reject(new Error(ENGINE_UNAVAILABLE_MESSAGE));
-}
-
-// Read-only probes resolve to no events when the engine is unavailable, so callers fall back
-// to their own "unable to probe" or empty result instead of failing.
-function probeEngineJson(_args: string[]): Promise<Record<string, unknown>[]> {
-  return Promise.resolve([]);
-}
-
-function validateFolder(input: unknown): string | null {
-  if (typeof input !== 'string' || !input) {
-    return null;
-  }
-  const resolved = path.resolve(input);
-  if (!path.isAbsolute(resolved) || !fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
-    return null;
-  }
-  return resolved;
-}
-
 function assertLibrary(libraries: LibraryRegistryStore, libraryId: string): void {
   libraries.getLibrary(libraryId);
 }
 
+// Returns the run options the API accepts. It refuses unknown fields, so only these three are ever sent.
+function toRunOptions(config: AnalysisConfig | undefined): RunOptions {
+  const preset = config?.preset;
+  return {
+    runGemma: config?.runGemma === true,
+    preset: preset && PRESETS.has(preset) ? preset : 'balanced',
+    includeSubfolders: config?.includeSubfolders !== false,
+  };
+}
+
+// Returns the text of a failure that may reach the renderer. Anything but a client error gets a fixed message.
+function safeMessage(error: unknown): string {
+  return error instanceof ApiClientError ? error.message : REQUEST_FAILED_MESSAGE;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Ends the run with an error event. Does nothing when the run is no longer the active one.
+function failRun(run: ActiveRun, message: string): void {
+  if (activeRun !== run) return;
+  activeRun = null;
+  applyEvent({ type: 'error', libraryId: run.libraryId, message });
+}
+
+// Ends a run whose stream is over. A run that closed without a terminal event still has to tell the renderer,
+// which otherwise keeps showing it as running: the event is derived from the API status.
+function finishRun(run: ActiveRun, remote: AnalysisStatus): void {
+  if (activeRun !== run) return;
+  activeRun = null;
+  statuses.set(run.libraryId, remote);
+  if (run.sawTerminalEvent || run.cancelled) return;
+  if (remote.step === 'done') {
+    applyEvent({ type: 'done', libraryId: run.libraryId, message: remote.message });
+  } else {
+    applyEvent({ type: 'error', libraryId: run.libraryId, message: STOPPED_MESSAGE });
+  }
+}
+
+// Forwards one API event in the bridge shape, under the run's library whatever the frame claims.
+// After a cancel, progress is dropped: each progress event sets the renderer back to "running".
+function forwardEvent(run: ActiveRun, raw: Record<string, unknown>): void {
+  const type = raw['type'];
+  if (activeRun !== run || typeof type !== 'string' || !FORWARDED_EVENTS.has(type)) return;
+  if (run.cancelled && PROGRESS_EVENTS.has(type)) return;
+  if (type === 'done' || type === 'error') run.sawTerminalEvent = true;
+  applyEvent({ ...raw, libraryId: run.libraryId } as unknown as AnalysisEvent);
+}
+
+// Follows the run's events until it is over, reconnecting while the API still reports it as running.
+// Each connection replays the run from its start, so the frames already delivered are skipped. If the API's
+// buffer dropped old events the skip can lose newer ones; finishRun still reports the outcome from the status.
+async function followRun(backend: AnalysisBackend, run: ActiveRun): Promise<void> {
+  const { libraryId, abort } = run;
+  let delivered = 0;
+  let attempts = 0;
+  while (!abort.signal.aborted) {
+    const before = delivered;
+    let skip = delivered;
+    try {
+      await backend.api.streamEvents(
+        libraryId,
+        (raw) => {
+          if (skip > 0) {
+            skip -= 1;
+            return;
+          }
+          delivered += 1;
+          forwardEvent(run, raw);
+        },
+        abort.signal,
+      );
+    } catch {
+      // The status below decides whether to reconnect, so this failure needs no handling of its own.
+    }
+    if (abort.signal.aborted) return;
+    const remote = await backend.api.getRunStatus(libraryId).catch(() => null);
+    if (remote && !remote.running) {
+      finishRun(run, remote);
+      return;
+    }
+    attempts = delivered > before ? 0 : attempts + 1;
+    if (attempts >= MAX_STREAM_ATTEMPTS) {
+      failRun(run, CONTACT_LOST_MESSAGE);
+      return;
+    }
+    await delay(backend.reconnectDelayMs ?? RECONNECT_DELAY_MS);
+  }
+}
+
+// Brings the services up with the folder mounted, starts the run and follows it. Never rejects: every failure
+// ends the run with an error event. Compose recreates `api` only when the folder or the token changed.
+async function launchRun(
+  backend: AnalysisBackend,
+  run: ActiveRun,
+  folder: string,
+  options: RunOptions,
+): Promise<void> {
+  const { libraryId } = run;
+  try {
+    stackToStop = backend.stack;
+    if (!(await backend.stack.start(folder))) {
+      failRun(run, STACK_FAILED_MESSAGE);
+      return;
+    }
+    if (activeRun !== run) return;
+    if (run.cancelled) {
+      activeRun = null;
+      Object.assign(statusFor(libraryId), { running: false, step: 'idle', message: 'Analysis cancelled.' });
+      return;
+    }
+    const started = await backend.api.startRun(libraryId, options);
+    if (activeRun !== run) return;
+    statuses.set(libraryId, started);
+    run.phase = 'running';
+    void followRun(backend, run);
+  } catch (error) {
+    failRun(run, safeMessage(error));
+    return;
+  }
+  // The requests made while the run was starting. If they fail the run simply continues, and the stream shows it:
+  // a failed cancel clears the flag, because the flag would otherwise drop that run's progress.
+  if (run.cancelled) {
+    await backend.api.cancelRun(libraryId).catch(() => {
+      run.cancelled = false;
+    });
+  } else if (run.pauseOnStart) {
+    await backend.api.pauseRun(libraryId).catch(() => null);
+  }
+}
+
+// Pauses or resumes this session's run. A run that is still starting applies the request once it exists.
+async function setPaused(backend: AnalysisBackend, libraryId: string, paused: boolean): Promise<void> {
+  const run = activeRun;
+  if (run?.libraryId !== libraryId) return;
+  statusFor(libraryId).paused = paused;
+  if (run.phase === 'starting') {
+    run.pauseOnStart = paused;
+    return;
+  }
+  statuses.set(libraryId, await (paused ? backend.api.pauseRun(libraryId) : backend.api.resumeRun(libraryId)));
+}
+
+// Rethrows an API failure as a plain Error with its fixed message, the only part that crosses IPC.
+async function guarded<T>(action: () => Promise<T>): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    throw new Error(safeMessage(error));
+  }
+}
+
 export function isAnalysisRunning(): boolean {
-  return child !== null && runningLibraryId !== null;
+  return activeRun !== null;
 }
 
 export function registerAnalysisIpc(
   windowsProvider: WindowsProvider,
   libraries: LibraryRegistryStore,
+  backend: AnalysisBackend,
 ): void {
   getWindows = windowsProvider;
+  const { api } = backend;
 
+  // Resolves as soon as the run is requested. Its outcome reaches the renderer as events, because bringing
+  // the services up can take minutes. The folder goes to the stack only; the API request never names a path.
   ipcMain.handle('analysis:start', (_event, libraryId: string, config: AnalysisConfig): void => {
     assertLibrary(libraries, libraryId);
     if (isAnalysisRunning()) {
       throw new Error('An analysis is already running.');
     }
-    const folder = validateFolder(config?.inputFolder);
-    if (!folder) {
+    if (disposal) {
+      throw new Error(STOPPING_MESSAGE);
+    }
+    let folder: string;
+    try {
+      folder = validatePhotoFolder(config?.inputFolder);
+    } catch {
       applyEvent({ type: 'error', libraryId, message: 'Invalid or missing photo folder.' });
       return;
     }
-    // Validated input is accepted, but no process starts: the engine only runs in containers.
-    // TODO(P02.4): call the containerised engine API here, with the preset and options.
-    applyEvent({ type: 'error', libraryId, message: ENGINE_UNAVAILABLE_MESSAGE });
+    const run: ActiveRun = {
+      libraryId,
+      phase: 'starting',
+      cancelled: false,
+      pauseOnStart: false,
+      sawTerminalEvent: false,
+      abort: new AbortController(),
+    };
+    activeRun = run;
+    statuses.set(libraryId, {
+      ...idleStatus(libraryId),
+      step: 'indexing',
+      running: true,
+      message: 'Starting the analysis services.',
+      startedAt: new Date().toISOString(),
+    });
+    void launchRun(backend, run, folder, toRunOptions(config));
   });
 
-  ipcMain.handle('analysis:pause', (_event, libraryId: string): void => {
+  ipcMain.handle('analysis:pause', (_event, libraryId: string): Promise<void> => {
     assertLibrary(libraries, libraryId);
-    if (runningLibraryId === libraryId) {
-      statusFor(libraryId).paused = true;
-      writeControl(libraries, libraryId, true, false);
-    }
+    return guarded(() => setPaused(backend, libraryId, true));
   });
 
-  ipcMain.handle('analysis:resume', (_event, libraryId: string): void => {
+  ipcMain.handle('analysis:resume', (_event, libraryId: string): Promise<void> => {
     assertLibrary(libraries, libraryId);
-    if (runningLibraryId === libraryId) {
-      statusFor(libraryId).paused = false;
-      writeControl(libraries, libraryId, false, false);
-    }
+    return guarded(() => setPaused(backend, libraryId, false));
   });
 
-  ipcMain.handle('analysis:cancel', (_event, libraryId: string): void => {
+  // Asks the run to stop. The run stays active until its stream ends, so a new one cannot race the old one.
+  // Rejects when the API call fails. The run then goes on, so its state is restored and its progress flows again.
+  ipcMain.handle('analysis:cancel', async (_event, libraryId: string): Promise<void> => {
     assertLibrary(libraries, libraryId);
-    if (runningLibraryId !== libraryId) return;
-    writeControl(libraries, libraryId, false, true);
+    const run = activeRun;
+    if (run?.libraryId !== libraryId) return;
+    run.cancelled = true;
     const status = statusFor(libraryId);
-    Object.assign(status, { running: false, paused: false, step: 'idle', message: 'Analysis cancelled.' });
-    if (child) {
-      const proc = child;
-      setTimeout(() => {
-        if (!proc.killed) proc.kill();
-      }, 1500);
+    const before = { paused: status.paused, message: status.message };
+    Object.assign(status, { paused: false, message: 'Cancelling the analysis.' });
+    if (run.phase !== 'running') return;
+    try {
+      statuses.set(libraryId, await guarded(() => api.cancelRun(libraryId)));
+    } catch (error) {
+      run.cancelled = false;
+      if (activeRun === run) Object.assign(statusFor(libraryId), before);
+      throw error;
     }
   });
 
-  ipcMain.handle('analysis:status', (_event, libraryId: string): AnalysisStatus => {
+  // Reports the API's status. While the services are starting or down, the last known status stands in.
+  // That includes the time before this session's first start, when the client sends nothing.
+  ipcMain.handle('analysis:status', async (_event, libraryId: string): Promise<AnalysisStatus> => {
     assertLibrary(libraries, libraryId);
-    return { ...statusFor(libraryId) };
+    if (activeRun?.libraryId === libraryId && activeRun.phase === 'starting') {
+      return { ...statusFor(libraryId) };
+    }
+    try {
+      const remote = await api.getRunStatus(libraryId);
+      statuses.set(libraryId, remote);
+      return { ...remote };
+    } catch {
+      return { ...statusFor(libraryId) };
+    }
   });
 
-  ipcMain.handle('photos:get', (_event, libraryId: string): PhotoItem[] => {
+  // Returns no photos when the services are down, as it did when the engine had produced no output.
+  ipcMain.handle('photos:get', async (_event, libraryId: string): Promise<PhotoItem[]> => {
     assertLibrary(libraries, libraryId);
     try {
-      const file = path.join(libraries.workingDir(libraryId), 'photos.json');
-      const records = JSON.parse(fs.readFileSync(file, 'utf-8')) as Omit<PhotoItem, 'libraryId'>[];
-      return records.map((photo) => ({ ...photo, libraryId }));
+      const records = await api.listPhotos(libraryId);
+      return records.map((photo) => ({ ...photo, libraryId }) as unknown as PhotoItem);
     } catch {
       return [];
     }
   });
 
+  // Nothing is sent for an empty selection: the API requires at least one id, and there is nothing to copy.
   ipcMain.handle('export:finalSet', async (_event, libraryId: string, photoIds: string[]): Promise<void> => {
     assertLibrary(libraries, libraryId);
-    const ids = Array.isArray(photoIds) ? photoIds.filter((id) => typeof id === 'string').join(',') : '';
-    await runEngineJson([
-      'export-final', '--ids', ids, '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId),
-    ]);
+    const ids = Array.isArray(photoIds) ? photoIds.filter((id) => typeof id === 'string') : [];
+    if (ids.length > 0) {
+      await guarded(() => api.exportPhotos(libraryId, ids));
+    }
   });
 
-  ipcMain.handle('ollama:check', async (): Promise<OllamaStatus> => {
-    const activeId = libraries.getState().activeLibraryId;
-    const events = await probeEngineJson([
-      'ollama-check', '--config', engineConfig(), '--data-root', libraries.libraryRoot(activeId),
-    ]);
-    const report = events.find((event) => event['type'] === 'ollama_check');
-    return report
-      ? (report as unknown as OllamaStatus)
-      : {
-          runtimeReachable: false,
-          primaryModel: '',
-          primaryAvailable: false,
-          fallbackModel: null,
-          fallbackAvailable: false,
-          message: 'Unable to probe Ollama.',
-        };
-  });
+  // Ollama has no API route and is not used in new work; package P03 removes this channel's client.
+  ipcMain.handle('ollama:check', (): OllamaStatus => ({
+    runtimeReachable: false,
+    primaryModel: '',
+    primaryAvailable: false,
+    fallbackModel: null,
+    fallbackAvailable: false,
+    message: 'Unable to probe Ollama.',
+  }));
 
   ipcMain.handle('data:clear', async (_event, libraryId: string): Promise<void> => {
     assertLibrary(libraries, libraryId);
     if (isAnalysisRunning()) throw new Error('Cannot clear data during an analysis.');
-    await runEngineJson([
-      'clear-data', '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId),
-    ]);
+    await guarded(() => api.clearData(libraryId));
+    statuses.delete(libraryId);
   });
 
+  // Returns null when the services are down, the same answer as a library with no saved session.
   ipcMain.handle('review:get', async (_event, libraryId: string): Promise<ReviewSession | null> => {
     assertLibrary(libraries, libraryId);
-    const events = await probeEngineJson([
-      'load-review', '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId),
-    ]);
-    const result = events.find((event) => event['type'] === 'review_session');
-    return result?.['session'] ? (result['session'] as ReviewSession) : null;
+    return api.getReview(libraryId).catch(() => null);
   });
 
+  // Sends only the known fields, because the API refuses a body with any other.
   ipcMain.handle(
     'review:save',
     async (_event, libraryId: string, session: ReviewSession): Promise<void> => {
       assertLibrary(libraries, libraryId);
-      const working = libraries.workingDir(libraryId);
-      const payloadPath = path.join(working, 'review_session.json');
-      fs.mkdirSync(working, { recursive: true });
-      fs.writeFileSync(payloadPath, JSON.stringify(session ?? {}), 'utf-8');
-      await runEngineJson([
-        'save-review', '--file', payloadPath, '--config', engineConfig(),
-        '--data-root', libraries.libraryRoot(libraryId),
-      ]);
+      await guarded(() =>
+        api.saveReview(libraryId, {
+          slotAssignments: session?.slotAssignments ?? {},
+          locks: session?.locks ?? {},
+          shortlist: session?.shortlist ?? [],
+        }),
+      );
     },
   );
 
-  // Estimates OpenAI Quality Mode cost from the gated set (no API calls are made).
-  ipcMain.handle('openai:estimate', async (_event, libraryId: string): Promise<OpenAiCostEstimate | null> => {
+  // The handlers below belong to the legacy cloud flow. They keep their channels and shapes until package P05
+  // removes them, but they contact nothing and start nothing.
+  ipcMain.handle('openai:estimate', (_event, libraryId: string): OpenAiCostEstimate | null => {
     assertLibrary(libraries, libraryId);
-    const events = await probeEngineJson([
-      'openai-estimate', '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId),
-    ]);
-    const r = events.find((event) => event['type'] === 'openai_estimate');
-    if (!r) return null;
-    return {
-      eligible: Number(r['eligible'] ?? 0),
-      counts: (r['counts'] as Record<string, number>) ?? {},
-      perStageUsd: (r['per_stage_usd'] as Record<string, number>) ?? {},
-      estimatedTotalUsd: Number(r['estimated_total_usd'] ?? 0),
-      budgetMaxUsd: Number(r['budget_max_usd'] ?? 0),
-      withinBudget: Boolean(r['within_budget']),
-    };
+    return null;
   });
 
-  // Probes the OpenAI API (key/reachability/models). The key is injected via the environment.
-  ipcMain.handle('openai:status', async (_event, libraryId: string): Promise<OpenAiStatus> => {
+  ipcMain.handle('openai:status', (_event, libraryId: string): OpenAiStatus => {
     assertLibrary(libraries, libraryId);
-    const events = await probeEngineJson([
-      'openai-check', '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId),
-    ]);
-    const r = events.find((event) => event['type'] === 'openai_check');
-    if (!r) return { hasKey: false, reachable: false, models: {}, message: 'Unable to probe OpenAI.' };
-    return {
-      hasKey: Boolean(r['hasKey']),
-      reachable: Boolean(r['reachable']),
-      models: (r['models'] as Record<string, string | null>) ?? {},
-      message: String(r['message'] ?? ''),
-      warnings: (r['warnings'] as string[]) ?? undefined,
-    };
+    return { hasKey: false, reachable: false, models: {}, message: 'Unable to probe OpenAI.' };
   });
 
-  // Starts the optional OpenAI Quality Mode run (streams progress like analysis:start). The
-  // engine cloud gate is enabled for this run via --enable-cloud (explicit user action), and
-  // the API key is injected through the environment, never as an argument.
   ipcMain.handle(
     'openai:start',
     (_event, libraryId: string, _options: { budgetUsd?: number; stage?: string }): void => {
@@ -314,22 +462,31 @@ export function registerAnalysisIpc(
         applyEvent({ type: 'error', libraryId, message: 'No OpenAI API key configured. Add it in Settings.' });
         return;
       }
-      // No process starts: the engine only runs in containers (see ENGINE_UNAVAILABLE_MESSAGE).
-      applyEvent({ type: 'error', libraryId, message: ENGINE_UNAVAILABLE_MESSAGE });
+      applyEvent({ type: 'error', libraryId, message: CLOUD_UNAVAILABLE_MESSAGE });
     },
   );
 
-  // Re-exports OpenAI Quality Mode output folders + reports from stored results.
-  ipcMain.handle('export:openaiResults', async (_event, libraryId: string): Promise<void> => {
+  ipcMain.handle('export:openaiResults', (_event, libraryId: string): Promise<void> => {
     assertLibrary(libraries, libraryId);
-    await runEngineJson([
-      'export-openai-results', '--config', engineConfig(), '--data-root', libraries.libraryRoot(libraryId),
-    ]);
+    return Promise.reject(new Error(CLOUD_UNAVAILABLE_MESSAGE));
   });
 }
 
-export function disposeAnalysisIpc(): void {
-  if (child && !child.killed) child.kill();
-  child = null;
-  runningLibraryId = null;
+async function stopServices(): Promise<void> {
+  activeRun?.abort.abort();
+  activeRun = null;
+  statuses.clear();
+  const stack = stackToStop;
+  stackToStop = null;
+  if (stack) await stack.stop();
+}
+
+// Stops following the run and stops the services if this session started them. Their volumes survive.
+// Resolves when Docker has finished, including an `up` still in flight, so the caller can quit without leaving
+// the services running. A new start is refused until then, and calls made meanwhile share the same stop.
+export function disposeAnalysisIpc(): Promise<void> {
+  disposal ??= stopServices().finally(() => {
+    disposal = null;
+  });
+  return disposal;
 }

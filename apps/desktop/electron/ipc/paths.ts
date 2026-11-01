@@ -1,8 +1,8 @@
-// Resolves repository, engine config, and generated-data paths for the Electron main process.
+// Resolves the repository and generated-data paths for the Electron main process.
 // Python never runs on the host: the engine runs in containers only (see docs/operations.md).
-// The engine code lives next to the app (repoRoot); ALL generated data (DB, thumbnails,
-// working files, output, reports) lives under userData/AuraFrameAI so nothing is written
-// into the repository or any protected personal-data location.
+// compose.yaml lives in the repository root (repoRoot); host-side data lives under
+// userData/AuraFrameAI so nothing is written into the repository or any protected
+// personal-data location.
 
 import { app } from 'electron';
 import * as fs from 'node:fs';
@@ -18,9 +18,4 @@ export function dataRoot(): string {
   const root = path.join(app.getPath('userData'), 'AuraFrameAI');
   fs.mkdirSync(root, { recursive: true });
   return root;
-}
-
-// Returns the absolute path to the engine config file.
-export function engineConfig(): string {
-  return path.join(repoRoot(), 'engine', 'config.yaml');
 }

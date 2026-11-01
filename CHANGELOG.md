@@ -20,7 +20,7 @@
   port, on `127.0.0.1`, and `api` and `vision` have no route to the internet. Photos mount read-only at
   `/photos`, with data and models in named volumes. `bash scripts/check.sh --integration` proves the
   isolation on a synthetic folder, using the image without PyTorch, no GPU and no model. The PyTorch image,
-  GPU access and a served model have not been run, and the desktop app does not use the stack yet (P02.4).
+  GPU access and a served model have not been run.
 - `start.sh` starts, inspects and stops the container stack: `--cpu`, `--rebuild`, `--backend-only`,
   `--provider local|none`, `--status`, `--logs [service]` and `--stop`. It checks Docker, Compose, the GPU
   and the model files, warns when Docker has less than 10 GB, generates a new session token per start and
@@ -31,7 +31,18 @@
 - Electron main has a module that starts and stops the container stack for a chosen photo folder. It checks
   that the folder is an existing directory, runs Docker without a shell, and passes the folder and a fresh
   per-session token only through the environment, so neither appears in a command line, event or reply.
-  The window does not use it yet (P02.4.2, P02.4.3), and it has been tested with a fake Docker only.
+  It has been tested with a fake Docker only.
+- The desktop app now talks to the containerised engine. Starting an analysis brings the services up with the
+  chosen folder mounted read-only and starts the run through the API. Progress, pause, resume, cancel, the
+  photo list, the review session, clearing data and exporting the final set also use the API, with the same
+  window behavior and channels. Only Electron main holds the session token, no reply or event carries it, and it
+  is sent to no one until this session has started the services. Closing the window or quitting the app stops
+  the services it started and keeps the data, after waiting for a start in progress. If Docker has not finished
+  within 10 minutes, a dialog says what may still be running and the app exits. This has been tested with a fake
+  server and a fake Docker only, not against the real services. Still open: thumbnails, exporting a single photo,
+  removing a deleted library's data from the volume, and showing earlier results before a run starts the
+  services. A new start while a cancel is finishing is refused, and the status stays at "Starting..." until it is
+  refreshed. The final set is copied into the data volume, so the output folder button does not show it yet.
 
 ### Changed
 
@@ -41,9 +52,7 @@
   passes build, lint and tests but has not yet been started.
 
 - Python now runs only in containers. The `engine:*` npm scripts that called Python on the host are
-  removed, and the Electron main process no longer looks for a host interpreter or a `.venv`. Until
-  P02.4 connects the containerised engine, starting an analysis from the app fails with the message
-  "The analysis engine is not available yet", and engine-backed read-only checks report no result.
+  removed, and the Electron main process no longer looks for a host interpreter or a `.venv`.
   Run the engine tests with the container command in `docs/testing.md`.
 
 - The documentation now describes AuraFrame AI as a general tool for finding beautiful photos of any

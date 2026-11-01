@@ -147,6 +147,14 @@ test('exits 1 when Docker, the daemon, Compose or the GPU is missing', () => {
   assert.equal(cpu.status, 0, cpu.stderr);
 });
 
+test('says on stderr that the window is not launched, and why, without denying that the app uses the services', () => {
+  const run = runStart([]);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stderr, /window is not launched by this script yet: its container build comes in P02\.5/);
+  assert.match(run.stderr, /stop them with '\.\/start\.sh --stop'/);
+  assert.doesNotMatch(`${run.stdout}${run.stderr}`, /does not use the services|P02\.4/);
+});
+
 test('exits 3 when a service or the gateway fails its health check', () => {
   const serviceDown = runStart([], { env: { STUB_UP_EXIT: '1' } });
   assert.equal(serviceDown.status, 3);

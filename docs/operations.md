@@ -1,9 +1,10 @@
 # Operations
 
-Status: **partly implemented** ([P02](roadmap.md)). `compose.yaml` and `start.sh` exist, and the desktop app
-does not use the stack yet. Of the `start.sh` contract below, the services, the checks, the token and the
-exit codes are implemented. The window, `--fetch-models`, `--codex-login` and `--provider codex` are
-planned, and the script says so (see [Not available yet](#not-available-yet)). To run the current code, see
+Status: **partly implemented** ([P02](roadmap.md)). `compose.yaml` and `start.sh` exist, and the desktop app's
+analysis handlers call the stack over HTTP ([Bridge mapping](architecture.md#bridge-mapping)). Of the `start.sh`
+contract below, the services, the checks, the token and the exit codes are implemented. The window,
+`--fetch-models`, `--codex-login` and `--provider codex` are planned, and the script says so (see
+[Not available yet](#not-available-yet)). To run the current code, see
 [Running the current code](#running-the-current-code).
 
 ## Compose stack
@@ -102,9 +103,9 @@ These flags are valid, but their feature comes later. Each prints a "not availab
 | `--fetch-models` | P03.2 |
 | `--codex-login`, `--provider codex` | P05.2 |
 
-The window is not launched either: the desktop app does not use the services until P02.4, and its container
-build comes in P02.5. After a start, the script prints that, leaves the services running, and `--stop` ends
-them. `--rebuild` rebuilds the images only.
+The window is not launched either: its container build comes in P02.5. After a start, the script prints that,
+leaves the services running, and `--stop` ends them. `--rebuild` rebuilds the images only. A window started
+separately brings its own token, so its first run makes compose recreate `api` with that token.
 
 ## First start
 
@@ -190,6 +191,20 @@ npm install
 npm start
 ```
 
-The desktop window starts, but starting an analysis from the app fails with a clear message
-("The analysis engine is not available yet") until P02.4 connects the containerised engine. Run the
-engine tests with the container command in [Testing](testing.md#engine-tests-in-a-throwaway-container).
+Starting an analysis from the window runs `docker compose up -d --wait` with the chosen folder, then calls the
+API on `127.0.0.1` (`AURAFRAME_PORT`, default `8420`). Docker must be running, otherwise the app reports that the
+services could not be started. Until a run starts the services, the app sends the API nothing and shows no
+photos, including those of earlier runs; saving a review, exporting and clearing data report that the service is
+not reachable. This path is tested with a fake server and a fake Docker only, and has not been run against the
+real stack. Run the engine tests with the container command in
+[Testing](testing.md#engine-tests-in-a-throwaway-container).
+
+Closing the window, File > Exit and every other normal quit stop the services and keep the data. A start in
+progress is waited for first, which can take minutes on a first image build, so the process can outlive the
+window. The wait is bounded to 10 minutes. If Docker has not finished by then, a dialog says so and the app exits.
+The Docker command it was waiting for keeps running, and the services may stay or come up with the photo folder
+mounted read-only: run `./start.sh --stop`. The same command is needed after a crash, a forced kill or, on Windows,
+a system shutdown or log-off, because Electron emits no quit event for those.
+
+Known gap: starting a new analysis while a cancel is still finishing is refused with "An analysis is already
+running", and the status stays at "Starting..." until it is refreshed.

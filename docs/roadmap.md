@@ -110,6 +110,21 @@ this Windows session may not create symlinks). Not observed: a real Docker daemo
 wiring, the HTTP client and the `afmedia` proxy (P02.4.2, P02.4.3); the module is not called from `main.ts`
 yet, so P02.4 stays unchecked.
 
+Progress 2026-11-01: P02.4.2 added `apps/desktop/electron/api-client.ts` and `tests/analysis-http.test.cjs`, and
+`ipc/analysis.ipc.ts` now calls the API over HTTP (runs, `runs/current`, SSE events, photos, review, data, exports)
+with the same channels. `main.ts` builds the `ComposeStack` and the client; `analysis:start` starts the stack with
+the chosen folder. The token and Host header are added in main only, and no request leaves main until
+`stack.start` has resolved true in this session. `quit-handling.ts` makes closing the window, File > Exit and
+`app.quit()` stop the services, with `down` only after an `up` in flight has ended, and bounds that wait to 10
+minutes. The API has no route for the legacy local-model and cloud handlers, so they return their fallbacks and
+contact nothing. Details: [Bridge mapping](architecture.md#bridge-mapping). Observed: `bash scripts/check.sh --node`
+passed (lint, both builds, `bash -n start.sh`, and 96 Node tests: 95 passed, 1 skipped, the symlink case). Not
+observed: the client against the real API, gateway, Docker or a running Electron, including the quit paths and the
+dialog. Still open in P02.4: the `afmedia` proxy (P02.4.3), `export:photo` (it reads a host `photos.json`),
+`DELETE .../data` when a library is deleted, connecting `/exports` to the API's export folder, `compose.gpu.yaml`
+in the stack module, which runs without a GPU, and the status left at "Starting..." when a restart is refused
+during a cancel ([Operations](operations.md#running-the-current-code)). So P02.4 stays unchecked.
+
 ## 4. P03 — Local AI runtime
 
 **Depends on:** P02. **Areas:** providers, models.

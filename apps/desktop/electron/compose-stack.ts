@@ -71,6 +71,10 @@ export class ComposeStack {
   private readonly baseEnv: NodeJS.ProcessEnv;
   // Held only in this process. There is deliberately no getter that an IPC handler could return.
   private readonly token: string;
+  // True only from a successful `up` until the next start or stop.
+  private up = false;
+  private stopRequested = false;
+  private inFlightUp: Promise<boolean> | null = null;
 
   constructor(private readonly options: ComposeStackOptions) {
     this.spawnFn = options.spawn ?? (nodeSpawn as unknown as SpawnFn);
@@ -85,20 +89,43 @@ export class ComposeStack {
     return `Bearer ${this.token}`;
   }
 
+  // Returns true when this session's services accept the token: a successful `up` with no start or stop since.
+  // While it is false, whatever listens on the gateway port is not ours, so no request may carry the token.
+  isUp(): boolean {
+    return this.up;
+  }
+
   // Starts the stack with the photo folder mounted read-only by compose.
   // Resolves to true when docker exits with code 0; rejects with FolderValidationError for a bad folder.
+  // Requires that no stop is running; the caller refuses a start until its stop has resolved.
   async start(folder: unknown): Promise<boolean> {
     const photos = validatePhotoFolder(folder);
+    this.up = false;
     this.onEvent({ type: 'starting' });
     const env = { ...this.baseEnv, [PHOTOS_ENV]: photos, [TOKEN_ENV]: this.token };
-    return this.run(['up', '-d', '--wait'], env, 'started');
+    const attempt = this.run(['up', '-d', '--wait'], env, 'started');
+    this.inFlightUp = attempt;
+    const started = await attempt;
+    this.inFlightUp = null;
+    this.up = started && !this.stopRequested;
+    return started;
   }
 
   // Stops the stack and keeps its data volumes. Resolves to true when docker exits with code 0.
+  // Waits for an `up` in flight first: run in parallel, that `up` could finish after `down` and leave the
+  // services running with the photos mounted. Killing it instead is not reliable, because on Windows the compose
+  // plugin outlives the docker process that launched it. The wait has no bound here; quit-handling.ts bounds it.
   async stop(): Promise<boolean> {
+    this.up = false;
+    this.stopRequested = true;
     this.onEvent({ type: 'stopping' });
-    // "down" mounts nothing, so it needs no folder; compose.yaml has defaults for the other variables.
-    return this.run(['down'], { ...this.baseEnv, [TOKEN_ENV]: this.token }, 'stopped');
+    try {
+      await this.inFlightUp;
+      // "down" mounts nothing, so it needs no folder; compose.yaml has defaults for the other variables.
+      return await this.run(['down'], { ...this.baseEnv, [TOKEN_ENV]: this.token }, 'stopped');
+    } finally {
+      this.stopRequested = false;
+    }
   }
 
   // Runs one docker compose command and reports only its outcome.
