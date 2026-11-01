@@ -15,6 +15,9 @@
 - When removing a runtime path, replace it with an explicit, single-source error message constant so callers fail clearly instead of silently or by crashing.
 - After deleting a file or script, grep the docs for it and correct any statement that still calls it 'in use'.
 - Record checks that could not be run, such as upstream release notes without web access, as explicit gap rows in docs/testing.md.
+- Apply cross-cutting security checks (token, Host) as app-level middleware so unknown paths and OPTIONS are guarded too, not just declared routes.
+- Compare secrets with hmac.compare_digest, read them from the environment, and fail closed (refuse to start) when they are missing or too short.
+- Assert on the absence of access-control-* headers across success, refusal and OPTIONS responses in the same test.
 
 ---
 
@@ -194,4 +197,39 @@ The default library name was already neutral from P01.2.2, so the remaining code
   - bash scripts/check.sh passes end to end in this environment, including the Docker engine step (28 pytest tests); it needs Docker and network access.
   - The check run rebuilds dist/aura-frame; that directory is ignored.
   - P01.4 (LICENSE) remains open, and P01.SMOKE is what will observe the app starting on Electron 45.
+---
+
+## 2026-11-01T19:47:20Z - P02.3.1
+- I added the FastAPI skeleton in engine/api, pinned its dependencies and wrote tests, but I could not run any check. The shell denied the container pytest command twice, so the new code and tests are unverified and the earlier 28 passing tests are not re-confirmed. I wrote the code to the TestClient and Starlette behaviors I expect, not to observed output. A requirements-resolution error with the existing pins, such as pydantic against mediapipe, is also still possible.
+
+**What the guard does**
+- The guard is middleware, so it covers unknown paths and OPTIONS as well as the routes.
+- A foreign or missing Host gets 403 `foreign_host`. The allowed names are `127.0.0.1` and `localhost`, with any numeric port. `AURAFRAME_ALLOWED_HOSTS` can override the names.
+- A missing or wrong `Authorization: Bearer` token gets 401 `invalid_token`. The comparison uses `hmac.compare_digest`.
+- `create_app` raises ValueError for a token shorter than 16 characters. `create_app_from_env` raises RuntimeError when `AURAFRAME_API_TOKEN` is missing.
+- The app has no CORS middleware, and `/docs`, `/redoc` and `/openapi.json` are disabled.
+- `GET /health` returns `{status, version}`.
+- The shared models are `ApiModel` (it rejects unknown fields), `HealthResponse` and `ErrorResponse`.
+
+**Dependencies:** `engine/requirements.txt` now pins `fastapi==0.115.6`, `pydantic==2.10.4`, `uvicorn==0.34.0` and `httpx==0.28.1`. httpx is test-only, for the test client.
+
+**Tests:** `engine/tests/test_api_guard.py` covers these cases:
+- missing and wrong tokens;
+- foreign Hosts;
+- the health route returning 200;
+- no `access-control-*` header on any response, including refusals and OPTIONS;
+- a 422 on an invalid body, using a test-only route;
+- the startup failures;
+- the `is_allowed_host` and `is_valid_token` helpers.
+
+**Docs:** I added a note under P02 in `docs/roadmap.md` and left the P02.3 checkbox alone. `CHANGELOG.md` has a new entry under Unreleased.
+- Files changed: engine/api/__init__.py, engine/api/models.py, engine/api/security.py, engine/api/app.py, engine/requirements.txt, engine/tests/test_api_guard.py, CHANGELOG.md, docs/roadmap.md
+- **Learnings for future iterations:**
+  - The container pytest command was denied in this session, so engine/tests/test_api_guard.py and the new pins have never been run. Run the container pytest first thing, and check that pip resolves the new pins together with mediapipe, numpy 1.26.4 and the existing pins.
+  - The guard is middleware in engine/api/security.py (install_request_guard). It checks the Host first (403 foreign_host), then the bearer token (401 invalid_token). New routes get it automatically.
+  - FastAPI's TestClient defaults to Host `testserver`, which the guard refuses. Tests must build it with base_url="http://127.0.0.1:8000" and send `Authorization: Bearer <token>`.
+  - The token comes from AURAFRAME_API_TOKEN and must be at least 16 characters. The Host allowlist comes from AURAFRAME_ALLOWED_HOSTS and defaults to 127.0.0.1 and localhost. Serve the app with `uvicorn --factory api.app:create_app_from_env`. P02.1 and P02.4 must pass the token to the api container and to Electron main.
+  - Interactive docs and openapi.json are disabled. The Pydantic base ApiModel in engine/api/models.py forbids extra fields, so new request models should inherit from it.
+  - The API modules do not import torch or src, so they run in the pytest container that skips torch. engine/tests/conftest.py already puts the engine directory on sys.path, so tests import `api.*`.
+  - The roadmap P02.3 checkbox is untouched. The runs, events, photos, media, exports and data routes remain to be done as later P02.3 subtasks.
 ---

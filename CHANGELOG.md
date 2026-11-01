@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- The engine has the skeleton of its HTTP API (`engine/api`). Every request needs the per-session token
+  and a local Host header, and no CORS header is ever sent. Only a `/health` route exists; the other
+  routes and the container that serves them are planned (P02).
+
 ### Changed
 
 - Electron moves from 33.4.11, which was out of support, to 45.2.1, and `electron-builder` from 25.1.8 to

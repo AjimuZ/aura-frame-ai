@@ -62,6 +62,11 @@ Exit: `./start.sh` opens the Electron window; a synthetic folder chosen in the n
 a `fast` run end to end; closing the window stops the services; the network, read-only, token and
 hardening checks in [Testing](testing.md) pass.
 
+Progress 2026-11-01: P02.3.1 added the `engine/api` skeleton (app factory, session-token and Host guard,
+no CORS, `/health`, shared Pydantic models) and pinned `fastapi`, `pydantic`, `uvicorn` and `httpx` in
+`engine/requirements.txt`. Its tests are in `engine/tests/test_api_guard.py`. The runs, events, photos,
+media, exports and data routes are not written yet, and the API is not wired into a container.
+
 ## 4. P03 — Local AI runtime
 
 **Depends on:** P02. **Areas:** providers, models.

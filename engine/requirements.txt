@@ -12,6 +12,13 @@ PyYAML==6.0.2
 requests==2.32.3
 pytest==8.3.4
 
+# HTTP API (engine/api). httpx is only used by the FastAPI test client. None of these
+# packages sends telemetry.
+fastapi==0.115.6
+pydantic==2.10.4
+uvicorn==0.34.0
+httpx==0.28.1
+
 # Local image embeddings + aesthetic pre-scoring (CPU). Heavy but fully local.
 # The engine degrades gracefully (neutral scores) if these are not installed.
 torch==2.4.1
