@@ -35,6 +35,9 @@
 
 ### Added
 
+- `tests/personal-data.test.cjs`, a guard test that fails, naming file and line, on a user-home path
+  or on any word of at least four letters of the owner name (read from `git config user.name` at test
+  time, never stored) in a tracked or unignored file. The package.json author field was removed.
 - `tests/retired-terms.test.cjs`, a guard test that fails, naming file and line, when the retired
   product vocabulary reappears in any tracked or unignored file.
 - `scripts/check.sh`, one entry point for lint, builds, Node tests and the containerized engine tests,

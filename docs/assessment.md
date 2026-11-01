@@ -74,7 +74,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | D2 | `.venv` points to an interpreter under another user account, so it does not start | Run: "No Python at ..." |
 | D3 | `npm run engine:test` needs Python 3.12, and this PC has only 3.15 | Run: exit 6 |
 | D4 | `start.py` accepts the broken `.venv` as valid, because it checks only that the file exists | Read: `start.py:75` |
-| D5 | ~~A personal first name is hard-coded as the default library, in code, mock data and tests~~ **Fixed in P01.2.2:** the default is now "My library" and the mock data and tests use neutral names | Read: `apps/desktop/electron/ipc/library-store.ts` |
+| D5 | ~~A personal first name is hard-coded as the default library, in code, mock data and tests~~ **Fixed in P01.2.2:** the default is now "My library" and the mock data and tests use neutral names. **Guarded in P01.3:** the `package.json` author field is removed and `tests/personal-data.test.cjs` fails on user-home paths and on the owner name | Read: `apps/desktop/electron/ipc/library-store.ts` |
 | D6 | `package.json` declares MIT, but no `LICENSE` file exists | Run |
 | D7 | Face detection uses MediaPipe's legacy `solutions` API, with upstream support ended in 2023 | Read: `engine/src/face_quality.py:24` |
 | D8 | `tqdm` is required but never imported | Read |

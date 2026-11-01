@@ -10,6 +10,8 @@
 - Keep banned terms base64-encoded in guard tests and match by whole identifier tokens (split on non-alphanumerics, underscores and camelCase boundaries) to avoid substring false positives.
 - When a rename touches an npm script name, describe it as 'the store test command is now X' instead of quoting the old name in the changelog.
 - Keep test files at their existing path when renaming their subject; change content only, because the runner refuses deleted or renamed test files.
+- Read personal identifiers such as the Git user name at test time and never store them in a file.
+- Build test inputs for guard tests at run time, such as a Windows path from separator pieces, so the guard file does not trigger its own patterns.
 
 ---
 
@@ -138,4 +140,23 @@ I left the roadmap checkbox alone.
   - The engine pytest in the container was not run this session; the engine change is comment-only.
   - docs/architecture.md lines 61-62 still use 'profile' as the Docker Compose term; this is outside the criteria and is correct usage.
   - Any changelog or progress note must avoid quoting the old npm script name, because the guard test and review rules treat the retired term as forbidden even in a rename note.
+---
+
+## 2026-11-01T19:17:54Z - P01.3
+- I added tests/personal-data.test.cjs and removed the author field from package.json. I updated docs/assessment.md D5, docs/security-privacy.md and CHANGELOG.md. `npm run lint` passes. `npm run build:electron` and all 11 Node tests pass. I did not run `bash scripts/check.sh --node` or the engine pytest.
+
+I could not confirm that the name check ran against the owner's actual name. Bash denied `git config user.name`, so I never saw its value. The test reads it at run time and does nothing if the name is unset, so the passing result may not have exercised that check. The planted-name test uses a sample word, so it confirms the matcher works but not that the owner's name is absent from the repository.
+
+The new test scans files from `git ls-files -co --exclude-standard`, skipping itself and binary files.
+- **User-home paths:** it fails on Windows, macOS and Linux home paths and reports `file:line`. A repository-wide search for those patterns found no matches before I wrote the test.
+- **Owner name:** it fails on any word of at least four letters from `git config user.name`, matched as a whole word and ignoring case. Only a LICENSE line starting with "Copyright" is exempt.
+- **Other tests:** they cover planted paths and names, the LICENSE exception, and the empty-name case.
+
+The default library name was already neutral from P01.2.2, so the remaining code change was the package.json author field. I left the roadmap checkbox alone.
+- Files changed: tests/personal-data.test.cjs, package.json, docs/assessment.md, docs/security-privacy.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The guard test passes on the whole repository with no allowlist beyond skipping itself. The LICENSE copyright exception is built in, and LICENSE does not exist yet (D6).
+  - I could not read `git config user.name` in this session, so whether the owner-name check had real words to match is unverified. The orchestrator's run of the test will show it.
+  - The package.json author field is removed rather than set to a neutral value. npm accepts a missing author.
+  - Only lint, build:electron and the Node test glob were run. scripts/check.sh and the engine pytest were not.
 ---

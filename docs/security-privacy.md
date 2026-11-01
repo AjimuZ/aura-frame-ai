@@ -87,3 +87,7 @@ Verified on 2026-11-01 by reading the source.
 - Weights for the aesthetic predictor load with `weights_only=True`.
 - A personal first name was hard-coded as the default library name, which broke the project rule
   against personal data in code. Fixed in P01.2.2; see [assessment](assessment.md#environment-and-repository).
+  The `package.json` author field no longer holds a personal name, and `tests/personal-data.test.cjs`
+  now fails on a user-home path in any tracked or unignored file, and on any word of at least four
+  letters of the owner name read from `git config user.name` at test time. The name is never stored.
+  The LICENSE copyright line is the only allowed exception.
