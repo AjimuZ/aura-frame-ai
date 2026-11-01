@@ -152,7 +152,7 @@
       ],
       "priority": 7,
       "passes": false,
-      "notes": "Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Retired terms, base64: ZGF0aW5n. Never write them in plain text. Order is deliberate: the guard test comes last, so it needs no allowlist. The profile rename belongs to P01.2.2, not here. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. The engine side was renamed by the previous task. Read its field names from engine/, do not rename them again.",
+      "notes": "BLOCKED: still failing after 3 attempts: commit message rejected: error: line 3: remove the authorship or tool reference \"AI\" commit message rejected\nReview: copy every criterion character for character into `criteria`, because the runner compares exact text. Retired terms, base64: ZGF0aW5n. Never write them in plain text. Order is deliberate: the guard test comes last, so it needs no allowlist. The profile rename belongs to P01.2.2, not here. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. The engine side was renamed by the previous task. Read its field names from engine/, do not rename them again.",
       "dependsOn": [
         "P01.2.1.1"
       ],
