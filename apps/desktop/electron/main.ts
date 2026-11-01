@@ -81,8 +81,9 @@ void app.whenReady().then(() => {
     const api = new ApiClient({ port: gatewayPort(process.env), session: stack });
     protocol.handle('afmedia', (request) => handleMediaRequest({ api, libraries }, request));
     registerSettingsIpc();
-    registerFilesystemIpc(libraries);
-    registerLibrariesIpc(libraries, isAnalysisRunning);
+    const bridge = { api, servicesUp: () => stack.isUp() };
+    registerFilesystemIpc(libraries, bridge);
+    registerLibrariesIpc(libraries, isAnalysisRunning, bridge);
 
     const window = createWindow();
     hardenNavigation(window);

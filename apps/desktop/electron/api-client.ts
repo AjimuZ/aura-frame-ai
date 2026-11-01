@@ -42,6 +42,14 @@ const REFUSAL_MESSAGES = new Map<string, string>([
   ['export_folder_unsafe', 'The export folder cannot be used.'],
 ]);
 
+export const REQUEST_FAILED_MESSAGE = 'The request to the analysis service failed.';
+
+// Returns the text of a failure that may reach the renderer. Anything but a client error gets a fixed message,
+// because other errors can carry a path, an address or a token.
+export function safeApiMessage(error: unknown): string {
+  return error instanceof ApiClientError ? error.message : REQUEST_FAILED_MESSAGE;
+}
+
 // `message` is safe to show to the person: it holds no token, path, address or server text.
 export class ApiClientError extends Error {
   constructor(

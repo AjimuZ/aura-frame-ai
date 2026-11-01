@@ -2,7 +2,7 @@
 // main-only API client. The renderer sees the same channels and shapes, and never the session token.
 
 import { BrowserWindow, ipcMain } from 'electron';
-import { ApiClient, ApiClientError } from '../api-client';
+import { ApiClient, safeApiMessage } from '../api-client';
 import type { RunOptions } from '../api-client';
 import { validatePhotoFolder } from '../compose-stack';
 import type { ComposeStack } from '../compose-stack';
@@ -58,7 +58,7 @@ const PROGRESS_EVENTS = new Set(['progress', 'local_gate_progress']);
 const MAX_STREAM_ATTEMPTS = 5;
 const RECONNECT_DELAY_MS = 1000;
 
-const REQUEST_FAILED_MESSAGE = 'The request to the analysis service failed.';
+const ALREADY_RUNNING_MESSAGE = 'An analysis is already running.';
 const STACK_FAILED_MESSAGE =
   'The analysis services could not be started. Check that Docker is installed and running.';
 const CONTACT_LOST_MESSAGE = 'Lost contact with the analysis service.';
@@ -143,9 +143,12 @@ function toRunOptions(config: AnalysisConfig | undefined): RunOptions {
   };
 }
 
-// Returns the text of a failure that may reach the renderer. Anything but a client error gets a fixed message.
-function safeMessage(error: unknown): string {
-  return error instanceof ApiClientError ? error.message : REQUEST_FAILED_MESSAGE;
+// Refuses a start. The window already shows "Starting...", and a rejection alone would leave it there, so the
+// refusal also goes out as an error event. The event is broadcast without touching the stored status: a refusal
+// must not rewrite the state of the run that caused it, whose own progress then sets the window right again.
+function refuseStart(libraryId: string, message: string): never {
+  broadcast({ type: 'error', libraryId, message });
+  throw new Error(message);
 }
 
 function delay(ms: number): Promise<void> {
@@ -251,7 +254,7 @@ async function launchRun(
     run.phase = 'running';
     void followRun(backend, run);
   } catch (error) {
-    failRun(run, safeMessage(error));
+    failRun(run, safeApiMessage(error));
     return;
   }
   // The requests made while the run was starting. If they fail the run simply continues, and the stream shows it:
@@ -296,7 +299,7 @@ async function guarded<T>(action: () => Promise<T>): Promise<T> {
   try {
     return await action();
   } catch (error) {
-    throw new Error(safeMessage(error));
+    throw new Error(safeApiMessage(error));
   }
 }
 
@@ -317,10 +320,10 @@ export function registerAnalysisIpc(
   ipcMain.handle('analysis:start', (_event, libraryId: string, config: AnalysisConfig): void => {
     assertLibrary(libraries, libraryId);
     if (isAnalysisRunning()) {
-      throw new Error('An analysis is already running.');
+      refuseStart(libraryId, ALREADY_RUNNING_MESSAGE);
     }
     if (disposal) {
-      throw new Error(STOPPING_MESSAGE);
+      refuseStart(libraryId, STOPPING_MESSAGE);
     }
     let folder: string;
     try {

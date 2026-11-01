@@ -37,6 +37,9 @@
 - Any new request from Electron main to the API goes through `ApiClient.open`, so it cannot bypass the session gate or attach the token on its own.
 - Handlers that answer the renderer take their backend by injection (`MediaProxyBackend`), so a Node test can run them with a fake server and no Electron.
 - When leaving work open in a progress note, name the roadmap task that owns each leftover, so the parent item's unchecked state can be explained.
+- An IPC handler that must not leak paths or tokens catches every lower-level error and rethrows a fixed message, including `fs.copyFile` errors, which name both paths.
+- To prove 'sends nothing', count calls at the injected client as well as requests at the fake server, so the test tells the handler's own gate from the client's.
+- A handler that depends on remote state before a local irreversible change (registry removal) calls the remote step first and lets a failure leave the local state untouched.
 
 ---
 
@@ -425,4 +428,26 @@ The P02.4.2 checkbox and scripts/ralph/prd.json were left alone.
   - `docs/roadmap.md:98` still says the window belongs to P02.4 and P02.5. It is a dated progress note and was left as it is; P02.WINDOW now owns launching the window.
   - `resolveWorkingFile` in the library store no longer has a caller in `main.ts` and I did not check for others. A later cleanup can check whether it can go.
   - Not observed yet: the proxy against the real gateway and API, and an image shown in a running Electron. P01.SMOKE or the first real run should check them.
+---
+
+## 2026-11-01T23:33:37Z - P02.4.4
+- Single-photo export and library deletion now go through the API client, and a refused start clears "Starting..." in the window. `bash scripts/check.sh --node` passed: lint, both builds, `bash -n start.sh`, and 118 Node tests (117 passed, 1 skipped). The skip is the pre-existing symlink case in `compose-stack`. Not run: the engine container tests (no engine file changed), `--compose` and `--integration`. Not observed: any of this against the real API or in a running Electron, including the native save dialog.
+
+- **`export:photo`:** It looks the photo up by ID with `ApiClient.listPhotos`. It maps the stored `/photos/...` path onto the library's chosen host folder, refuses dot, empty, backslash or NUL segments, and compares real paths so links cannot escape. The original is copied through the save dialog, and the check that refuses a destination equal to the original is kept. Error messages are fixed, and a failed copy no longer shows the system error, which names both paths.
+- **`libraries:delete`:** It calls `ApiClient.clearData` (`DELETE /api/libraries/{id}/data`) before the registry entry goes, and a failed call keeps the library. The last library is checked first, so no data is cleared for a deletion that would be refused.
+- **Services down:** `main.ts` passes `() => stack.isUp()` into both registrations. While it is false, neither handler calls the client. `export:photo` says the services are not running. `libraries:delete` is refused with a fixed message telling the person to start an analysis first, so data is never left in the volume.
+- **Refused start:** When `analysis:start` is refused (a run still active, a cancel finishing included, or the services stopping), main now broadcasts an `error` event for that library, and the call still rejects as before. The event does not change the stored status of the run that caused it.
+- **Shared helper:** `safeApiMessage` and `REQUEST_FAILED_MESSAGE` moved into `api-client.ts` and are used by all three handlers.
+- **Visible limit:** Right after launch a library cannot be deleted until a run has started the services. This is documented in `docs/architecture.md` and `docs/operations.md`.
+- Files changed: apps/desktop/electron/api-client.ts, apps/desktop/electron/ipc/analysis.ipc.ts, apps/desktop/electron/ipc/filesystem.ipc.ts, apps/desktop/electron/ipc/libraries.ipc.ts, apps/desktop/electron/main.ts, tests/bridge-handlers.test.cjs, tests/analysis-http.test.cjs, CHANGELOG.md, docs/architecture.md, docs/operations.md, docs/roadmap.md, docs/testing.md
+- **Learnings for future iterations:**
+  - `registerFilesystemIpc(libraries, backend)` and `registerLibrariesIpc(libraries, isAnalysisRunning, backend)` now take a backend of `{ api, servicesUp }`. `main.ts` builds one `bridge` object with `servicesUp: () => stack.isUp()`; tests inject a fake.
+  - The handler-level `servicesUp` gate sits on top of the gate inside `ApiClient.open`. The handler gate exists to give a specific message and to stop a delete before it touches the registry; the client gate is what guarantees no request leaves main.
+  - `resolveOriginal` uses `fs.realpathSync.native` for the folder and the file, then a `path.relative` containment test. The test `a link inside the folder` ran on this Windows session with a directory junction, which needs no privilege; a symlink-only test would have been skipped.
+  - A fake-server body that echoes the session token is turned into 'unusable answer' by the client, so tests that want a plain refusal must not put the token in the body.
+  - `refuseStart` in `analysis.ipc.ts` broadcasts without `applyEvent`, so a refusal never overwrites the stored status of the run that caused it. The renderer's own progress events set it back to running.
+  - Deleting a library requires the services to be up in this session, so it cannot be done right after launch. P02.WINDOW decides whether the stack comes up at launch; if it does, this limit disappears.
+  - `docs/architecture.md` 'Not done yet' now names only P03.5, P05.5 and P02.WINDOW; `/exports` and `compose.gpu.yaml` remain with P02.4.5, along with the `docs/architecture.md:92-93` and `docs/operations.md:30` notes.
+  - `resolveWorkingFile` in the library store still has no caller from `main.ts`; a later cleanup can check whether it can go.
+  - Not observed: the native save dialog, the handlers against the real API, and a running Electron window. P01.SMOKE or the first real run should check them.
 ---

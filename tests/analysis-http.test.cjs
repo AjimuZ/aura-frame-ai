@@ -503,10 +503,16 @@ test('after a cancel, progress is dropped and the run ends with the stream', asy
   await invoke('analysis:cancel', LIBRARY_ID);
   assert.equal(isAnalysisRunning(), true, 'the run stays active until the engine has stopped');
   await assert.rejects(invoke('analysis:start', LIBRARY_ID, config), /already running/);
+  // The window shows "Starting..." while it waits for the answer, and only an event clears it without a refresh.
+  assert.deepEqual(events.at(-1).event, {
+    type: 'error',
+    libraryId: LIBRARY_ID,
+    message: 'An analysis is already running.',
+  });
   finish();
   await waitFor(() => !isAnalysisRunning(), 'the run to end');
 
-  assert.deepEqual(eventTypes(events), ['progress', 'log']);
+  assert.deepEqual(eventTypes(events), ['progress', 'error', 'log']);
   assert.equal(events[0].event.message, 'Before');
 });
 
@@ -719,7 +725,7 @@ const LEAVING_PATHS = {
 for (const [name, leave] of Object.entries(LEAVING_PATHS)) {
   test(`${name} during a start runs down only after up has ended, then exits`, async (t) => {
     const { gate, open } = newGate();
-    const { api, invoke, spawnCalls, config } = await setup(t, { dockerGate: gate });
+    const { api, invoke, events, spawnCalls, config } = await setup(t, { dockerGate: gate });
     const app = newFakeApp();
     installQuitHandling(app, {
       dispose: disposeAnalysisIpc,
@@ -736,6 +742,11 @@ for (const [name, leave] of Object.entries(LEAVING_PATHS)) {
     assert.equal(spawnCalls.length, 1, 'down must wait for the up in flight');
     assert.deepEqual(app.exits, [], 'the app must stay alive until Docker has finished');
     await assert.rejects(invoke('analysis:start', LIBRARY_ID, config), /are stopping/);
+    assert.deepEqual(events.at(-1).event, {
+      type: 'error',
+      libraryId: LIBRARY_ID,
+      message: 'The analysis services are stopping.',
+    });
 
     open();
     await waitFor(() => app.exits.length > 0, 'the app to exit');

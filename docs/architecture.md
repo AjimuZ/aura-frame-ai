@@ -180,9 +180,25 @@ against a fake HTTP server only:
   show its "No preview" placeholder. The chosen host folder still reaches the window through the library state, as it
   has to for the folder picker.
 
-Not done yet: `exportPhoto` still reads a host `photos.json`
-that no longer exists, and `deleteLibrary` does not call `DELETE /api/libraries/{id}/data`, so the library's data
-stays in the volume (both P02.4.4). `checkOllama` and `getOpenAiStatus` return their fixed "unable to probe" answers
+Single photo, deletion and refused starts (P02.4.4, `ipc/filesystem.ipc.ts`, `ipc/libraries.ipc.ts`, tested with a
+fake server and a temporary folder only):
+
+- `exportPhoto` finds the photo by ID in `GET /api/libraries/{id}/photos`. It maps the stored `/photos/...` path to the
+  library's chosen host folder, and refuses a path that is not under `/photos`, holds a `.`, `..`, empty or backslash
+  segment, or whose real path (links included) is outside that folder. The original is copied through the native save
+  dialog, and a destination equal to the original is still refused. Messages are fixed: no reply or error carries a
+  path or the token.
+- `deleteLibrary` calls `DELETE /api/libraries/{id}/data` first and removes the registry entry only when it succeeds.
+  If the API fails, the library stays. The last library is still refused.
+- While the services are not up in this session (`stack.isUp()`), `exportPhoto` and `deleteLibrary` send nothing. The
+  export says the services are not running. The deletion is refused with a fixed message that tells the person to start
+  an analysis first, so a library's data is never left in the volume without an owner. A consequence: right after
+  launch, a library cannot be deleted until a run has started the services.
+- A start refused because a run is still active (a cancel finishing included) or the services are stopping now also
+  sends an `error` event for that library, so the window leaves "Starting..." without a refresh. The refusal does not
+  change the stored status of the run that caused it, and the call still rejects with the same message.
+
+Not done yet: `checkOllama` and `getOpenAiStatus` return their fixed "unable to probe" answers
 instead of `GET /api/providers` (P03.5). `estimateOpenAiCost`, `startOpenAiQuality` and `exportOpenAiResults` keep
 their channels but do nothing (P05.5). The window receives no token from `start.sh`, so main's own token replaces it
 at the first run (P02.WINDOW).

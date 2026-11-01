@@ -206,5 +206,7 @@ The Docker command it was waiting for keeps running, and the services may stay o
 mounted read-only: run `./start.sh --stop`. The same command is needed after a crash, a forced kill or, on Windows,
 a system shutdown or log-off, because Electron emits no quit event for those.
 
-Known gap: starting a new analysis while a cancel is still finishing is refused with "An analysis is already
-running", and the status stays at "Starting..." until it is refreshed.
+Starting a new analysis while a cancel is still finishing is refused with "An analysis is already running", and the
+window shows that message instead of staying at "Starting...". Deleting a library is refused while the services are not
+up in this session, with a message that says to start an analysis first, because its stored data can only be removed
+through the API. Both are tested with a fake server only.

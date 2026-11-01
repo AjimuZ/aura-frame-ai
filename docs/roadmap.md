@@ -137,6 +137,18 @@ and the status left at "Starting..." when a restart is refused during a cancel (
 API's export folder and `compose.gpu.yaml` in the stack module (P02.4.5). Showing earlier results before a run and the
 token from `start.sh` belong to P02.WINDOW. So P02.4 stays unchecked until P02.4.5 passes.
 
+Progress 2026-11-02: P02.4.4 changed `ipc/filesystem.ipc.ts`, `ipc/libraries.ipc.ts`, `ipc/analysis.ipc.ts`,
+`api-client.ts` and `main.ts`, and added `tests/bridge-handlers.test.cjs`. `export:photo` finds the photo by ID through
+`ApiClient`, maps its stored path to the library's host folder with a real-path check, and keeps the check that refuses
+a destination equal to the original. `libraries:delete` calls `DELETE .../data` before the registry entry goes, and
+both handlers send nothing while the services are not up (the deletion is refused with a fixed message). A refused
+`analysis:start` now also sends an error event, so the window leaves "Starting...". Details:
+[Bridge mapping](architecture.md#bridge-mapping). Observed: `bash scripts/check.sh --node` passed (lint, both builds,
+`bash -n start.sh`, and 118 Node tests: 117 passed, 1 skipped, the symlink case of `compose-stack`). The link-escape
+test ran with a directory junction. Not run: the engine container tests (no engine file changed), `--compose` and
+`--integration`. Not observed: these handlers against the real API or in a running Electron, including the native save
+dialog. Still open in P02.4: `/exports` and `compose.gpu.yaml` (P02.4.5).
+
 ## 4. P03 — Local AI runtime
 
 **Depends on:** P02. **Areas:** providers, models.

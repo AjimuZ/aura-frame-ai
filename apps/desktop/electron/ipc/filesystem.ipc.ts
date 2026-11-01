@@ -1,46 +1,94 @@
-// Filesystem IPC handlers: folder selection and opening the output folder.
+// Filesystem IPC handlers: folder selection, single-photo export and opening the output folder.
 // The renderer never touches the filesystem directly; these handlers validate and
 // mediate every access. No personal data paths are read or enumerated here.
 
 import { dialog, ipcMain, shell } from 'electron';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { safeApiMessage } from '../api-client';
+import type { ApiClient } from '../api-client';
 import type { LibraryRegistryStore } from './library-store';
 
+// What the handlers need from main. Injected, so a test can use a fake server.
+export interface FilesystemBackend {
+  api: Pick<ApiClient, 'listPhotos'>;
+  // True only while this session's services are up. While false, nothing is sent to the API.
+  servicesUp: () => boolean;
+}
+
 interface IndexedPhoto {
-  id: string;
-  filePath: string;
+  // The original on the host, resolved and checked to lie inside the library's photo folder.
+  source: string;
   fileName: string;
 }
 
-function isIndexedPhoto(value: unknown): value is IndexedPhoto {
-  if (!value || typeof value !== 'object') return false;
-  const record = value as Record<string, unknown>;
+// Where the API container mounts the library's photo folder. Stored paths start with it.
+const CONTAINER_PHOTOS_PREFIX = '/photos/';
+
+// Fixed messages. None of them may name a path, a folder or a token.
+const SERVICES_DOWN_MESSAGE = 'The analysis services are not running. Start an analysis to export a photo.';
+const NO_FOLDER_MESSAGE = 'This library has no photo folder.';
+const NOT_FOUND_MESSAGE = 'Photo not found in the active library.';
+const UNAVAILABLE_MESSAGE = 'The original photo is no longer available.';
+const COPY_FAILED_MESSAGE = 'The photo could not be copied to the chosen destination.';
+const OUTSIDE_MESSAGE ='The original photo is outside the library photo folder.';
+
+// Returns true when `candidate` is strictly inside `root`. Both must already be resolved.
+function isInside(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
   return (
-    typeof record['id'] === 'string' &&
-    typeof record['filePath'] === 'string' &&
-    typeof record['fileName'] === 'string'
+    relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
   );
 }
 
-// Reads the trusted engine mirror and resolves a renderer-provided id to an indexed original.
-function findPhoto(libraries: LibraryRegistryStore, libraryId: string, photoId: unknown): IndexedPhoto {
+// Maps a stored container path to a file inside the library's host folder and returns its real path.
+// Throws a fixed-message Error when the path is not under `/photos`, holds a dot or empty segment, a backslash or
+// a NUL, does not exist as a file, or resolves outside the folder (a link or a case trick included).
+function resolveOriginal(inputFolder: string, storedPath: string): string {
+  if (!storedPath.startsWith(CONTAINER_PHOTOS_PREFIX)) throw new Error(OUTSIDE_MESSAGE);
+  const segments = storedPath.slice(CONTAINER_PHOTOS_PREFIX.length).split('/');
+  if (segments.some((part) => part === '' || part === '.' || part === '..' || /[\\\0]/.test(part))) {
+    throw new Error(OUTSIDE_MESSAGE);
+  }
+  let root: string;
+  let real: string;
+  try {
+    root = fs.realpathSync.native(inputFolder);
+    real = fs.realpathSync.native(path.join(root, ...segments));
+  } catch {
+    throw new Error(UNAVAILABLE_MESSAGE);
+  }
+  if (!isInside(root, real)) throw new Error(OUTSIDE_MESSAGE);
+  if (!fs.statSync(real).isFile()) throw new Error(UNAVAILABLE_MESSAGE);
+  return real;
+}
+
+// Looks the photo up by ID in the API and maps its stored path to the original on the host.
+// The stored path is read here and goes no further: no reply and no error message carries it.
+async function findPhoto(
+  backend: FilesystemBackend,
+  libraries: LibraryRegistryStore,
+  libraryId: string,
+  photoId: unknown,
+): Promise<IndexedPhoto> {
   if (typeof photoId !== 'string' || photoId.length === 0 || photoId.length > 200) {
     throw new Error('Invalid photo id.');
   }
-  const mirrorPath = fs.realpathSync(path.join(libraries.workingDir(libraryId), 'photos.json'));
-  const records: unknown = JSON.parse(fs.readFileSync(mirrorPath, 'utf-8'));
-  const photo = Array.isArray(records)
-    ? records.find((record) => isIndexedPhoto(record) && record.id === photoId)
-    : undefined;
-  if (!isIndexedPhoto(photo)) {
-    throw new Error('Photo not found in the active library.');
+  const { inputFolder } = libraries.getLibrary(libraryId);
+  if (!inputFolder) throw new Error(NO_FOLDER_MESSAGE);
+  if (!backend.servicesUp()) throw new Error(SERVICES_DOWN_MESSAGE);
+  let records: Record<string, unknown>[];
+  try {
+    records = await backend.api.listPhotos(libraryId);
+  } catch (error) {
+    throw new Error(safeApiMessage(error));
   }
-  const source = path.resolve(photo.filePath);
-  if (!fs.existsSync(source) || !fs.statSync(source).isFile()) {
-    throw new Error('The original photo is no longer available.');
-  }
-  return { ...photo, filePath: source };
+  const record = records.find((item) => item['id'] === photoId);
+  const storedPath = record?.['filePath'];
+  if (!record || typeof storedPath !== 'string') throw new Error(NOT_FOUND_MESSAGE);
+  const source = resolveOriginal(inputFolder, storedPath);
+  const storedName = record['fileName'];
+  return { source, fileName: typeof storedName === 'string' ? storedName : path.basename(source) };
 }
 
 function isSameFile(source: string, destination: string): boolean {
@@ -56,7 +104,7 @@ function isSameFile(source: string, destination: string): boolean {
 }
 
 // Registers the filesystem-related IPC channels exactly once.
-export function registerFilesystemIpc(libraries: LibraryRegistryStore): void {
+export function registerFilesystemIpc(libraries: LibraryRegistryStore, backend: FilesystemBackend): void {
   // Opens a native directory picker and returns the chosen folder, or null if cancelled.
   ipcMain.handle('fs:selectPhotoFolder', async (_event, libraryId: string): Promise<string | null> => {
     libraries.getLibrary(libraryId);
@@ -72,13 +120,13 @@ export function registerFilesystemIpc(libraries: LibraryRegistryStore): void {
     return folder;
   });
 
-  // Copies any indexed photo (including review/rejected items) to a user-selected path.
+  // Copies any indexed photo (including review/rejected items) to a user-selected path. Resolves to false when the
+  // dialog is cancelled. Sends nothing while the services are down, and refuses with a fixed message then.
   ipcMain.handle('export:photo', async (_event, libraryId: string, photoId: string): Promise<boolean> => {
-    libraries.getLibrary(libraryId);
-    const photo = findPhoto(libraries,libraryId, photoId);
+    const photo = await findPhoto(backend, libraries, libraryId, photoId);
     const exportDir = path.join(libraries.outputDir(libraryId), 'exported_photos');
     fs.mkdirSync(exportDir, { recursive: true });
-    const safeName = path.basename(photo.fileName) || `photo${path.extname(photo.filePath)}`;
+    const safeName = path.basename(photo.fileName) || `photo${path.extname(photo.source)}`;
     const result = await dialog.showSaveDialog({
       title: 'Export photo',
       defaultPath: path.join(exportDir, safeName),
@@ -87,10 +135,16 @@ export function registerFilesystemIpc(libraries: LibraryRegistryStore): void {
     if (result.canceled || !result.filePath) {
       return false;
     }
-    if (isSameFile(photo.filePath, result.filePath)) {
+    if (isSameFile(photo.source, result.filePath)) {
       throw new Error('Choose a destination different from the original photo.');
     }
-    await fs.promises.copyFile(photo.filePath, result.filePath);
+    try {
+      // COPYFILE_EXCL is not used: the save dialog already asked the person to confirm an overwrite.
+      await fs.promises.copyFile(photo.source, result.filePath);
+    } catch {
+      // The system error names both paths, so it is replaced.
+      throw new Error(COPY_FAILED_MESSAGE);
+    }
     return true;
   });
 
