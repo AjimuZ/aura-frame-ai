@@ -349,22 +349,67 @@
       }
     },
     {
-      "id": "P02.3",
-      "title": "Add the FastAPI application: runs, events, photos, media, exports, data.",
-      "description": "Add the FastAPI application: runs, events, photos, media, exports, data.",
+      "id": "P02.3.1",
+      "title": "P02.3.1 FastAPI skeleton: dependencies, session-token and Host guard, no CORS",
+      "description": "Create engine/api with the app factory, add pinned fastapi, pydantic and uvicorn to engine/requirements.txt (no telemetry), and add a middleware or dependency that refuses requests without the per-session token or with a foreign Host. No CORS middleware and no CORS header may be sent. Add a health route and shared Pydantic models. Tests go in engine/tests with the FastAPI test client.",
       "acceptanceCriteria": [
-        "FastAPI serves the routes in the bridge mapping of docs/architecture.md: runs and runs/current, events over SSE, photos, media, exports, data, review and providers",
         "A request without the session token, or with a foreign Host, is refused, and no CORS header is ever sent",
+        "Input is validated with Pydantic and engine/tests cover the guard and the health route",
+        "Dependencies are pinned in engine/requirements.txt and no telemetry is added"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P01.EXIT"
+      ],
+      "splitFrom": "P02.3",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.3 Add the FastAPI application: runs, events, photos, media, exports, data."
+      }
+    },
+    {
+      "id": "P02.3.2",
+      "title": "P02.3.2 Read-only routes: photos, media by photo ID, providers, data and review",
+      "description": "Add GET photos, media served by photo ID only (no route accepts a path), GET providers, DELETE data, and GET and PUT review under /api/libraries/{id}/, following the bridge mapping in docs/architecture.md. Photos are read-only and the tests use synthetic images.",
+      "acceptanceCriteria": [
+        "FastAPI serves the routes in the bridge mapping of docs/architecture.md: photos, media, data, review and providers",
         "Images are served by photo ID only, and no route accepts a path",
+        "Tests in engine/tests cover each route with synthetic images, and input is validated with Pydantic"
+      ],
+      "priority": 15,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P01.EXIT",
+        "P02.3.1"
+      ],
+      "splitFrom": "P02.3",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.3 Add the FastAPI application: runs, events, photos, media, exports, data."
+      }
+    },
+    {
+      "id": "P02.3.3",
+      "title": "P02.3.3 Runs, SSE events and exports",
+      "description": "Add POST runs, the runs/current control routes (pause, resume, cancel, status), and GET events over SSE. A run starts the engine as a child process with shell false, and its JSONL progress events are streamed to SSE. Add POST exports, which write copies only. Tests use synthetic images and a stub engine command.",
+      "acceptanceCriteria": [
+        "FastAPI serves the routes in the bridge mapping of docs/architecture.md: runs and runs/current, events over SSE and exports",
         "A run starts the engine as a child process, and its JSONL events reach the SSE stream",
         "Tests in engine/tests cover each route with synthetic images, and input is validated with Pydantic"
       ],
       "priority": 15,
       "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses the standalone word AI anywhere, including in the product name or when quoting a description, and refuses the name of the project instructions file. Never quote those strings in the message. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Expected to be split by the preflight. Follow the fastapi guidance but add no telemetry. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "notes": "",
       "dependsOn": [
-        "P01.EXIT"
+        "P01.EXIT",
+        "P02.3.2"
       ],
+      "splitFrom": "P02.3",
       "source": {
         "path": "docs/roadmap.md",
         "section": "3. P02 — Container stack",
@@ -387,7 +432,9 @@
       "passes": false,
       "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses the standalone word AI anywhere, including in the product name or when quoting a description, and refuses the name of the project instructions file. Never quote those strings in the message. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. The fetch-models service comes in P03.2 and codex in P05.1. Heavy GPU dependencies stay out of engine/requirements.txt, because the engine check installs that file on every run. Find digests with `docker buildx imagetools inspect`. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
       "dependsOn": [
-        "P02.3"
+        "P02.3.1",
+        "P02.3.2",
+        "P02.3.3"
       ],
       "source": {
         "path": "docs/roadmap.md",
@@ -496,10 +543,12 @@
       "dependsOn": [
         "P02.1",
         "P02.2",
-        "P02.3",
         "P02.4",
         "P02.5",
-        "P02.6"
+        "P02.6",
+        "P02.3.1",
+        "P02.3.2",
+        "P02.3.3"
       ],
       "source": {
         "reference": "docs/roadmap.md",
