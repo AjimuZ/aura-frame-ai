@@ -63,12 +63,13 @@ npm run lint
 npm run build:angular
 npm run build:electron
 npm run test:libraries
-bash scripts/check.sh              # all checks; --node, --engine, --integration select subsets
+bash scripts/check.sh              # all checks; --node, --engine, --compose, --integration select subsets
+docker compose config --quiet
 ```
 
 Python runs only in containers: there is no host interpreter, no `.venv` and no `engine:*` npm script. Run the engine tests with the container command in `docs/testing.md`.
 
-Planned, not yet present: `./start.sh`, `docker compose`. See `docs/operations.md`.
+Planned, not yet present: `./start.sh`. See `docs/operations.md`.
 
 ## Preferred Claude Code Workflow
 

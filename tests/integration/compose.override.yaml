@@ -1,0 +1,11 @@
+# Integration overlay: keeps the real vision image, user, network and mounts, but starts no llama-server,
+# because the check has no model file and must never download one.
+
+services:
+  vision:
+    entrypoint: ["sleep"]
+    command: ["86400"]
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 2s
+      start_period: 0s

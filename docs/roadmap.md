@@ -50,7 +50,7 @@ the retired-terms test and the personal-data test. Not observed: the desktop app
 
 **Depends on:** P01. **Areas:** Docker, API, Electron main.
 
-- [ ] P02.1 Add `compose.yaml`, Dockerfiles, networks, volumes and hardening.
+- [x] P02.1 Add `compose.yaml`, Dockerfiles, networks, volumes and hardening.
 - [ ] P02.2 Add `start.sh` with the contract in [Operations](operations.md#startsh).
 - [x] P02.3 Add the FastAPI application: runs, events, photos, media, exports, data.
 - [ ] P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of
@@ -78,7 +78,16 @@ and exports routes, with the engine supervisor in `engine/api/runs.py` and the c
 `engine/tests/test_api_runs.py`, with a stub engine command and synthetic images. Observed:
 `bash scripts/check.sh --engine` (the container pytest run, without torch) passed with 182 tests and 1
 warning, which covers the P02.3.1, P02.3.2 and P02.3.3 suites and the new dependency pins. Not observed:
-the routes against the real engine pipeline. The API is not wired into a container yet.
+the routes against the real engine pipeline. P02.1 wired the API into a container (below).
+
+Progress 2026-11-01: P02.1 added `compose.yaml` with `gateway`, `api` and `vision`, the GPU overlay
+`compose.gpu.yaml`, the Dockerfiles and gateway configuration in `docker/`, and `.dockerignore`
+([Architecture](architecture.md#container-stack), [ADR 0010](decisions/0010-compose-stack-layout.md)).
+Observed: `bash scripts/check.sh --compose` passed, and `bash scripts/check.sh --integration` passed with
+all assertions holding ([Testing](testing.md#container-isolation)). Not observed: the `full` stage of `api`
+building, a GPU in a container, `vision` serving a model, and the engine running in `api`. Debian packages
+and the transitive Python packages in the `api` image are not pinned, only its base image and the direct
+Python requirements.
 
 ## 4. P03 — Local AI runtime
 

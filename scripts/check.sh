@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Single entry point for every project check; exits 0 only when all selected checks pass.
 #
-# Usage: bash scripts/check.sh [--node] [--engine] [--integration]
+# Usage: bash scripts/check.sh [--node] [--engine] [--compose] [--integration]
 #   --node         lint, Angular build, Electron build, Node tests in tests/
 #   --engine       engine tests in a throwaway container (mounts engine/ read-only)
-#   --integration  slow container integration checks (none exist yet: prints SKIP)
-#   (no flag)      --node and --engine; integration checks are left out
+#   --compose      `docker compose config --quiet` and the static hardening policy, without starting anything
+#   --integration  --compose, then starts the stack on a synthetic folder and tests its isolation
+#   (no flag)      --node, --engine and --compose; the integration check is left out
 #
 # A check whose files do not exist prints a visible SKIP line. A failing check
 # is named in the summary and makes the exit code non-zero.
@@ -16,18 +17,24 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.." || exit 2
 
 run_node=0
 run_engine=0
+run_compose=0
 run_integration=0
 for arg in "$@"; do
   case "$arg" in
     --node) run_node=1 ;;
     --engine) run_engine=1 ;;
+    --compose) run_compose=1 ;;
     --integration) run_integration=1 ;;
-    *) echo "Unknown option: $arg (use --node, --engine, --integration)" >&2; exit 2 ;;
+    *) echo "Unknown option: $arg (use --node, --engine, --compose, --integration)" >&2; exit 2 ;;
   esac
 done
-if [ $((run_node + run_engine + run_integration)) -eq 0 ]; then
+if [ $((run_node + run_engine + run_compose + run_integration)) -eq 0 ]; then
   run_node=1
   run_engine=1
+  run_compose=1
+fi
+if [ "$run_integration" -eq 1 ]; then
+  run_compose=1
 fi
 
 failed=()
@@ -77,6 +84,21 @@ engine_tests() {
       cd /app && python -m pytest engine/tests -q -p no:cacheprovider'
 }
 
+# compose_config: validates the stack as run by default, with the vision profile, and with GPU access.
+compose_config() {
+  docker compose config --quiet &&
+    docker compose --profile local config --quiet &&
+    docker compose --profile local -f compose.yaml -f compose.gpu.yaml config --quiet
+}
+
+# compose_policy: checks the resolved configuration against the hardening rules in scripts/compose-policy.cjs.
+compose_policy() {
+  (
+    set -o pipefail
+    docker compose --profile local config --format json | node scripts/compose-policy.cjs
+  )
+}
+
 if [ "$run_node" -eq 1 ]; then
   run_check "lint" npm run lint
   run_check "angular build" npm run build:angular
@@ -100,8 +122,25 @@ if [ "$run_engine" -eq 1 ]; then
   fi
 fi
 
+if [ "$run_compose" -eq 1 ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker not found; the compose checks need it" >&2
+    failed+=("compose checks")
+    echo "FAIL: compose checks" >&2
+  else
+    run_check "compose config" compose_config
+    run_check "compose policy" compose_policy
+  fi
+fi
+
 if [ "$run_integration" -eq 1 ]; then
-  skip_check "integration checks" "none exist yet; planned for P02"
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker not found; the integration check needs it" >&2
+    failed+=("compose integration")
+    echo "FAIL: compose integration" >&2
+  else
+    run_check "compose integration" bash tests/integration/compose-stack.sh
+  fi
 fi
 
 echo

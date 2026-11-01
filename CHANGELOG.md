@@ -5,19 +5,22 @@
 ### Added
 
 - The engine has the skeleton of its HTTP API (`engine/api`). Every request needs the per-session token
-  and a local Host header, and no CORS header is ever sent. Only a `/health` route exists; the other
-  routes and the container that serves them are planned (P02).
+  and a local Host header, and no CORS header is ever sent.
 - The engine API gained read routes under `/api`: the photos of a library, images served by photo ID
   only (a thumbnail, or the original on request), the provider status, the review session (read and
   save) and clearing a library's generated data. No route accepts a path. The routes are tested with
-  synthetic images, and the engine test suite passes in a container (182 tests). The API is not served
-  from a container yet.
+  synthetic images, and the engine test suite passes in a container (182 tests).
 - The engine API can now start an analysis run as a child process (one at a time), pause, resume and
   cancel it, stream its progress events over server-sent events, and copy chosen photos into a library's
   output folder. A run request carries options only, never a path or a command, and exports only copy.
   The tests use a stub engine and synthetic images and pass in the container run (182 engine tests in
-  total); the routes have not been run against the real engine, and the API is not served from a
-  container yet.
+  total); the routes have not been run against the real engine.
+- The services now run in Docker Compose: `gateway`, `api` and `vision`, with images pinned by digest,
+  non-root users, all capabilities dropped and read-only root filesystems. Only `gateway` publishes a
+  port, on `127.0.0.1`, and `api` and `vision` have no route to the internet. Photos mount read-only at
+  `/photos`, with data and models in named volumes. `bash scripts/check.sh --integration` proves the
+  isolation on a synthetic folder, using the image without PyTorch, no GPU and no model. The PyTorch image,
+  GPU access and a served model have not been run, and the desktop app does not use the stack yet (P02.4).
 
 ### Changed
 

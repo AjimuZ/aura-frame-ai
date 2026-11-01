@@ -1,7 +1,8 @@
 # Architecture
 
-Status: **target architecture, not implemented**. The [current state](#current-state-implemented)
-and the [migration map](#migration-map) show how the code gets there. Decision:
+Status: **target architecture, partly implemented**. The [current state](#current-state-implemented)
+and the [migration map](#migration-map) show how the code gets there. The [container stack](#container-stack)
+exists, but the desktop app does not use it yet. Decision:
 [ADR 0009](decisions/0009-electron-desktop-shell.md).
 
 ## Overview
@@ -65,6 +66,31 @@ only client of the API.
 `backend` is declared `internal: true`, so it has no route to the internet. `gateway` is the only
 service that publishes a port, bound to `127.0.0.1`. It exists because a port cannot be published
 from an internal network.
+
+## Container stack
+
+Written in `compose.yaml` and `docker/` (P02.1), with `gateway`, `api` and `vision`. `codex` arrives
+with P05.1 and `fetch-models` with P03.2. Decision: [ADR 0010](decisions/0010-compose-stack-layout.md).
+
+| Rule | Where it is set |
+| --- | --- |
+| Images pinned by digest | `vision` in `compose.yaml`; the base images in `docker/api/Dockerfile` and `docker/gateway/Dockerfile` |
+| Non-root, `no-new-privileges`, all capabilities dropped, read-only root filesystem, `/tmp` on tmpfs | Every service, from `x-hardening` in `compose.yaml` |
+| GPU access | `compose.gpu.yaml`, an overlay, so the base file starts on a host without a GPU |
+| Photos | `AURAFRAME_PHOTOS_DIR`, read-only at `/photos`. Unset means the empty ignored folder `./data/no-photos` |
+| Published port | `127.0.0.1:${AURAFRAME_PORT:-8420}` to `gateway:8080` |
+| Build context of `api` | `.dockerignore` excludes everything, then allows `engine/` and the health probe, so personal folders never reach the daemon |
+
+`gateway` refuses any Host other than `127.0.0.1` and `localhost` with HTTP 403 and forwards the rest.
+The API still checks the Host and the token itself. `gateway` resolves `api` per request, because
+recreating `api` for another folder can change its address.
+
+`api` has two build stages. `full`, the default, adds PyTorch with CUDA. `core` leaves that stack out,
+with the same package set as the engine tests, and the integration check uses it.
+
+Not observed yet: the `full` stage building, a GPU in a container, `vision` serving a model, and the
+engine running in `api`. The `/exports` mount exists, but the API still writes exports under `/data`
+until P02.4 connects it.
 
 ## Storage
 
@@ -130,7 +156,7 @@ under `ng serve` stays too.
 
 Written in `engine/api/storage.py`; the routes for photos, media, providers, data and review exist
 (P02.3.2), and so do those for runs, events and exports ([below](#runs-events-and-exports)). The
-container that serves them does not exist yet.
+`api` container serves them; the desktop app is not connected yet (P02.4).
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
@@ -158,9 +184,9 @@ Rules the routes follow:
 
 ## Runs, events and exports
 
-Written in `engine/api/runs.py` and `engine/api/exports.py` (P02.3.3); the container that serves them
-does not exist yet. Their tests (stub engine, synthetic images) pass in the container pytest run; the
-routes have not been run against the real engine.
+Written in `engine/api/runs.py` and `engine/api/exports.py` (P02.3.3), and served by the `api` container.
+Their tests (stub engine, synthetic images) pass in the container pytest run; the routes have not been run
+against the real engine.
 
 | Route | Behavior |
 | --- | --- |
@@ -194,6 +220,7 @@ Rules these routes follow:
 ```text
 start.sh                 Entry point
 compose.yaml             Services, networks, volumes
+compose.gpu.yaml         GPU access for api and vision, as an overlay
 docker/                  Dockerfiles, gateway configuration, desktop shell build
 apps/desktop/angular/    Angular renderer
 apps/desktop/electron/   Electron main and preload, now a client of the API

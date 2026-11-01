@@ -1,0 +1,151 @@
+# Container stack of the desktop app: gateway, api and vision, their networks and their storage.
+#
+# - Only `gateway` publishes a port, on 127.0.0.1. `api` and `vision` sit on the internal `backend`
+#   network alone, so they have no route to the internet.
+# - GPU access is added by compose.gpu.yaml, so this file also runs on a host without a GPU.
+# - `vision` needs the profile `local`: `docker compose --profile local up`. Its model files come from
+#   the `models` volume, and nothing here downloads them.
+# - Rules enforced by `bash scripts/check.sh --compose` (scripts/compose-policy.cjs).
+
+name: auraframe
+
+# Applied to every service. A service that truly needs more must say why in this file.
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+services:
+  gateway:
+    <<: *hardening
+    build:
+      context: ./docker/gateway
+    user: "101:101"
+    pids_limit: 64
+    tmpfs:
+      - /tmp:size=64m
+    ports:
+      - "127.0.0.1:${AURAFRAME_PORT:-8420}:8080"
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  api:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+      # `full` has PyTorch with CUDA. `core` leaves that stack out; the integration check uses it.
+      target: ${AURAFRAME_API_TARGET:-full}
+    user: "10001:10001"
+    init: true
+    pids_limit: 1024
+    # Longer than the 30 seconds the API gives a running engine to stop on its own.
+    stop_grace_period: 40s
+    tmpfs:
+      - /tmp:size=512m
+    environment:
+      # The API refuses to start without a token, so an unset value fails closed.
+      AURAFRAME_API_TOKEN: ${AURAFRAME_API_TOKEN:-}
+      AURAFRAME_DATA_ROOT: /data
+      AURAFRAME_PHOTOS_ROOT: /photos
+      TORCH_HOME: /models/torch
+      HF_HOME: /models/huggingface
+      HF_HUB_OFFLINE: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    volumes:
+      # The default is an empty ignored folder, so a start without a chosen folder sees no photos.
+      - type: bind
+        source: ${AURAFRAME_PHOTOS_DIR:-./data/no-photos}
+        target: /photos
+        read_only: true
+        bind:
+          create_host_path: true
+      - type: volume
+        source: data
+        target: /data
+      - type: bind
+        source: ${AURAFRAME_EXPORTS_DIR:-./data/output}
+        target: /exports
+        bind:
+          create_host_path: true
+      - type: volume
+        source: models
+        target: /models
+        read_only: true
+    networks:
+      - backend
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "/app/healthcheck.py"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
+
+  vision:
+    <<: *hardening
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda@sha256:75037a842f2ec1d1b5317ce64078bbb4a2a134238e91a755c10ce31d8f90550a
+    profiles: [local]
+    user: "10001:10001"
+    pids_limit: 512
+    tmpfs:
+      - /tmp:size=64m
+    environment:
+      HOME: /tmp
+    command:
+      - --model
+      - ${AURAFRAME_VISION_MODEL:-/models/Qwen3.8-27B-GSQ-RCO-IQ2_XS.gguf}
+      - --mmproj
+      - ${AURAFRAME_VISION_MMPROJ:-/models/mmproj-Qwen3.8-27B-BF16.gguf}
+      - --ctx-size
+      - "8192"
+      - --parallel
+      - "1"
+      - --gpu-layers
+      - all
+      - --reasoning
+      - "off"
+      - --sleep-idle-seconds
+      - "120"
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+    volumes:
+      - type: volume
+        source: models
+        target: /models
+        read_only: true
+    networks:
+      - backend
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 300s
+
+networks:
+  # Carries the published port of `gateway`, and nothing else joins it.
+  frontend: {}
+  # No route to the internet. Everything that handles photos lives here.
+  backend:
+    internal: true
+
+# Named by the project: `auraframe_data` and `auraframe_models`. Another project name gets its own.
+volumes:
+  data: {}
+  models: {}

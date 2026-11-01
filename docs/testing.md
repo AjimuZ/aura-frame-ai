@@ -16,8 +16,9 @@ A failing check is named in the summary and gives exit 1. A check whose files do
 | --- | --- |
 | `--node` | Lint, Angular build, Electron build, `node --test "tests/**/*.test.cjs"` |
 | `--engine` | Engine tests in the throwaway container below. Fails if Docker is missing |
-| `--integration` | Slow container integration checks. None exist yet, so it prints `SKIP` (P02 adds them) |
-| none | `--node` and `--engine`; integration checks are left out |
+| `--compose` | `docker compose config --quiet`, with and without the `local` profile and the GPU overlay, then the static policy in `scripts/compose-policy.cjs`. Starts nothing |
+| `--integration` | `--compose`, then starts the stack on a synthetic folder and tests its isolation from inside. See [below](#container-isolation) |
+| none | `--node`, `--engine` and `--compose`; the integration check is left out |
 
 Status: written in P01.1; its first full run is not yet recorded here.
 
@@ -33,6 +34,8 @@ Results from 2026-11-01 on the reference PC.
 | Library store tests | `node --test "tests/*-store.test.cjs"` | Pass, 4 of 4 |
 | Electron hardening guard | `node --test tests/electron-hardening.test.cjs` | Pass, 3 of 3. Reads source and lockfile only. It does not start the app |
 | Engine tests, container | See below | Pass, 27 of 27, in 1.65 s, without the torch stack |
+| Compose configuration and policy | `bash scripts/check.sh --compose` | Pass, exit 0 |
+| Container isolation | `bash scripts/check.sh --integration` | Pass, all assertions hold, with the `core` stage of `api`, no GPU and no model |
 | Design system color check | See [Design system](design-system.md#verification) | **Fails:** 13 literals outside the token file, fixed in P06 |
 | Electron 33 to 45 breaking changes | Not checked | Gap: sessions have no web access, so upstream release notes could not be read. P01.SMOKE is what observes the app running |
 | Angular unit tests | None exist | Gap |
@@ -61,14 +64,28 @@ In Git Bash on Windows, prefix the command with `MSYS_NO_PATHCONV=1` and use `$(
 Limit: without the torch stack, embeddings and aesthetics run on their fallback paths. Those paths
 are what the suite asserts. The OpenCLIP and LAION paths are not covered.
 
+### Container isolation
+
+`tests/integration/compose-stack.sh` starts the real services under the project name
+`auraframe-integration`, with its own volumes, and removes them on exit. It uses a synthetic folder and no
+model file. Each negative result has a control, so a broken probe cannot pass as a blocked connection.
+
+| Property | How it is shown | Control |
+| --- | --- | --- |
+| `api` and `vision` have no internet | TCP connections to two public addresses and one public name fail, from inside each service | The same probe reaches other services on `backend`, and from the same image on Docker's default network it reaches a public endpoint. Without that, the check fails as unproven |
+| `/photos` cannot be written | `touch`, `mkdir`, append and `rm` fail with `Read-only file system`, as the service user and as root | The folder on the host is world-writable, `/proc/self/mounts` shows a separate `ro` mount, the synthetic file is readable and stays unchanged, and `api` can write to `/data` |
+| Only `gateway` publishes a port | `docker inspect` shows `127.0.0.1:<port>` for `gateway`, nothing for `api` and `vision` | Through that port, HTTP 200 with the token, 401 without it, 403 for a foreign Host |
+| Non-root, no Docker socket, read-only root | `id -u`, `test ! -e /var/run/docker.sock`, and a refused write to `/etc` in each service | `llama-server --version` runs as the service user |
+
+Limits: `api` is built from the `core` stage, and `vision` runs `sleep` instead of `llama-server`, because
+the check has no model and must not download one. Neither the GPU overlay nor the `full` stage is started.
+The check needs internet access for its control, and fails on an offline host.
+
 ## Planned checks
 
 | Package | Check | Exit condition |
 | --- | --- | --- |
 | P01 | Retired-terms search | No match in the repository. The test holds the term list in encoded form so the repository stays clean |
-| P02 | `docker compose config --quiet` | Valid configuration |
-| P02 | Network isolation test | From `api` and `vision`, connections to the internet fail |
-| P02 | Read-only test | From `api`, a write under `/photos` fails |
 | P02 | Token and Host test | Requests without the session token, or with a foreign `Host`, are refused |
 | P02 | Electron hardening test | The renderer has no Node, no network and only `window.auraFrame`, and cannot navigate away |
 | P02 | Smoke test | `./start.sh` on a synthetic folder completes a `fast` run end to end, through the window |

@@ -1,7 +1,31 @@
 # Operations
 
-Status: **planned** ([P02](roadmap.md)). `start.sh` and `compose.yaml` do not exist yet. To run the
-current code, see [Running the current code](#running-the-current-code).
+Status: **partly implemented** ([P02](roadmap.md)). `compose.yaml` exists, and the desktop app does not
+use it yet. `start.sh` does not exist yet, so its contract below is planned. To run the current code, see
+[Running the current code](#running-the-current-code).
+
+## Compose stack
+
+```bash
+AURAFRAME_API_TOKEN=<at least 16 characters> AURAFRAME_PHOTOS_DIR=<folder> \
+  docker compose --profile local -f compose.yaml -f compose.gpu.yaml up -d --build
+```
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `AURAFRAME_API_TOKEN` | none | Session token. `api` refuses to start without one |
+| `AURAFRAME_PHOTOS_DIR` | `./data/no-photos` | Folder mounted read-only at `/photos` |
+| `AURAFRAME_EXPORTS_DIR` | `./data/output` | Folder mounted at `/exports` |
+| `AURAFRAME_PORT` | `8420` | Port of `gateway` on `127.0.0.1` |
+| `AURAFRAME_API_TARGET` | `full` | Build stage of `api`. `core` leaves out PyTorch |
+| `AURAFRAME_VISION_MODEL`, `AURAFRAME_VISION_MMPROJ` | The files in [AI providers](ai-providers.md#server-settings) | Model files in the `models` volume |
+
+- Leave out `--profile local` to run without `vision`. Leave out `compose.gpu.yaml` on a host without a GPU.
+- `vision` does not become healthy until its model files are in the `models` volume, which nothing fills
+  yet (P03.2). Until then, run without the profile.
+- On Linux, create the exports folder first, writable by uid 10001. Docker otherwise creates it as root.
+  The API does not write there yet (P02.4).
+- Image builds do not download model files.
 
 ## Prerequisites
 

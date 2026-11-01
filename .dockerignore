@@ -1,0 +1,9 @@
+# Build context of the api image: everything is excluded, then only what the image needs comes back.
+# Personal folders and generated data therefore never reach the Docker daemon.
+*
+!engine/
+!docker/api/healthcheck.py
+engine/tests/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/

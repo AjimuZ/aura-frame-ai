@@ -1,0 +1,9 @@
+# GPU access for api and vision: `docker compose -f compose.yaml -f compose.gpu.yaml up`.
+# Kept apart because `gpus` makes a container fail to start on a host without a GPU runtime.
+
+services:
+  api:
+    gpus: all
+
+  vision:
+    gpus: all

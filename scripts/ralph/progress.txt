@@ -23,6 +23,9 @@
 - Do not skip a test for an environment gap. Run it where the capability exists, or let it fail visibly.
 - Before writing 'not run' in the changelog or roadmap, try the project check script. When the result is known, record the exact count and command in those documents.
 - When a later subtask delivers what an earlier progress note called 'still to do', rewrite the earlier sentence in the same change.
+- To prove a negative in a container check, pair it with a positive control: the same probe must succeed against a reachable target, and a write refusal must carry the specific error (EROFS), so a missing tool or a permission error cannot pass as isolation.
+- Check Compose hardening against `docker compose config --format json` rather than the YAML text, and unit test the checker with one weakened configuration per rule.
+- Start a root-context .dockerignore with `*` and re-allow only what the image needs, so personal folders never reach the Docker daemon.
 
 ---
 
@@ -283,4 +286,39 @@ The data layout is in `engine/api/storage.py`. Each library lives under `<AURAFR
   - All of P02.3 (guard, read routes, runs, events, exports) is now covered by passing tests. What remains is P02.1 (container and compose) and P02.4 (Electron main as an HTTP client).
   - The roadmap progress notes should record observed counts, not intentions. Do not write 'denied' or 'not run' once a check has been observed.
   - The routes have not been exercised against the real engine pipeline. The first end-to-end run in the container should verify the engine command and arguments built by engine/api/runs.py.
+---
+
+## 2026-11-01T20:26:49Z - P02.1
+- Added the Compose stack (gateway, api, vision), with Dockerfiles, networks, volumes and hardening. All checks pass.
+
+Observed results:
+- `bash scripts/check.sh --integration`: 3 passed, 0 failed. All isolation assertions hold.
+  - api and vision get 'Network is unreachable' for public addresses and cannot resolve or connect to a public name. Positive controls show the same probe reaching backend services, and reaching the internet from the same images outside the stack.
+  - Writes under /photos fail with 'Read-only file system', both as the service user and as root.
+  - gateway publishes only 127.0.0.1:18420. Through it, /health answers 200 with the token, 401 without it and 403 for a foreign Host.
+- `bash scripts/check.sh` (lint, Angular and Electron builds, Node tests, engine tests, compose checks): 7 passed, 0 failed. Node tests: 38 of 38. Engine pytest: 182 passed, 1 warning. No code changed after the integration run, only docs and the changelog.
+
+Not observed:
+- the `full` api stage (PyTorch with CUDA) building
+- the GPU overlay at run time (only its configuration is validated)
+- vision serving a model (the check runs `sleep` in the real image, and `llama-server --version` as the service user)
+- the engine running inside api
+- the /exports bind mount being used: it exists, but the API still writes exports under /data until P02.4
+- `docker version` and `docker compose version`, because those commands were denied, so the versions are unrecorded
+
+Known limits:
+- Debian packages and transitive Python packages in the api image are not pinned, only its base image and the direct requirements.
+- vision does not become healthy until model files exist (P03.2), so run the stack without the `local` profile until then.
+
+No retired terms or personal data were found (guard tests pass), and img/ was not read. The roadmap checkbox is untouched.
+- Files changed: compose.yaml, compose.gpu.yaml, .dockerignore, docker/api/Dockerfile, docker/api/healthcheck.py, docker/gateway/Dockerfile, docker/gateway/nginx.conf, scripts/check.sh, scripts/compose-policy.cjs, tests/compose-policy.test.cjs, tests/integration/compose-stack.sh, tests/integration/compose.override.yaml, CHANGELOG.md, CLAUDE.md, docs/architecture.md, docs/operations.md, docs/roadmap.md, docs/testing.md, docs/decisions/0010-compose-stack-layout.md
+- **Learnings for future iterations:**
+  - P02.2 (start.sh): pass `--profile local` for vision and `-f compose.yaml -f compose.gpu.yaml` for the GPU, and leave the overlay out for --cpu. `docker compose config --services` without the profile omits vision. Required environment: AURAFRAME_API_TOKEN (at least 16 characters), AURAFRAME_PHOTOS_DIR; optional: AURAFRAME_PORT, AURAFRAME_EXPORTS_DIR, AURAFRAME_API_TARGET, AURAFRAME_VISION_MODEL, AURAFRAME_VISION_MMPROJ.
+  - vision has a 300 s start_period and cannot become healthy until model files exist, so `up --wait` with the local profile will fail or wait until P03.2 fills the models volume. Until then, start without the profile.
+  - The models volume is mounted read-only by api and vision. An empty volume first mounted by api takes uid 10001 from the image; first mounted by vision it may be root-owned. P03.2 fetch-models must set its own ownership.
+  - P02.4: the /exports bind mount exists, but engine/api/exports.py still writes to <data root>/libraries/<id>/output. Connect them or drop the mount. On Linux the host folder must be created writable by uid 10001 first.
+  - Not observed: the `full` api stage building, a GPU in a container, the real engine command in the api container (read-only root, /tmp tmpfs of 512 MB, HOME=/tmp, TORCH_HOME and HF_HOME under the read-only /models). The first real run should check these, especially whether anything writes outside /data and /tmp.
+  - In this session `bash scripts/check.sh` with any flag and `docker buildx imagetools inspect` are allowed. `docker version` and `docker compose version` are denied. A first integration run with a cached vision pull took under 10 minutes.
+  - Compose top-level `name: auraframe` with volumes that carry no explicit `name:` gives auraframe_data and auraframe_models, while `-p auraframe-integration` gets separate volumes, so the integration `down -v` cannot touch real data. Do not add explicit volume names.
+  - The gateway resolves `api` per request through Docker's DNS (127.0.0.11) and a variable, so recreating api with another photos folder does not leave a stale address.
 ---
