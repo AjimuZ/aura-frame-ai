@@ -33,12 +33,12 @@ export type GateStatus =
   | 'failed_read';
 
 export interface GemmaPhotoReview {
-  datingScore: number;
+  overallScore: number;
   technicalQuality: number;
   faceClarity: number;
   expressionScore: number;
   naturalnessScore: number;
-  outfitScore: number;
+  styleScore: number;
   contextScore: number;
   category: PhotoCategory;
   bestSlot: ProfileSlot;
@@ -126,7 +126,7 @@ export const PROFILE_SLOT_LABELS: Record<ProfileSlot, string> = {
   reject: 'Reject',
 };
 
-// The six ordered slots that make up the final dating profile set.
+// The six ordered slots that make up the final curated set.
 export const FINAL_SET_SLOTS: ProfileSlot[] = [
   'main_photo',
   'full_body',

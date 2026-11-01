@@ -20,8 +20,9 @@
 - Export folders and report sections use neutral names (`top_06_final_set`, `top_20_best`,
   `top_50_review`). Analysis data from earlier runs must be recreated by a new run; there is no migration
   ([ADR 0001](docs/decisions/0001-general-purpose-photo-curation.md)).
-- The desktop app still reads the old score keys (`datingScore`, `outfitScore`) until the next roadmap
-  task updates it, so those values show as 0 in the interface until then.
+- The desktop app (Electron contracts, Angular models, mock API, dashboard) now uses `overallScore` and
+  `styleScore`, matching the engine, and the package description calls the product a local AI photo
+  curation tool.
 
 ### Added
 

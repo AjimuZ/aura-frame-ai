@@ -1,7 +1,7 @@
 {
   "name": "aura-frame-ai",
   "version": "1.0.0",
-  "description": "Local AI Photo Curator for Dating Profiles - a privacy-first desktop tool that ranks personal photos locally.",
+  "description": "Local AI photo curation tool - a privacy-first desktop tool that ranks personal photos locally.",
   "private": true,
   "author": "Azim",
   "license": "MIT",

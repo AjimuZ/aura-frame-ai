@@ -36,12 +36,12 @@ export type GateStatus =
 export type AnalysisPreset = 'fast' | 'balanced' | 'quality';
 
 export interface GemmaPhotoReview {
-  datingScore: number;
+  overallScore: number;
   technicalQuality: number;
   faceClarity: number;
   expressionScore: number;
   naturalnessScore: number;
-  outfitScore: number;
+  styleScore: number;
   contextScore: number;
   category: PhotoCategory;
   bestSlot: ProfileSlot;

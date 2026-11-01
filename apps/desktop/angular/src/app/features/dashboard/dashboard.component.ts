@@ -49,7 +49,7 @@ import { PhotoStore } from '../../core/services/photo-store.service';
         <button class="af-button-secondary" (click)="go('/import')">Import photos</button>
         <button class="af-button-secondary" (click)="go('/analysis')">Run analysis</button>
         <button class="af-button-secondary" (click)="go('/review')">Open Top 20</button>
-        <button class="af-button-primary" (click)="go('/profile-builder')">Generate dating set</button>
+        <button class="af-button-primary" (click)="go('/profile-builder')">Generate curated set</button>
       </div>
     </section>
   `,

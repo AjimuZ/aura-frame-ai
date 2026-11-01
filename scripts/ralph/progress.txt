@@ -6,6 +6,7 @@
 - Under Git Bash, use MSYS_NO_PATHCONV=1 with pwd -W when passing host paths to docker -v.
 - When renaming a field that crosses layers, grep every spelling (snake_case, camelCase, DB column, config key, local variable) before declaring the rename complete.
 - Copy acceptance criteria character for character into review criteria, since the runner compares exact text.
+- Verify a pre-existing working-tree change with the project checks and searches before reporting it done.
 
 ---
 
@@ -72,4 +73,17 @@ The edits are in `engine/config.yaml`, `engine/src/db.py`, `engine/src/final_ran
   - Electron and Angular still use datingScore and outfitScore in apps/desktop/angular/src/app/core/models/photo.model.ts, apps/desktop/angular/src/app/core/services/mock-aura-frame-api.ts and apps/desktop/electron/ipc/contracts.ts; the next task must rename them to overallScore and styleScore.
   - The engine pytest (docker command) was denied in this session, so it still needs to be run by the orchestrator. The engine test files contain no references to the renamed clothing-score names.
   - The guard test (last in the P01.2 order) can search engine/ without an allowlist, because the earlier searches for the retired terms, the clothing-score names and the first-photo wording found nothing.
+---
+
+## 2026-11-01T19:02:08Z - P01.2.1.2
+- The renames were already in the working tree, so I only verified them. `npm run lint` passed. `npm run build` and `npm run build:electron` both passed. The Node tests passed (4 of 4). A case-insensitive search of apps/ and package.json for the retired term found nothing. A search of apps/ for `outfit`, `datingScore` and `dating_score` also found nothing. I did not run the engine pytest in the container. I did not read the package description or the engine field names this session, so those two points are unchecked. Review criteria, copied exactly:
+1. Score fields in Electron contracts and Angular models have neutral names, and the JSON contract between them and the engine still matches
+2. A search of apps/ and package.json for the retired terms finds nothing
+3. The package.json description calls the product a local AI photo curation tool
+4. A search of apps/ for `outfit` finds nothing, and the field matches the name the engine now uses
+- Files changed: apps/desktop/electron/ipc/contracts.ts, apps/desktop/angular/src/app/core/models/photo.model.ts, apps/desktop/angular/src/app/core/services/mock-aura-frame-api.ts, package.json
+- **Learnings for future iterations:**
+  - The desktop app now uses overallScore and styleScore, which map to the engine's overall_score and style_score.
+  - Lint, both builds and the 4 Node tests pass. The engine pytest was not run in this session.
+  - The guard test can search apps/ and package.json without an allowlist, because those searches find nothing.
 ---
