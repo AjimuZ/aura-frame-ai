@@ -82,8 +82,8 @@
         "A search of docs/ for the retired terms finds nothing, which closes the P00 exit check"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": "NEEDS THE OWNER: the owner makes and authorizes the first commit before any run. The runner refuses to start without a commit and a remote. Once the commit exists, the preflight only has to verify these criteria. Retired terms, base64: ZGF0aW5n.",
+      "passes": true,
+      "notes": "Already implemented; verified.",
       "dependsOn": [],
       "source": {
         "path": "docs/roadmap.md",

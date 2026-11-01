@@ -18,7 +18,7 @@ P04, P05, P06 -> P07
 - [x] P00.2 Research the current state of the art for the pipeline, local models and Codex CLI.
 - [x] P00.3 Replace all documentation with the new set.
 - [x] P00.4 Review and install 10 Claude Code skills at user scope.
-- [ ] P00.5 Make the first commit. The owner must authorize this.
+- [x] P00.5 Make the first commit. The owner must authorize this.
 
 Exit: documentation describes the target and marks what is planned; no retired term remains in the
 documentation; the first commit exists.
