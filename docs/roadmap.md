@@ -67,6 +67,12 @@ no CORS, `/health`, shared Pydantic models) and pinned `fastapi`, `pydantic`, `u
 `engine/requirements.txt`. Its tests are in `engine/tests/test_api_guard.py`. The runs, events, photos,
 media, exports and data routes are not written yet, and the API is not wired into a container.
 
+Progress 2026-11-01: P02.3.2 added the photos, media (by photo ID), providers, data (DELETE) and review
+(GET, PUT) routes in `engine/api/routes.py`, with the data layout in `engine/api/storage.py`
+([Architecture](architecture.md#library-data-layout)). Tests are in `engine/tests/test_api_routes.py`.
+Not yet observed: the container pytest run was denied in both sessions that worked on them, so the new
+tests have not been executed. The runs, events and exports routes are still to do.
+
 ## 4. P03 — Local AI runtime
 
 **Depends on:** P02. **Areas:** providers, models.

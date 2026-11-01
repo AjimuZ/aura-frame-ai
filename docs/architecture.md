@@ -126,6 +126,35 @@ under `ng serve` stays too.
 | `estimateOpenAiCost`, `startOpenAiQuality`, `exportOpenAiResults` | Removed: the provider setting of a normal run replaces them |
 | `clearGeneratedData`, `getReviewSession`, `saveReviewSession` | `/api/libraries/{id}/data`, `/api/libraries/{id}/review` |
 
+## Library data layout
+
+Written in `engine/api/storage.py`; the routes for photos, media, providers, data and review exist
+(P02.3.2), and the container that serves them does not yet.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `AURAFRAME_PHOTOS_ROOT` | `/photos` | The chosen folder, mounted read-only |
+| `AURAFRAME_DATA_ROOT` | `/data` | The writable volume for generated data |
+
+Each library keeps its generated data under `<data root>/libraries/<library id>/`, using the engine's
+own `--data-root` layout: `working/auraframe.db`, `working/thumbs/`, `output/` and `reports/`. The two
+roots may not contain each other, so clearing data cannot reach an original.
+
+Rules the routes follow:
+
+- A library id matches `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` and a photo id matches `^IMG_[0-9A-F]{10}$`.
+  Anything else is refused with HTTP 422. No route takes a path.
+- `GET /api/libraries/{id}/media/{photo_id}` looks the photo up in SQLite. The stored path must
+  resolve inside the photos root (`?variant=original`) or the library's `thumbs/` directory (default
+  `?variant=thumbnail`), else the answer is 404 `media_unavailable`.
+- `DELETE /api/libraries/{id}/data` removes `working`, `output` and `reports` of that library only. It
+  is idempotent and does not follow symlinks. It never touches the photos root.
+- `GET /api/libraries/{id}/photos` returns the stored camelCase records, or `[]` for a library with no
+  database yet. `GET` and `PUT /api/libraries/{id}/review` use the `slotAssignments`, `locks` and
+  `shortlist` shape of the bridge, and `PUT` rejects unknown fields and oversized bodies.
+- `GET /api/providers` reports configuration only, with no probe: local scoring is `available`, the
+  local vision model is `not_configured` and Codex is `disabled`. The real contract arrives with P03.
+
 ## Target repository layout
 
 ```text

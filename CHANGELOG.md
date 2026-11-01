@@ -7,6 +7,10 @@
 - The engine has the skeleton of its HTTP API (`engine/api`). Every request needs the per-session token
   and a local Host header, and no CORS header is ever sent. Only a `/health` route exists; the other
   routes and the container that serves them are planned (P02).
+- The engine API gained read routes under `/api`: the photos of a library, images served by photo ID
+  only (a thumbnail, or the original on request), the provider status, the review session (read and
+  save) and clearing a library's generated data. No route accepts a path. The routes are tested with
+  synthetic images but the tests have not been run yet, and the API is not served from a container yet.
 
 ### Changed
 

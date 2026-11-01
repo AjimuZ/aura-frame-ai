@@ -18,6 +18,9 @@
 - Apply cross-cutting security checks (token, Host) as app-level middleware so unknown paths and OPTIONS are guarded too, not just declared routes.
 - Compare secrets with hmac.compare_digest, read them from the environment, and fail closed (refuse to start) when they are missing or too short.
 - Assert on the absence of access-control-* headers across success, refusal and OPTIONS responses in the same test.
+- Take paths from stored records, never from requests. Validate IDs with a strict pattern, and resolve every stored path against its allowed root with is_relative_to before serving it.
+- Delete generated data by an explicit allowlist of subdirectories under a per-library root, unlink symlinks without following them, and refuse configurations where the writable root and the read-only photos root overlap.
+- Do not skip a test for an environment gap. Run it where the capability exists, or let it fail visibly.
 
 ---
 
@@ -232,4 +235,37 @@ The default library name was already neutral from P01.2.2, so the remaining code
   - Interactive docs and openapi.json are disabled. The Pydantic base ApiModel in engine/api/models.py forbids extra fields, so new request models should inherit from it.
   - The API modules do not import torch or src, so they run in the pytest container that skips torch. engine/tests/conftest.py already puts the engine directory on sys.path, so tests import `api.*`.
   - The roadmap P02.3 checkbox is untouched. The runs, events, photos, media, exports and data routes remain to be done as later P02.3 subtasks.
+---
+
+## 2026-11-01T19:55:27Z - P02.3.2
+- The routes are written but not run. The shell denied the container pytest command, so none of the new tests have been run, and neither has the earlier guard suite or the new dependency pins. This attempt fixed the flagged problem: in `engine/tests/test_api_routes.py` the symlink test no longer has `pytest.skip`. It now calls `symlink_to` directly, so it fails loudly if symlinks are unavailable. The tests run in a Linux container, where they are. I did not run `npm run lint` or the node tests either.
+
+The routes under `/api` are in `engine/api/routes.py`:
+- **Photos:** `GET /libraries/{id}/photos` returns the stored camelCase records, or `[]` when the library has no database yet.
+- **Media:** `GET /libraries/{id}/media/{photo_id}` returns the thumbnail by default, or the original with `?variant=original`.
+  - The photo id must match `^IMG_[0-9A-F]{10}$`, and no route takes a path.
+  - The stored path is looked up in SQLite and must resolve inside the photos root (originals) or the library's thumbnails directory.
+  - It must also have an image extension. Otherwise the answer is 404 `media_unavailable`.
+- **Providers:** `GET /providers` reports configuration only: local scoring `available`, local vision model `not_configured`, Codex `disabled`. It contacts nothing and does not mention Ollama.
+- **Data:** `DELETE /libraries/{id}/data` removes only `working`, `output` and `reports` under that library's directory in the data root. It is idempotent and unlinks symlinks without following them. It never touches the photos root, and the two roots may not contain each other.
+- **Review:** `GET` and `PUT /libraries/{id}/review` use the `slotAssignments`, `locks` and `shortlist` shape of the bridge.
+  - `PUT` validates a Pydantic model that rejects unknown fields and bounds key and list sizes. Invalid bodies get 422.
+  - `GET` returns null before the first save.
+
+Library ids must match `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`. The request guard from P02.3.1 covers all of these routes, and the tests check 401 without the token and 403 for a foreign Host on each.
+
+The data layout is in `engine/api/storage.py`. Each library lives under `<AURAFRAME_DATA_ROOT>/libraries/<id>/`, using the engine's own `--data-root` layout. The documentation changes are:
+- `docs/architecture.md`: a "Library data layout" section.
+- `CHANGELOG.md`: a new entry, which says the tests have not been run.
+- `docs/roadmap.md`: a progress note, with the P02.3 checkbox left alone.
+- Files changed: engine/api/app.py, engine/api/models.py, engine/api/errors.py, engine/api/routes.py, engine/api/storage.py, engine/tests/test_api_routes.py, CHANGELOG.md, docs/architecture.md, docs/roadmap.md
+- **Learnings for future iterations:**
+  - The container pytest command was denied in both attempts. engine/tests/test_api_routes.py, engine/tests/test_api_guard.py and the new pins in engine/requirements.txt have never been run, so run the container pytest first and fix whatever it shows.
+  - engine/api/storage.py holds ApiSettings (data root and photos root, which may not overlap), the library and photo id patterns, library_config built on src.utils.apply_data_root, is_inside and clear_library_data.
+  - create_app(token, hosts, settings=None) falls back to load_settings_from_env() (AURAFRAME_DATA_ROOT, default /data; AURAFRAME_PHOTOS_ROOT, default /photos). P02.1 must mount /photos read-only and /data as a writable volume.
+  - API refusals use ApiError(status, code, message) from engine/api/errors.py, rendered as the ErrorResponse body. Pydantic and pattern failures still return FastAPI's default 422.
+  - GET /api/providers is a static placeholder. P03 should replace _provider_statuses in engine/api/routes.py with the real provider contract and keep the same response shape.
+  - Test pattern: build ApiSettings with tmp_path roots, write synthetic JPEGs with PIL, store rows through db.upsert_photo(db.connect(library_config(...))), then call the app through TestClient with base_url http://127.0.0.1:8000 and the bearer header.
+  - Not yet done in P02.3: the runs, events and exports routes. The P02.3 checkbox stays for the orchestrator.
+  - The symlink test now fails if the OS cannot create symlinks (it has no skip). It is meant for the Linux test container, not a Windows host.
 ---
