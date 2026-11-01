@@ -14,6 +14,7 @@
 - Build test inputs for guard tests at run time, such as a Windows path from separator pieces, so the guard file does not trigger its own patterns.
 - When removing a runtime path, replace it with an explicit, single-source error message constant so callers fail clearly instead of silently or by crashing.
 - After deleting a file or script, grep the docs for it and correct any statement that still calls it 'in use'.
+- Record checks that could not be run, such as upstream release notes without web access, as explicit gap rows in docs/testing.md.
 
 ---
 
@@ -173,4 +174,15 @@ The default library name was already neutral from P01.2.2, so the remaining code
   - docs/roadmap.md P01.5 checkbox is left unticked on purpose; an earlier attempt had ticked it and this session reverted that.
   - Not run this session: the container engine pytest, the Angular build (`npm run build`) and `bash scripts/check.sh --node`. Lint, the Electron build and all 11 Node tests passed.
   - Remaining `start.py` mentions in docs/roadmap.md, docs/architecture.md and the ADRs are plan or history text (P02.6 and the replacement table) and were left alone.
+---
+
+## 2026-11-01T19:39:00Z - P01.6
+- I checked the Electron 45.2.1 and electron-builder 26.18.0 upgrade already in the tree and added the missing gap statement to docs/testing.md. `npm run lint` passed. `npm run build` (Angular plus Electron) passed. All 14 Node tests passed, including the new hardening guard. That guard reads source and the lockfile only, so it confirms the hardening settings and lockfile versions but does not start the app. I confirmed with a grep that main.ts still has 7 matches for contextIsolation, sandbox, nodeIntegration, will-navigate, Content-Security-Policy and afmedia. I did not read the lines to check each setting. `npm view electron version` was not run, so "one of the three latest majors" is unverified. The `npm ls` check was denied. The lockfile test passed instead. The testing.md row states that sessions have no web access, so upstream breaking changes from Electron 33 to 45 could not be read, and that P01.SMOKE is what observes the app running. I did not run the engine pytest or `bash scripts/check.sh`.
+- Files changed: package.json, package-lock.json, apps/desktop/electron/main.ts, tests/electron-hardening.test.cjs, CHANGELOG.md, docs/testing.md, docs/assessment.md, docs/risks.md, docs/security-privacy.md, docs/technology.md, docs/architecture.md
+- **Learnings for future iterations:**
+  - The Electron 45 and electron-builder 26 upgrade is verified statically only. Runtime behavior of the afmedia protocol, sandbox and CSP is untested until P01.SMOKE.
+  - tests/electron-hardening.test.cjs guards the hardening settings and the lockfile versions without starting the app.
+  - `npm view electron version` and `npm ls` were not run (the second was denied), so the three-latest-majors claim is unverified.
+  - scripts/ralph/prd.json shows as modified in the tree. It is orchestrator-owned and I did not touch it.
+  - The roadmap checkbox for P01.6 was left for the orchestrator.
 ---

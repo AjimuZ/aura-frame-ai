@@ -50,9 +50,10 @@ Removed by the packages in the [roadmap](roadmap.md): `open-clip-torch`, `timm`,
 
 ## Dependencies to upgrade
 
-Electron is the urgent one, because it stays. Installed: **33.4.11, last released in April 2025**. Upstream
-supports only the latest three major versions, and the latest on 2026-11-01 is 45.2.1, with 44 and 43 still
-receiving releases. `electron-builder` (25.1.8) moves with it. See P01.6.
+Electron stays, so it must stay supported. Upstream supports only the latest three major versions, and the
+latest on 2026-11-01 is 45.2.1, with 44 and 43 still receiving releases. Done in P01.6: Electron is 45.2.1
+(from 33.4.11) and `electron-builder` is 26.18.0 (from 25.1.8). Electron 45 requires Node.js 22.12 or newer
+to install, and its npm package no longer fetches the binary at install: the first `electron` run downloads it.
 
 ## Sources
 

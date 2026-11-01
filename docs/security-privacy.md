@@ -78,8 +78,11 @@ Verified on 2026-11-01 by reading the source.
 
 - Electron window hardened: `contextIsolation`, no `nodeIntegration`, sandbox, narrow typed
   preload bridge, validated IPC, blocked navigation.
-- **Electron 33.4.11 is out of support.** Its Chromium has had no fixes from this release line since
-  April 2025. Tracked in [assessment](assessment.md#environment-and-repository) and P01.6.
+- Electron is 45.2.1, a supported major, since P01.6 (it was 33.4.11, out of support). The window
+  options, navigation lock, CSP and `afmedia` scheme are unchanged, and `tests/electron-hardening.test.cjs`
+  fails if one leaves the source. That test reads source only: the behavior has not yet been observed in
+  the running app on this version. The legacy key storage uses the `safeStorage` synchronous calls, which
+  the 45.2.1 type definitions mark as deprecated but still provide; P05 removes that flow.
 - HTML reports escape every value, including AI text (`engine/src/generate_report.py`).
 - The engine makes no network calls except to the configured AI endpoint.
 - The OpenAI flow is off by default and sends resized copies with EXIF stripped and orientation

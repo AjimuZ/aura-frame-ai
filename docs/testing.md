@@ -31,8 +31,10 @@ Results from 2026-11-01 on the reference PC.
 | Electron build | `npm run build:electron` | Pass, exit 0 |
 | Angular build | `npm run build:angular` | Pass, exit 0 |
 | Library store tests | `node --test "tests/*-store.test.cjs"` | Pass, 4 of 4 |
+| Electron hardening guard | `node --test tests/electron-hardening.test.cjs` | Pass, 3 of 3. Reads source and lockfile only. It does not start the app |
 | Engine tests, container | See below | Pass, 27 of 27, in 1.65 s, without the torch stack |
 | Design system color check | See [Design system](design-system.md#verification) | **Fails:** 13 literals outside the token file, fixed in P06 |
+| Electron 33 to 45 breaking changes | Not checked | Gap: sessions have no web access, so upstream release notes could not be read. P01.SMOKE is what observes the app running |
 | Angular unit tests | None exist | Gap |
 | End-to-end tests | None exist | Gap |
 

@@ -4,6 +4,11 @@
 
 ### Changed
 
+- Electron moves from 33.4.11, which was out of support, to 45.2.1, and `electron-builder` from 25.1.8 to
+  26.18.0. Working on the app now needs Node.js 22.12 or newer, and the first `electron` run downloads the
+  binary. The window hardening, navigation lock, CSP and `afmedia` scheme are unchanged. The upgraded app
+  passes build, lint and tests but has not yet been started.
+
 - Python now runs only in containers. The `engine:*` npm scripts that called Python on the host are
   removed, and the Electron main process no longer looks for a host interpreter or a `.venv`. Until
   P02.4 connects the containerised engine, starting an analysis from the app fails with the message

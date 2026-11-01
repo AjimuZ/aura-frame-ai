@@ -87,9 +87,9 @@ function createWindow(): BrowserWindow {
 // Prevent the renderer from opening external windows or navigating away from the app.
 function hardenNavigation(window: BrowserWindow): void {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  window.webContents.on('will-navigate', (event, url) => {
+  window.webContents.on('will-navigate', (event) => {
     const allowed = isDev ? DEV_SERVER_URL : 'file://';
-    if (!url.startsWith(allowed)) {
+    if (!event.url.startsWith(allowed)) {
       event.preventDefault();
     }
   });

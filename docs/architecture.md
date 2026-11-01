@@ -156,7 +156,7 @@ Angular UI -> Electron renderer -> typed preload bridge -> Electron main process
 
 | Today | Target | Package |
 | --- | --- | --- |
-| Electron 33.4.11 | A supported major version | P01 |
+| Electron | Done in P01: 45.2.1, a supported major version | P01 |
 | `apps/desktop/electron/ipc/library-store.ts` | Done in P01: libraries, without the legacy migration and hard-coded name | P01 |
 | `apps/desktop/electron/ipc/analysis.ipc.ts` | Same channels, HTTP to the API instead of a child process | P02 |
 | `apps/desktop/electron/ipc/paths.ts` | Python paths removed | P02 |

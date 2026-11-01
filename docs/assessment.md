@@ -81,7 +81,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | D9 | Primary button labels have 3.36:1 contrast, under the AA threshold | Run, see [Design system](design-system.md#measured-contrast) |
 | D10 | Angular has no unit tests, and no end-to-end test exists | Read |
 | D11 | 13 color literals sit outside the token file, in shared styles and one component | Run: the design system color check |
-| D12 | **Electron 33.4.11 is out of support.** Its last release is from April 2025, the latest is 45.2.1, and upstream supports only the latest three majors | Run: installed version against the official release list |
+| D12 | ~~Electron 33.4.11 is out of support. Its last release is from April 2025, and upstream supports only the latest three majors~~ **Resolved in P01.6:** Electron is 45.2.1, the latest release on 2026-11-01, and `electron-builder` is 26.18.0, its current major. Build, lint and Node tests pass. The upgraded app has not yet been started | Run: `npm view electron version`. Read: `package.json`, `package-lock.json` |
 
 ## Retired vocabulary
 
