@@ -466,21 +466,63 @@
       }
     },
     {
-      "id": "P02.4",
-      "title": "Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of",
-      "description": "Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of the child process, `afmedia` proxied, chosen folder mounted read-only.",
+      "id": "P02.4.1",
+      "title": "P02.4.1 Electron main: validated folder, Docker via spawn without a shell, per-session token",
+      "description": "Add an Electron main module that validates the chosen photo folder as an existing directory, starts and stops the Compose stack through child_process.spawn with shell: false (the folder is passed only through the environment, mounted read-only by compose), and creates a per-session API token held only in main. Cover it with Node tests, including one for the spawn arguments and options.",
       "acceptanceCriteria": [
-        "Analysis handlers call the API over HTTP, and the bridge methods and IPC channels keep their signatures",
-        "A Node test with a fake HTTP server proves that main adds the token and that no IPC reply or event carries it",
-        "`afmedia` proxies thumbnails from the API by photo ID",
-        "The chosen folder is validated as an existing directory, and Docker runs through `spawn` with `shell: false` and the folder only in the environment"
+        "The chosen folder is validated as an existing directory, and Docker runs through `spawn` with `shell: false` and the folder only in the environment",
+        "The per-session token is generated in Electron main and never appears in any IPC reply or event"
       ],
       "priority": 18,
       "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses the standalone word AI anywhere, including in the product name or when quoting a description, and refuses the name of the project instructions file. Never quote those strings in the message. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "notes": "",
       "dependsOn": [
         "P02.1"
       ],
+      "splitFrom": "P02.4",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of"
+      }
+    },
+    {
+      "id": "P02.4.2",
+      "title": "P02.4.2 Electron main: analysis handlers call the API over HTTP",
+      "description": "Replace the child-process engine driver in analysis.ipc.ts with an HTTP client of the API (runs, runs/current pause/resume/cancel, SSE events, photos, review, data, exports). Main adds the token and the Host header. Bridge methods and IPC channels keep their signatures. Add a Node test with a fake HTTP server.",
+      "acceptanceCriteria": [
+        "Analysis handlers call the API over HTTP, and the bridge methods and IPC channels keep their signatures",
+        "A Node test with a fake HTTP server proves that main adds the token and that no IPC reply or event carries it"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P02.1",
+        "P02.4.1"
+      ],
+      "splitFrom": "P02.4",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "3. P02 — Container stack",
+        "line": "P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of"
+      }
+    },
+    {
+      "id": "P02.4.3",
+      "title": "P02.4.3 afmedia proxies thumbnails from the API by photo ID",
+      "description": "Change the afmedia protocol handler to request media from the API by photo ID, with the token added in main, and update the Angular file-url pipe to use IDs instead of paths. The renderer receives no path and no token.",
+      "acceptanceCriteria": [
+        "`afmedia` proxies thumbnails from the API by photo ID"
+      ],
+      "priority": 18,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P02.1",
+        "P02.4.2"
+      ],
+      "splitFrom": "P02.4",
       "source": {
         "path": "docs/roadmap.md",
         "section": "3. P02 — Container stack",
@@ -519,7 +561,9 @@
       "passes": false,
       "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses the standalone word AI anywhere, including in the product name or when quoting a description, and refuses the name of the project instructions file. Never quote those strings in the message. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. start.py was already absent on 2026-11-01, although the assessment cites it, so only the Python paths and the documents remain.",
       "dependsOn": [
-        "P02.4"
+        "P02.4.1",
+        "P02.4.2",
+        "P02.4.3"
       ],
       "source": {
         "path": "docs/roadmap.md",
@@ -543,12 +587,14 @@
       "dependsOn": [
         "P02.1",
         "P02.2",
-        "P02.4",
         "P02.5",
         "P02.6",
         "P02.3.1",
         "P02.3.2",
-        "P02.3.3"
+        "P02.3.3",
+        "P02.4.1",
+        "P02.4.2",
+        "P02.4.3"
       ],
       "source": {
         "reference": "docs/roadmap.md",
