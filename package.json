@@ -23,7 +23,7 @@
     "engine:gemma": "py -3.12 engine/main.py gemma-review",
     "engine:export": "py -3.12 engine/main.py export-final",
     "engine:test": "py -3.12 -m pytest engine/tests",
-    "test:profiles": "npm run build:electron && node --test tests/profile-store.test.cjs"
+    "test:libraries": "npm run build:electron && node --test \"tests/*-store.test.cjs\""
   },
   "dependencies": {
     "@angular/animations": "^20.0.0",

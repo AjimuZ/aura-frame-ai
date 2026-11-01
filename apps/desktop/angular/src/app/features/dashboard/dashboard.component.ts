@@ -10,7 +10,7 @@ import { PhotoStore } from '../../core/services/photo-store.service';
   imports: [PageHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <af-page-header title="Dashboard" [subtitle]="'Local photo curation for ' + (activeProfile()?.name ?? 'the active profile')">
+    <af-page-header title="Dashboard" [subtitle]="'Local photo curation for ' + (activeLibrary()?.name ?? 'the active library')">
       <button class="af-button-secondary" (click)="go('/import')">Import photos</button>
       <button class="af-button-primary" (click)="go('/analysis')">Start analysis</button>
     </af-page-header>
@@ -49,7 +49,7 @@ import { PhotoStore } from '../../core/services/photo-store.service';
         <button class="af-button-secondary" (click)="go('/import')">Import photos</button>
         <button class="af-button-secondary" (click)="go('/analysis')">Run analysis</button>
         <button class="af-button-secondary" (click)="go('/review')">Open Top 20</button>
-        <button class="af-button-primary" (click)="go('/profile-builder')">Generate curated set</button>
+        <button class="af-button-primary" (click)="go('/library-builder')">Generate curated set</button>
       </div>
     </section>
   `,
@@ -59,7 +59,7 @@ export class DashboardComponent {
   private readonly router = inject(Router);
 
   readonly stats = this.store.stats;
-  readonly activeProfile = this.store.profileService.activeProfile;
+  readonly activeLibrary = this.store.libraryService.activeLibrary;
 
   go(path: string): void {
     void this.router.navigate([path]);

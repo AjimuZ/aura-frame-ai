@@ -13,7 +13,7 @@ import type { AnalysisPreset, OpenAiCostEstimate } from '../../core/models';
   imports: [PageHeaderComponent, ProgressStepperComponent, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <af-page-header title="Analysis" [subtitle]="'Local computer-vision and AI pipeline for ' + (activeProfile()?.name ?? 'the active profile')">
+    <af-page-header title="Analysis" [subtitle]="'Local computer-vision and AI pipeline for ' + (activeLibrary()?.name ?? 'the active library')">
       <button class="af-button-secondary" (click)="store.openOutputFolder()">Open output folder</button>
     </af-page-header>
 
@@ -111,7 +111,7 @@ export class AnalysisComponent {
   readonly status = this.store.status;
   readonly logs = this.store.logs;
   readonly folder = this.store.selectedFolder;
-  readonly activeProfile = this.store.profileService.activeProfile;
+  readonly activeLibrary = this.store.libraryService.activeLibrary;
   preset: AnalysisPreset = 'balanced';
 
   readonly openaiEnabled = computed(() => this.settingsService.settings().openai?.enabled ?? false);

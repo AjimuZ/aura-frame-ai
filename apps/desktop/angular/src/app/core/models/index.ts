@@ -2,5 +2,5 @@
 export * from './photo.model';
 export * from './analysis.model';
 export * from './settings.model';
-export * from './profile.model';
+export * from './library.model';
 export * from './aura-frame-api.model';

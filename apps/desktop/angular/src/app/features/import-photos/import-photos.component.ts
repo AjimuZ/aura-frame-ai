@@ -10,7 +10,7 @@ import { PhotoStore } from '../../core/services/photo-store.service';
   imports: [PageHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <af-page-header title="Import Photos" [subtitle]="'Select a local folder for ' + (activeProfile()?.name ?? 'the active profile') + '. Photos never leave your computer.'" />
+    <af-page-header title="Import Photos" [subtitle]="'Select a local folder for ' + (activeLibrary()?.name ?? 'the active library') + '. Photos never leave your computer.'" />
 
     <section class="af-card">
       <button
@@ -62,7 +62,7 @@ export class ImportPhotosComponent {
   private readonly router = inject(Router);
 
   readonly folder = this.store.selectedFolder;
-  readonly activeProfile = this.store.profileService.activeProfile;
+  readonly activeLibrary = this.store.libraryService.activeLibrary;
   readonly includeSubfolders = signal(true);
   readonly ignoreDuplicates = signal(true);
   readonly generateThumbnails = signal(true);

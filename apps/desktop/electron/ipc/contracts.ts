@@ -11,7 +11,7 @@ export type PhotoCategory =
   | 'BAD'
   | 'REJECT';
 
-export type ProfileSlot =
+export type PhotoSlot =
   | 'main_photo'
   | 'second_photo'
   | 'full_body'
@@ -44,14 +44,14 @@ export interface GemmaPhotoReview {
   styleScore: number;
   contextScore: number;
   category: PhotoCategory;
-  bestSlot: ProfileSlot;
+  bestSlot: PhotoSlot;
   strengths: string[];
   weaknesses: string[];
   reason: string;
 }
 
 export interface PhotoItem {
-  profileId: string;
+  libraryId: string;
   id: string;
   filePath: string;
   thumbnailPath: string;
@@ -81,7 +81,7 @@ export interface PhotoItem {
   gemmaScore?: GemmaPhotoReview;
   finalScore: number;
   category: PhotoCategory;
-  bestSlot: ProfileSlot;
+  bestSlot: PhotoSlot;
   status: PhotoStatus;
   rejectReason?: string;
   reasonTags: string[];
@@ -107,7 +107,7 @@ export interface PhotoItem {
   inTop20?: boolean;
   inTop50?: boolean;
   inTop100?: boolean;
-  finalSelectedSlot?: ProfileSlot | '';
+  finalSelectedSlot?: PhotoSlot | '';
   estimatedCostUsd?: number;
 }
 
@@ -143,7 +143,7 @@ export type AnalysisStep =
   | 'error';
 
 export interface AnalysisStatus {
-  profileId: string | null;
+  libraryId: string | null;
   step: AnalysisStep;
   running: boolean;
   paused: boolean;
@@ -157,7 +157,7 @@ export interface AnalysisStatus {
 export type AnalysisEvent =
   | {
       type: 'progress';
-      profileId: string;
+      libraryId: string;
       step: AnalysisStep | string;
       current: number;
       total: number;
@@ -165,17 +165,17 @@ export type AnalysisEvent =
     }
   | {
       type: 'photo_scored';
-      profileId: string;
+      libraryId: string;
       photoId: string;
       finalScore: number;
       category: PhotoCategory | string;
     }
-  | { type: 'log'; profileId: string; level: 'info' | 'warning' | 'error'; message: string }
-  | { type: 'done'; profileId: string; message: string }
-  | { type: 'error'; profileId: string; message: string }
+  | { type: 'log'; libraryId: string; level: 'info' | 'warning' | 'error'; message: string }
+  | { type: 'done'; libraryId: string; message: string }
+  | { type: 'error'; libraryId: string; message: string }
   | {
       type: 'local_gate_progress';
-      profileId: string;
+      libraryId: string;
       current: number;
       total: number;
       hard_rejected: number;
@@ -184,7 +184,7 @@ export type AnalysisEvent =
     }
   | {
       type: 'openai_progress';
-      profileId: string;
+      libraryId: string;
       stage: string;
       current: number;
       total: number;
@@ -194,14 +194,14 @@ export type AnalysisEvent =
     }
   | {
       type: 'openai_photo_scored';
-      profileId: string;
+      libraryId: string;
       photo_id: string;
       stage: string;
       score: number;
       best_slot: string;
     }
-  | { type: 'budget_warning'; profileId: string; spent_estimate_usd: number; message: string }
-  | { type: 'budget_stopped'; profileId: string; spent_estimate_usd: number; message: string };
+  | { type: 'budget_warning'; libraryId: string; spent_estimate_usd: number; message: string }
+  | { type: 'budget_stopped'; libraryId: string; spent_estimate_usd: number; message: string };
 
 // OpenAI Quality Mode settings stored in app settings (the API key is NOT stored here; it is
 // held in OS-encrypted storage and injected as an environment variable into the engine).
@@ -246,7 +246,7 @@ export interface ReviewSession {
   shortlist: string[];
 }
 
-export interface LocalProfile {
+export interface LocalLibrary {
   id: string;
   name: string;
   inputFolder: string | null;
@@ -254,9 +254,9 @@ export interface LocalProfile {
   updatedAt: string;
 }
 
-export interface ProfileState {
-  profiles: LocalProfile[];
-  activeProfileId: string;
+export interface LibraryState {
+  libraries: LocalLibrary[];
+  activeLibraryId: string;
 }
 
 export interface AppSettings {
@@ -275,38 +275,38 @@ export interface AppSettings {
 
 // The typed bridge surface exposed to the Angular renderer via contextBridge.
 export interface AuraFrameApi {
-  getProfileState(): Promise<ProfileState>;
-  createProfile(name: string): Promise<ProfileState>;
-  renameProfile(profileId: string, name: string): Promise<ProfileState>;
-  activateProfile(profileId: string): Promise<ProfileState>;
-  deleteProfile(profileId: string): Promise<ProfileState>;
-  selectPhotoFolder(profileId: string): Promise<string | null>;
-  startAnalysis(profileId: string, config: AnalysisConfig): Promise<void>;
-  pauseAnalysis(profileId: string): Promise<void>;
-  resumeAnalysis(profileId: string): Promise<void>;
-  cancelAnalysis(profileId: string): Promise<void>;
-  getAnalysisStatus(profileId: string): Promise<AnalysisStatus>;
-  getPhotos(profileId: string): Promise<PhotoItem[]>;
-  exportPhoto(profileId: string, photoId: string): Promise<boolean>;
-  exportFinalSet(profileId: string, photoIds: string[]): Promise<void>;
-  openOutputFolder(profileId: string): Promise<void>;
-  openReportsFolder(profileId: string): Promise<void>;
+  getLibraryState(): Promise<LibraryState>;
+  createLibrary(name: string): Promise<LibraryState>;
+  renameLibrary(libraryId: string, name: string): Promise<LibraryState>;
+  activateLibrary(libraryId: string): Promise<LibraryState>;
+  deleteLibrary(libraryId: string): Promise<LibraryState>;
+  selectPhotoFolder(libraryId: string): Promise<string | null>;
+  startAnalysis(libraryId: string, config: AnalysisConfig): Promise<void>;
+  pauseAnalysis(libraryId: string): Promise<void>;
+  resumeAnalysis(libraryId: string): Promise<void>;
+  cancelAnalysis(libraryId: string): Promise<void>;
+  getAnalysisStatus(libraryId: string): Promise<AnalysisStatus>;
+  getPhotos(libraryId: string): Promise<PhotoItem[]>;
+  exportPhoto(libraryId: string, photoId: string): Promise<boolean>;
+  exportFinalSet(libraryId: string, photoIds: string[]): Promise<void>;
+  openOutputFolder(libraryId: string): Promise<void>;
+  openReportsFolder(libraryId: string): Promise<void>;
   getSettings(): Promise<AppSettings>;
   setSettings(settings: AppSettings): Promise<AppSettings>;
   checkOllama(): Promise<OllamaStatus>;
-  clearGeneratedData(profileId: string): Promise<void>;
-  getReviewSession(profileId: string): Promise<ReviewSession | null>;
-  saveReviewSession(profileId: string, session: ReviewSession): Promise<void>;
+  clearGeneratedData(libraryId: string): Promise<void>;
+  getReviewSession(libraryId: string): Promise<ReviewSession | null>;
+  saveReviewSession(libraryId: string, session: ReviewSession): Promise<void>;
   // OpenAI Quality Mode (optional cloud flow; all guarded + off by default).
   getOpenAiKeyStatus(): Promise<boolean>;
   setOpenAiKey(key: string): Promise<boolean>;
   clearOpenAiKey(): Promise<boolean>;
-  getOpenAiStatus(profileId: string): Promise<OpenAiStatus>;
-  estimateOpenAiCost(profileId: string): Promise<OpenAiCostEstimate | null>;
+  getOpenAiStatus(libraryId: string): Promise<OpenAiStatus>;
+  estimateOpenAiCost(libraryId: string): Promise<OpenAiCostEstimate | null>;
   startOpenAiQuality(
-    profileId: string,
+    libraryId: string,
     options: { budgetUsd?: number; stage?: string },
   ): Promise<void>;
-  exportOpenAiResults(profileId: string): Promise<void>;
+  exportOpenAiResults(libraryId: string): Promise<void>;
   onProgress(callback: (event: AnalysisEvent) => void): () => void;
 }

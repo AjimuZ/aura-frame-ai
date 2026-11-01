@@ -1,4 +1,4 @@
-// Fixed application sidebar with local-profile management and primary navigation.
+// Fixed application sidebar with local-library management and primary navigation.
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { PhotoStore } from '../../../core/services/photo-store.service';
@@ -26,41 +26,41 @@ type EditorMode = 'create' | 'rename' | 'delete' | null;
         </div>
       </div>
 
-      <section class="af-profile-switcher" aria-label="Local profile">
-        <div class="af-profile-switcher__identity">
-          <span class="af-profile-switcher__avatar" aria-hidden="true">{{ initial() }}</span>
+      <section class="af-library-switcher" aria-label="Local library">
+        <div class="af-library-switcher__identity">
+          <span class="af-library-switcher__avatar" aria-hidden="true">{{ initial() }}</span>
           <div>
-            <div class="af-profile-switcher__eyebrow">Active profile</div>
-            <strong>{{ activeProfile()?.name ?? 'Loading…' }}</strong>
+            <div class="af-library-switcher__eyebrow">Active library</div>
+            <strong>{{ activeLibrary()?.name ?? 'Loading…' }}</strong>
           </div>
         </div>
 
-        <label class="af-sr-only" for="active-profile">Select active profile</label>
+        <label class="af-sr-only" for="active-library">Select active library</label>
         <select
-          id="active-profile"
-          class="af-input af-profile-switcher__select"
-          [value]="activeProfileId()"
+          id="active-library"
+          class="af-input af-library-switcher__select"
+          [value]="activeLibraryId()"
           [disabled]="managementDisabled()"
-          (change)="selectProfile($event)"
+          (change)="selectLibrary($event)"
         >
-          @for (profile of profiles(); track profile.id) {
-            <option [value]="profile.id">{{ profile.name }}</option>
+          @for (library of libraries(); track library.id) {
+            <option [value]="library.id">{{ library.name }}</option>
           }
         </select>
 
-        <div class="af-profile-switcher__actions">
-          <button class="af-icon-button" title="New profile" aria-label="New profile" [disabled]="managementDisabled()" (click)="openCreate()">＋</button>
-          <button class="af-icon-button" title="Rename profile" aria-label="Rename profile" [disabled]="managementDisabled() || !activeProfile()" (click)="openRename()">✎</button>
-          <button class="af-icon-button" title="Delete profile" aria-label="Delete profile" [disabled]="managementDisabled() || profiles().length <= 1" (click)="openDelete()">⌫</button>
+        <div class="af-library-switcher__actions">
+          <button class="af-icon-button" title="New library" aria-label="New library" [disabled]="managementDisabled()" (click)="openCreate()">＋</button>
+          <button class="af-icon-button" title="Rename library" aria-label="Rename library" [disabled]="managementDisabled() || !activeLibrary()" (click)="openRename()">✎</button>
+          <button class="af-icon-button" title="Delete library" aria-label="Delete library" [disabled]="managementDisabled() || libraries().length <= 1" (click)="openDelete()">⌫</button>
         </div>
 
         @if (mode() === 'create' || mode() === 'rename') {
-          <div class="af-profile-editor">
-            <label class="af-field-label" for="profile-name">
-              {{ mode() === 'create' ? 'New profile name' : 'Rename profile' }}
+          <div class="af-library-editor">
+            <label class="af-field-label" for="library-name">
+              {{ mode() === 'create' ? 'New library name' : 'Rename library' }}
             </label>
             <input
-              id="profile-name"
+              id="library-name"
               class="af-input"
               maxlength="60"
               [value]="nameInput()"
@@ -73,8 +73,8 @@ type EditorMode = 'create' | 'rename' | 'delete' | null;
             </div>
           </div>
         } @else if (mode() === 'delete') {
-          <div class="af-profile-editor">
-            <p>Delete <strong>{{ activeProfile()?.name }}</strong> and all generated data?</p>
+          <div class="af-library-editor">
+            <p>Delete <strong>{{ activeLibrary()?.name }}</strong> and all generated data?</p>
             <p class="af-field-hint">Original photos will never be deleted.</p>
             <div class="af-actions">
               <button class="af-button-danger" [disabled]="busy()" (click)="confirmDelete()">Confirm delete</button>
@@ -84,10 +84,10 @@ type EditorMode = 'create' | 'rename' | 'delete' | null;
         }
 
         @if (error()) {
-          <div class="af-profile-switcher__error" role="alert">{{ error() }}</div>
+          <div class="af-library-switcher__error" role="alert">{{ error() }}</div>
         }
         @if (status().running) {
-          <div class="af-field-hint">Profile management is locked during analysis.</div>
+          <div class="af-field-hint">Library management is locked during analysis.</div>
         }
       </section>
 
@@ -108,9 +108,9 @@ type EditorMode = 'create' | 'rename' | 'delete' | null;
 })
 export class SidebarComponent {
   private readonly store = inject(PhotoStore);
-  readonly profiles = this.store.profileService.profiles;
-  readonly activeProfile = this.store.profileService.activeProfile;
-  readonly activeProfileId = this.store.profileService.activeProfileId;
+  readonly libraries = this.store.libraryService.libraries;
+  readonly activeLibrary = this.store.libraryService.activeLibrary;
+  readonly activeLibraryId = this.store.libraryService.activeLibraryId;
   readonly status = this.store.status;
   readonly mode = signal<EditorMode>(null);
   readonly nameInput = signal('');
@@ -122,7 +122,7 @@ export class SidebarComponent {
     { label: 'Import Photos', path: '/import', icon: '⤓' },
     { label: 'Analysis', path: '/analysis', icon: '◐' },
     { label: 'Review', path: '/review', icon: '▦' },
-    { label: 'Profile Builder', path: '/profile-builder', icon: '★' },
+    { label: 'Library Builder', path: '/library-builder', icon: '★' },
     { label: 'Reports', path: '/reports', icon: '▤' },
     { label: 'Settings', path: '/settings', icon: '⚙' },
   ];
@@ -132,12 +132,12 @@ export class SidebarComponent {
   }
 
   initial(): string {
-    return this.activeProfile()?.name.trim().charAt(0).toLocaleUpperCase() || '•';
+    return this.activeLibrary()?.name.trim().charAt(0).toLocaleUpperCase() || '•';
   }
 
-  async selectProfile(event: Event): Promise<void> {
-    const profileId = (event.target as HTMLSelectElement).value;
-    await this.run(() => this.store.switchProfile(profileId));
+  async selectLibrary(event: Event): Promise<void> {
+    const libraryId = (event.target as HTMLSelectElement).value;
+    await this.run(() => this.store.switchLibrary(libraryId));
   }
 
   openCreate(): void {
@@ -148,7 +148,7 @@ export class SidebarComponent {
 
   openRename(): void {
     this.error.set('');
-    this.nameInput.set(this.activeProfile()?.name ?? '');
+    this.nameInput.set(this.activeLibrary()?.name ?? '');
     this.mode.set('rename');
   }
 
@@ -164,18 +164,18 @@ export class SidebarComponent {
 
   async submitName(): Promise<void> {
     const name = this.nameInput();
-    const profileId = this.activeProfileId();
+    const libraryId = this.activeLibraryId();
     const operation =
       this.mode() === 'create'
-        ? () => this.store.createProfile(name)
-        : () => this.store.renameProfile(profileId, name);
+        ? () => this.store.createLibrary(name)
+        : () => this.store.renameLibrary(libraryId, name);
     const succeeded = await this.run(operation);
     if (succeeded) this.closeEditor();
   }
 
   async confirmDelete(): Promise<void> {
-    const profileId = this.activeProfileId();
-    const succeeded = await this.run(() => this.store.deleteProfile(profileId));
+    const libraryId = this.activeLibraryId();
+    const succeeded = await this.run(() => this.store.deleteLibrary(libraryId));
     if (succeeded) this.closeEditor();
   }
 

@@ -85,5 +85,5 @@ Verified on 2026-11-01 by reading the source.
 - The OpenAI flow is off by default and sends resized copies with EXIF stripped and orientation
   applied (`engine/src/cloud/openai_image_preparer.py`).
 - Weights for the aesthetic predictor load with `weights_only=True`.
-- A personal first name is hard-coded as the default profile name, which breaks the project rule
-  against personal data in code. Tracked in [assessment](assessment.md#environment-and-repository).
+- A personal first name was hard-coded as the default library name, which broke the project rule
+  against personal data in code. Fixed in P01.2.2; see [assessment](assessment.md#environment-and-repository).

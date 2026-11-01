@@ -5,14 +5,14 @@ import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({ name: 'fileUrl', standalone: true })
 export class FileUrlPipe implements PipeTransform {
-  transform(path: string | null | undefined, profileId: string | null | undefined): string {
-    if (!path || !profileId) {
+  transform(path: string | null | undefined, libraryId: string | null | undefined): string {
+    if (!path || !libraryId) {
       return '';
     }
     if (/^(afmedia|https?|data|blob):/.test(path)) {
       return path;
     }
     const normalized = path.replace(/\\/g, '/');
-    return `afmedia://media/?profileId=${encodeURIComponent(profileId)}&path=${encodeURIComponent(normalized)}`;
+    return `afmedia://media/?libraryId=${encodeURIComponent(libraryId)}&path=${encodeURIComponent(normalized)}`;
   }
 }

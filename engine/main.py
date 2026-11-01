@@ -269,7 +269,7 @@ def cmd_save_review(args: argparse.Namespace) -> int:
     return 0
 
 
-# Returns the latest manual review session from the selected profile database.
+# Returns the latest manual review session from the selected library database.
 def cmd_load_review(args: argparse.Namespace) -> int:
     config = _prepare_config(args)
     conn = db.connect(config)

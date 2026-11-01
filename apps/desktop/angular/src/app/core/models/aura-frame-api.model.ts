@@ -10,42 +10,42 @@ import type {
   ReviewSession,
 } from './analysis.model';
 import type { PhotoItem } from './photo.model';
-import type { ProfileState } from './profile.model';
+import type { LibraryState } from './library.model';
 import type { AppSettings } from './settings.model';
 
 export interface AuraFrameApi {
-  getProfileState(): Promise<ProfileState>;
-  createProfile(name: string): Promise<ProfileState>;
-  renameProfile(profileId: string, name: string): Promise<ProfileState>;
-  activateProfile(profileId: string): Promise<ProfileState>;
-  deleteProfile(profileId: string): Promise<ProfileState>;
-  selectPhotoFolder(profileId: string): Promise<string | null>;
-  startAnalysis(profileId: string, config: AnalysisConfig): Promise<void>;
-  pauseAnalysis(profileId: string): Promise<void>;
-  resumeAnalysis(profileId: string): Promise<void>;
-  cancelAnalysis(profileId: string): Promise<void>;
-  getAnalysisStatus(profileId: string): Promise<AnalysisStatus>;
-  getPhotos(profileId: string): Promise<PhotoItem[]>;
-  exportPhoto(profileId: string, photoId: string): Promise<boolean>;
-  exportFinalSet(profileId: string, photoIds: string[]): Promise<void>;
-  openOutputFolder(profileId: string): Promise<void>;
-  openReportsFolder(profileId: string): Promise<void>;
+  getLibraryState(): Promise<LibraryState>;
+  createLibrary(name: string): Promise<LibraryState>;
+  renameLibrary(libraryId: string, name: string): Promise<LibraryState>;
+  activateLibrary(libraryId: string): Promise<LibraryState>;
+  deleteLibrary(libraryId: string): Promise<LibraryState>;
+  selectPhotoFolder(libraryId: string): Promise<string | null>;
+  startAnalysis(libraryId: string, config: AnalysisConfig): Promise<void>;
+  pauseAnalysis(libraryId: string): Promise<void>;
+  resumeAnalysis(libraryId: string): Promise<void>;
+  cancelAnalysis(libraryId: string): Promise<void>;
+  getAnalysisStatus(libraryId: string): Promise<AnalysisStatus>;
+  getPhotos(libraryId: string): Promise<PhotoItem[]>;
+  exportPhoto(libraryId: string, photoId: string): Promise<boolean>;
+  exportFinalSet(libraryId: string, photoIds: string[]): Promise<void>;
+  openOutputFolder(libraryId: string): Promise<void>;
+  openReportsFolder(libraryId: string): Promise<void>;
   getSettings(): Promise<AppSettings>;
   setSettings(settings: AppSettings): Promise<AppSettings>;
   checkOllama(): Promise<OllamaStatus>;
-  clearGeneratedData(profileId: string): Promise<void>;
-  getReviewSession(profileId: string): Promise<ReviewSession | null>;
-  saveReviewSession(profileId: string, session: ReviewSession): Promise<void>;
+  clearGeneratedData(libraryId: string): Promise<void>;
+  getReviewSession(libraryId: string): Promise<ReviewSession | null>;
+  saveReviewSession(libraryId: string, session: ReviewSession): Promise<void>;
   getOpenAiKeyStatus(): Promise<boolean>;
   setOpenAiKey(key: string): Promise<boolean>;
   clearOpenAiKey(): Promise<boolean>;
-  getOpenAiStatus(profileId: string): Promise<OpenAiStatus>;
-  estimateOpenAiCost(profileId: string): Promise<OpenAiCostEstimate | null>;
+  getOpenAiStatus(libraryId: string): Promise<OpenAiStatus>;
+  estimateOpenAiCost(libraryId: string): Promise<OpenAiCostEstimate | null>;
   startOpenAiQuality(
-    profileId: string,
+    libraryId: string,
     options: { budgetUsd?: number; stage?: string },
   ): Promise<void>;
-  exportOpenAiResults(profileId: string): Promise<void>;
+  exportOpenAiResults(libraryId: string): Promise<void>;
   onProgress(callback: (event: AnalysisEvent) => void): () => void;
 }
 

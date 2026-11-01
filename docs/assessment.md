@@ -74,7 +74,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | D2 | `.venv` points to an interpreter under another user account, so it does not start | Run: "No Python at ..." |
 | D3 | `npm run engine:test` needs Python 3.12, and this PC has only 3.15 | Run: exit 6 |
 | D4 | `start.py` accepts the broken `.venv` as valid, because it checks only that the file exists | Read: `start.py:75` |
-| D5 | A personal first name is hard-coded as the default profile, in code, mock data and tests | Read: `apps/desktop/electron/ipc/profile-store.ts:51` |
+| D5 | ~~A personal first name is hard-coded as the default library, in code, mock data and tests~~ **Fixed in P01.2.2:** the default is now "My library" and the mock data and tests use neutral names | Read: `apps/desktop/electron/ipc/library-store.ts` |
 | D6 | `package.json` declares MIT, but no `LICENSE` file exists | Run |
 | D7 | Face detection uses MediaPipe's legacy `solutions` API, with upstream support ended in 2023 | Read: `engine/src/face_quality.py:24` |
 | D8 | `tqdm` is required but never imported | Read |
@@ -89,7 +89,8 @@ On 2026-11-01, the search for the retired product terms found 64 occurrences in 
 the documents since replaced. The engine, the Electron contracts, the Angular models and `package.json`
 have since been cleaned. `tests/retired-terms.test.cjs` now scans every file listed by
 `git ls-files -co --exclude-standard`, matches whole identifier words in any letter case, and fails
-naming file and line. The profile rename is still pending (P01.2.2).
+naming file and line. The per-person collections are now called libraries in the apps, the engine
+comments and `package.json` (P01.2.2).
 
 ## How to improve the project
 

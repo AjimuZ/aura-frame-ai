@@ -10,16 +10,16 @@ import type {
   AppSettings,
   PhotoCategory,
   PhotoItem,
-  ProfileSlot,
-  ProfileState,
+  PhotoSlot,
+  LibraryState,
   ReviewSession,
 } from '../models';
 
-const AZIM_ID = '11111111-1111-4111-8111-111111111111';
-const FRIEND_ID = '22222222-2222-4222-8222-222222222222';
+const MAIN_ID = '11111111-1111-4111-8111-111111111111';
+const SECOND_ID = '22222222-2222-4222-8222-222222222222';
 
 // Builds a single deterministic sample photo for the mock dataset.
-function samplePhoto(index: number, profileId: string): PhotoItem {
+function samplePhoto(index: number, libraryId: string): PhotoItem {
   const categories: PhotoCategory[] = [
     'HEADSHOT',
     'FULL_BODY',
@@ -28,7 +28,7 @@ function samplePhoto(index: number, profileId: string): PhotoItem {
     'CANDID',
     'ELEGANT',
   ];
-  const slots: ProfileSlot[] = [
+  const slots: PhotoSlot[] = [
     'main_photo',
     'full_body',
     'activity_photo',
@@ -39,7 +39,7 @@ function samplePhoto(index: number, profileId: string): PhotoItem {
   const category = categories[index % categories.length];
   const score = Math.round((9.4 - index * 0.18) * 10) / 10;
   return {
-    profileId,
+    libraryId,
     id: `SAMPLE_${String(index + 1).padStart(4, '0')}`,
     filePath: `sample/photo_${index + 1}.jpg`,
     thumbnailPath: '',
@@ -86,7 +86,7 @@ function samplePhoto(index: number, profileId: string): PhotoItem {
   };
 }
 
-const SAMPLE_PHOTOS: PhotoItem[] = Array.from({ length: 30 }, (_, i) => samplePhoto(i, AZIM_ID));
+const SAMPLE_PHOTOS: PhotoItem[] = Array.from({ length: 30 }, (_, i) => samplePhoto(i, MAIN_ID));
 
 const DEFAULT_SETTINGS: AppSettings = {
   ollamaUrl: 'http://localhost:11434',
@@ -107,33 +107,33 @@ export function createMockAuraFrameApi(): AuraFrameApi {
   const listeners = new Set<(event: AnalysisEvent) => void>();
   let settings: AppSettings = { ...DEFAULT_SETTINGS };
   let timer: ReturnType<typeof setInterval> | null = null;
-  let profileCounter = 3;
-  let profileState: ProfileState = {
-    activeProfileId: AZIM_ID,
-    profiles: [
+  let libraryCounter = 3;
+  let libraryState: LibraryState = {
+    activeLibraryId: MAIN_ID,
+    libraries: [
       {
-        id: AZIM_ID,
-        name: 'Azim',
-        inputFolder: 'C:/Pictures/Azim (preview)',
+        id: MAIN_ID,
+        name: 'Main library',
+        inputFolder: 'C:/Pictures/Main (preview)',
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
       {
-        id: FRIEND_ID,
-        name: 'Friend',
-        inputFolder: 'C:/Pictures/Friend (preview)',
+        id: SECOND_ID,
+        name: 'Second library',
+        inputFolder: 'C:/Pictures/Second (preview)',
         createdAt: '2026-01-02T00:00:00.000Z',
         updatedAt: '2026-01-02T00:00:00.000Z',
       },
     ],
   };
-  const photosByProfile = new Map<string, PhotoItem[]>([
-    [AZIM_ID, SAMPLE_PHOTOS],
-    [FRIEND_ID, Array.from({ length: 12 }, (_, i) => samplePhoto(i, FRIEND_ID))],
+  const photosByLibrary = new Map<string, PhotoItem[]>([
+    [MAIN_ID, SAMPLE_PHOTOS],
+    [SECOND_ID, Array.from({ length: 12 }, (_, i) => samplePhoto(i, SECOND_ID))],
   ]);
   const reviews = new Map<string, ReviewSession>();
   const status: AnalysisStatus = {
-    profileId: AZIM_ID,
+    libraryId: MAIN_ID,
     step: 'idle',
     running: false,
     paused: false,
@@ -143,143 +143,143 @@ export function createMockAuraFrameApi(): AuraFrameApi {
   };
 
   const emit = (event: AnalysisEvent): void => listeners.forEach((cb) => cb(event));
-  const cloneProfiles = (): ProfileState => ({
-    activeProfileId: profileState.activeProfileId,
-    profiles: profileState.profiles.map((profile) => ({ ...profile })),
+  const cloneLibraries = (): LibraryState => ({
+    activeLibraryId: libraryState.activeLibraryId,
+    libraries: libraryState.libraries.map((library) => ({ ...library })),
   });
   const validateName = (name: string, currentId?: string): string => {
     const safe = name.normalize('NFC').trim().replace(/\s+/gu, ' ');
     if (safe.length < 1 || safe.length > 60) {
-      throw new Error('Profile names must contain between 1 and 60 characters.');
+      throw new Error('Library names must contain between 1 and 60 characters.');
     }
-    const duplicate = profileState.profiles.some(
-      (profile) =>
-        profile.id !== currentId &&
-        profile.name.normalize('NFKC').toLocaleLowerCase() ===
+    const duplicate = libraryState.libraries.some(
+      (library) =>
+        library.id !== currentId &&
+        library.name.normalize('NFKC').toLocaleLowerCase() ===
           safe.normalize('NFKC').toLocaleLowerCase(),
     );
-    if (duplicate) throw new Error('A local profile with this name already exists.');
+    if (duplicate) throw new Error('A local library with this name already exists.');
     return safe;
   };
-  const assertProfilesUnlocked = (): void => {
+  const assertLibrariesUnlocked = (): void => {
     if (status.running) {
-      throw new Error('Profile management is unavailable while an analysis is running.');
+      throw new Error('Library management is unavailable while an analysis is running.');
     }
   };
 
   return {
-    getProfileState: () => Promise.resolve(cloneProfiles()),
-    createProfile: (name: string) => {
-      assertProfilesUnlocked();
+    getLibraryState: () => Promise.resolve(cloneLibraries()),
+    createLibrary: (name: string) => {
+      assertLibrariesUnlocked();
       const safeName = validateName(name);
-      const id = `00000000-0000-4000-8000-${String(profileCounter++).padStart(12, '0')}`;
+      const id = `00000000-0000-4000-8000-${String(libraryCounter++).padStart(12, '0')}`;
       const now = new Date().toISOString();
-      profileState = {
-        activeProfileId: id,
-        profiles: [
-          ...profileState.profiles,
+      libraryState = {
+        activeLibraryId: id,
+        libraries: [
+          ...libraryState.libraries,
           { id, name: safeName, inputFolder: null, createdAt: now, updatedAt: now },
         ],
       };
-      photosByProfile.set(id, []);
-      return Promise.resolve(cloneProfiles());
+      photosByLibrary.set(id, []);
+      return Promise.resolve(cloneLibraries());
     },
-    renameProfile: (profileId: string, name: string) => {
-      assertProfilesUnlocked();
-      const safeName = validateName(name, profileId);
-      profileState = {
-        ...profileState,
-        profiles: profileState.profiles.map((profile) =>
-          profile.id === profileId ? { ...profile, name: safeName } : profile,
+    renameLibrary: (libraryId: string, name: string) => {
+      assertLibrariesUnlocked();
+      const safeName = validateName(name, libraryId);
+      libraryState = {
+        ...libraryState,
+        libraries: libraryState.libraries.map((library) =>
+          library.id === libraryId ? { ...library, name: safeName } : library,
         ),
       };
-      return Promise.resolve(cloneProfiles());
+      return Promise.resolve(cloneLibraries());
     },
-    activateProfile: (profileId: string) => {
-      assertProfilesUnlocked();
-      if (!profileState.profiles.some((profile) => profile.id === profileId)) {
-        throw new Error('Unknown local profile.');
+    activateLibrary: (libraryId: string) => {
+      assertLibrariesUnlocked();
+      if (!libraryState.libraries.some((library) => library.id === libraryId)) {
+        throw new Error('Unknown local library.');
       }
-      profileState = { ...profileState, activeProfileId: profileId };
-      return Promise.resolve(cloneProfiles());
+      libraryState = { ...libraryState, activeLibraryId: libraryId };
+      return Promise.resolve(cloneLibraries());
     },
-    deleteProfile: (profileId: string) => {
-      assertProfilesUnlocked();
-      const remaining = profileState.profiles.filter((profile) => profile.id !== profileId);
-      if (remaining.length === 0) return Promise.reject(new Error('The last local profile cannot be deleted.'));
-      profileState = {
-        profiles: remaining,
-        activeProfileId:
-          profileState.activeProfileId === profileId ? remaining[0].id : profileState.activeProfileId,
+    deleteLibrary: (libraryId: string) => {
+      assertLibrariesUnlocked();
+      const remaining = libraryState.libraries.filter((library) => library.id !== libraryId);
+      if (remaining.length === 0) return Promise.reject(new Error('The last local library cannot be deleted.'));
+      libraryState = {
+        libraries: remaining,
+        activeLibraryId:
+          libraryState.activeLibraryId === libraryId ? remaining[0].id : libraryState.activeLibraryId,
       };
-      photosByProfile.delete(profileId);
-      return Promise.resolve(cloneProfiles());
+      photosByLibrary.delete(libraryId);
+      return Promise.resolve(cloneLibraries());
     },
-    selectPhotoFolder: (profileId: string) => {
-      const folder = `C:/Pictures/${profileId} (preview)`;
-      profileState = {
-        ...profileState,
-        profiles: profileState.profiles.map((profile) =>
-          profile.id === profileId ? { ...profile, inputFolder: folder } : profile,
+    selectPhotoFolder: (libraryId: string) => {
+      const folder = `C:/Pictures/${libraryId} (preview)`;
+      libraryState = {
+        ...libraryState,
+        libraries: libraryState.libraries.map((library) =>
+          library.id === libraryId ? { ...library, inputFolder: folder } : library,
         ),
       };
       return Promise.resolve(folder);
     },
-    startAnalysis: (profileId: string, _config: AnalysisConfig) => {
-      const profilePhotos = photosByProfile.get(profileId) ?? [];
-      status.profileId = profileId;
+    startAnalysis: (libraryId: string, _config: AnalysisConfig) => {
+      const libraryPhotos = photosByLibrary.get(libraryId) ?? [];
+      status.libraryId = libraryId;
       status.running = true;
-      status.total = profilePhotos.length;
+      status.total = libraryPhotos.length;
       status.current = 0;
       status.step = 'indexing';
       let i = 0;
       timer = setInterval(() => {
-        if (i >= profilePhotos.length) {
+        if (i >= libraryPhotos.length) {
           status.running = false;
           status.step = 'done';
-          emit({ type: 'done', profileId, message: 'Preview analysis complete.' });
+          emit({ type: 'done', libraryId, message: 'Preview analysis complete.' });
           if (timer) clearInterval(timer);
           return;
         }
         status.current = i + 1;
         emit({
           type: 'progress',
-          profileId,
+          libraryId,
           step: 'quality',
           current: i + 1,
-          total: profilePhotos.length,
-          message: `Analyzing ${profilePhotos[i].fileName}`,
+          total: libraryPhotos.length,
+          message: `Analyzing ${libraryPhotos[i].fileName}`,
         });
         emit({
           type: 'photo_scored',
-          profileId,
-          photoId: profilePhotos[i].id,
-          finalScore: profilePhotos[i].finalScore,
-          category: profilePhotos[i].category,
+          libraryId,
+          photoId: libraryPhotos[i].id,
+          finalScore: libraryPhotos[i].finalScore,
+          category: libraryPhotos[i].category,
         });
         i++;
       }, 250);
       return Promise.resolve();
     },
-    pauseAnalysis: (_profileId: string) => {
+    pauseAnalysis: (_libraryId: string) => {
       status.paused = true;
       return Promise.resolve();
     },
-    resumeAnalysis: (_profileId: string) => {
+    resumeAnalysis: (_libraryId: string) => {
       status.paused = false;
       return Promise.resolve();
     },
-    cancelAnalysis: (_profileId: string) => {
+    cancelAnalysis: (_libraryId: string) => {
       status.running = false;
       if (timer) clearInterval(timer);
       return Promise.resolve();
     },
-    getAnalysisStatus: (profileId: string) =>
+    getAnalysisStatus: (libraryId: string) =>
       Promise.resolve(
-        status.profileId === profileId
+        status.libraryId === libraryId
           ? { ...status }
           : {
-              profileId,
+              libraryId,
               step: 'idle',
               running: false,
               paused: false,
@@ -288,12 +288,12 @@ export function createMockAuraFrameApi(): AuraFrameApi {
               message: 'Idle',
             },
       ),
-    getPhotos: (profileId: string) =>
-      Promise.resolve((photosByProfile.get(profileId) ?? []).map((photo) => ({ ...photo }))),
-    exportPhoto: (_profileId: string, _photoId: string) => Promise.resolve(true),
-    exportFinalSet: (_profileId: string, _ids: string[]) => Promise.resolve(),
-    openOutputFolder: (_profileId: string) => Promise.resolve(),
-    openReportsFolder: (_profileId: string) => Promise.resolve(),
+    getPhotos: (libraryId: string) =>
+      Promise.resolve((photosByLibrary.get(libraryId) ?? []).map((photo) => ({ ...photo }))),
+    exportPhoto: (_libraryId: string, _photoId: string) => Promise.resolve(true),
+    exportFinalSet: (_libraryId: string, _ids: string[]) => Promise.resolve(),
+    openOutputFolder: (_libraryId: string) => Promise.resolve(),
+    openReportsFolder: (_libraryId: string) => Promise.resolve(),
     getSettings: () => Promise.resolve({ ...settings }),
     setSettings: (next: AppSettings) => {
       settings = { ...next, modifyOriginals: false };
@@ -308,27 +308,27 @@ export function createMockAuraFrameApi(): AuraFrameApi {
         fallbackAvailable: true,
         message: 'Preview mode: no real Ollama runtime is contacted.',
       }),
-    clearGeneratedData: (profileId: string) => {
-      photosByProfile.set(profileId, []);
-      reviews.delete(profileId);
+    clearGeneratedData: (libraryId: string) => {
+      photosByLibrary.set(libraryId, []);
+      reviews.delete(libraryId);
       return Promise.resolve();
     },
-    getReviewSession: (profileId: string) => Promise.resolve(reviews.get(profileId) ?? null),
-    saveReviewSession: (profileId: string, session: ReviewSession) => {
-      reviews.set(profileId, structuredClone(session));
+    getReviewSession: (libraryId: string) => Promise.resolve(reviews.get(libraryId) ?? null),
+    saveReviewSession: (libraryId: string, session: ReviewSession) => {
+      reviews.set(libraryId, structuredClone(session));
       return Promise.resolve();
     },
     getOpenAiKeyStatus: () => Promise.resolve(false),
     setOpenAiKey: (_key: string) => Promise.resolve(true),
     clearOpenAiKey: () => Promise.resolve(true),
-    getOpenAiStatus: (_profileId: string) =>
+    getOpenAiStatus: (_libraryId: string) =>
       Promise.resolve({
         hasKey: false,
         reachable: false,
         models: {},
         message: 'Preview mode: the OpenAI API is never contacted.',
       }),
-    estimateOpenAiCost: (_profileId: string) =>
+    estimateOpenAiCost: (_libraryId: string) =>
       Promise.resolve({
         eligible: SAMPLE_PHOTOS.length,
         counts: { broad_scan: SAMPLE_PHOTOS.length, quality_review: 20, premium_review: 10, final_judge: 6 },
@@ -337,9 +337,9 @@ export function createMockAuraFrameApi(): AuraFrameApi {
         budgetMaxUsd: 16,
         withinBudget: true,
       }),
-    startOpenAiQuality: (_profileId: string, _options: { budgetUsd?: number; stage?: string }) =>
+    startOpenAiQuality: (_libraryId: string, _options: { budgetUsd?: number; stage?: string }) =>
       Promise.resolve(),
-    exportOpenAiResults: (_profileId: string) => Promise.resolve(),
+    exportOpenAiResults: (_libraryId: string) => Promise.resolve(),
     onProgress: (callback: (event: AnalysisEvent) => void) => {
       listeners.add(callback);
       return () => listeners.delete(callback);

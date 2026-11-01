@@ -14,18 +14,18 @@ import type {
   OpenAiStatus,
   PhotoItem,
   ReviewSession,
-  ProfileState,
+  LibraryState,
 } from './ipc/contracts';
 
 const CHANNELS = {
   selectFolder: 'fs:selectPhotoFolder',
   openOutput: 'fs:openOutputFolder',
   openReports: 'fs:openReportsFolder',
-  getProfiles: 'profiles:get',
-  createProfile: 'profiles:create',
-  renameProfile: 'profiles:rename',
-  activateProfile: 'profiles:activate',
-  deleteProfile: 'profiles:delete',
+  getLibraries: 'libraries:get',
+  createLibrary: 'libraries:create',
+  renameLibrary: 'libraries:rename',
+  activateLibrary: 'libraries:activate',
+  deleteLibrary: 'libraries:delete',
   start: 'analysis:start',
   pause: 'analysis:pause',
   resume: 'analysis:resume',
@@ -51,55 +51,55 @@ const CHANNELS = {
 } as const;
 
 const api: AuraFrameApi = {
-  getProfileState: () => ipcRenderer.invoke(CHANNELS.getProfiles) as Promise<ProfileState>,
-  createProfile: (name: string) =>
-    ipcRenderer.invoke(CHANNELS.createProfile, name) as Promise<ProfileState>,
-  renameProfile: (profileId: string, name: string) =>
-    ipcRenderer.invoke(CHANNELS.renameProfile, profileId, name) as Promise<ProfileState>,
-  activateProfile: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.activateProfile, profileId) as Promise<ProfileState>,
-  deleteProfile: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.deleteProfile, profileId) as Promise<ProfileState>,
-  selectPhotoFolder: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.selectFolder, profileId) as Promise<string | null>,
-  startAnalysis: (profileId: string, config: AnalysisConfig) =>
-    ipcRenderer.invoke(CHANNELS.start, profileId, config) as Promise<void>,
-  pauseAnalysis: (profileId: string) => ipcRenderer.invoke(CHANNELS.pause, profileId) as Promise<void>,
-  resumeAnalysis: (profileId: string) => ipcRenderer.invoke(CHANNELS.resume, profileId) as Promise<void>,
-  cancelAnalysis: (profileId: string) => ipcRenderer.invoke(CHANNELS.cancel, profileId) as Promise<void>,
-  getAnalysisStatus: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.status, profileId) as Promise<AnalysisStatus>,
-  getPhotos: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.getPhotos, profileId) as Promise<PhotoItem[]>,
-  exportPhoto: (profileId: string, photoId: string) =>
-    ipcRenderer.invoke(CHANNELS.exportPhoto, profileId, photoId) as Promise<boolean>,
-  exportFinalSet: (profileId: string, photoIds: string[]) =>
-    ipcRenderer.invoke(CHANNELS.exportSet, profileId, photoIds) as Promise<void>,
-  openOutputFolder: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.openOutput, profileId) as Promise<void>,
-  openReportsFolder: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.openReports, profileId) as Promise<void>,
+  getLibraryState: () => ipcRenderer.invoke(CHANNELS.getLibraries) as Promise<LibraryState>,
+  createLibrary: (name: string) =>
+    ipcRenderer.invoke(CHANNELS.createLibrary, name) as Promise<LibraryState>,
+  renameLibrary: (libraryId: string, name: string) =>
+    ipcRenderer.invoke(CHANNELS.renameLibrary, libraryId, name) as Promise<LibraryState>,
+  activateLibrary: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.activateLibrary, libraryId) as Promise<LibraryState>,
+  deleteLibrary: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.deleteLibrary, libraryId) as Promise<LibraryState>,
+  selectPhotoFolder: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.selectFolder, libraryId) as Promise<string | null>,
+  startAnalysis: (libraryId: string, config: AnalysisConfig) =>
+    ipcRenderer.invoke(CHANNELS.start, libraryId, config) as Promise<void>,
+  pauseAnalysis: (libraryId: string) => ipcRenderer.invoke(CHANNELS.pause, libraryId) as Promise<void>,
+  resumeAnalysis: (libraryId: string) => ipcRenderer.invoke(CHANNELS.resume, libraryId) as Promise<void>,
+  cancelAnalysis: (libraryId: string) => ipcRenderer.invoke(CHANNELS.cancel, libraryId) as Promise<void>,
+  getAnalysisStatus: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.status, libraryId) as Promise<AnalysisStatus>,
+  getPhotos: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.getPhotos, libraryId) as Promise<PhotoItem[]>,
+  exportPhoto: (libraryId: string, photoId: string) =>
+    ipcRenderer.invoke(CHANNELS.exportPhoto, libraryId, photoId) as Promise<boolean>,
+  exportFinalSet: (libraryId: string, photoIds: string[]) =>
+    ipcRenderer.invoke(CHANNELS.exportSet, libraryId, photoIds) as Promise<void>,
+  openOutputFolder: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.openOutput, libraryId) as Promise<void>,
+  openReportsFolder: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.openReports, libraryId) as Promise<void>,
   getSettings: () => ipcRenderer.invoke(CHANNELS.getSettings) as Promise<AppSettings>,
   setSettings: (settings: AppSettings) =>
     ipcRenderer.invoke(CHANNELS.setSettings, settings) as Promise<AppSettings>,
   checkOllama: () => ipcRenderer.invoke(CHANNELS.checkOllama) as Promise<OllamaStatus>,
-  clearGeneratedData: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.clearData, profileId) as Promise<void>,
-  getReviewSession: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.getReview, profileId) as Promise<ReviewSession | null>,
-  saveReviewSession: (profileId: string, session: ReviewSession) =>
-    ipcRenderer.invoke(CHANNELS.saveReview, profileId, session) as Promise<void>,
+  clearGeneratedData: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.clearData, libraryId) as Promise<void>,
+  getReviewSession: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.getReview, libraryId) as Promise<ReviewSession | null>,
+  saveReviewSession: (libraryId: string, session: ReviewSession) =>
+    ipcRenderer.invoke(CHANNELS.saveReview, libraryId, session) as Promise<void>,
   getOpenAiKeyStatus: () => ipcRenderer.invoke(CHANNELS.openaiKeyStatus) as Promise<boolean>,
   setOpenAiKey: (key: string) => ipcRenderer.invoke(CHANNELS.openaiSetKey, key) as Promise<boolean>,
   clearOpenAiKey: () => ipcRenderer.invoke(CHANNELS.openaiClearKey) as Promise<boolean>,
-  getOpenAiStatus: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.openaiStatus, profileId) as Promise<OpenAiStatus>,
-  estimateOpenAiCost: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.openaiEstimate, profileId) as Promise<OpenAiCostEstimate | null>,
-  startOpenAiQuality: (profileId: string, options: { budgetUsd?: number; stage?: string }) =>
-    ipcRenderer.invoke(CHANNELS.openaiStart, profileId, options) as Promise<void>,
-  exportOpenAiResults: (profileId: string) =>
-    ipcRenderer.invoke(CHANNELS.exportOpenai, profileId) as Promise<void>,
+  getOpenAiStatus: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.openaiStatus, libraryId) as Promise<OpenAiStatus>,
+  estimateOpenAiCost: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.openaiEstimate, libraryId) as Promise<OpenAiCostEstimate | null>,
+  startOpenAiQuality: (libraryId: string, options: { budgetUsd?: number; stage?: string }) =>
+    ipcRenderer.invoke(CHANNELS.openaiStart, libraryId, options) as Promise<void>,
+  exportOpenAiResults: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.exportOpenai, libraryId) as Promise<void>,
   onProgress: (callback: (event: AnalysisEvent) => void) => {
     const listener = (_event: unknown, payload: AnalysisEvent): void => callback(payload);
     ipcRenderer.on(CHANNELS.event, listener);

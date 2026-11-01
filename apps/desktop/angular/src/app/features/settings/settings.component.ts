@@ -74,10 +74,10 @@ import { PhotoStore } from '../../core/services/photo-store.service';
       </div>
 
       <div class="af-field">
-        <label class="af-field-label">Profile output</label>
+        <label class="af-field-label">Library output</label>
         <div class="af-field-hint">
           Output and reports are isolated in AuraFrame's private data area for
-          {{ activeProfile()?.name ?? 'the active profile' }}.
+          {{ activeLibrary()?.name ?? 'the active library' }}.
         </div>
         <div class="af-actions" style="margin-top:8px;">
           <button class="af-button-secondary" (click)="store.openOutputFolder()">Open output folder</button>
@@ -180,8 +180,8 @@ import { PhotoStore } from '../../core/services/photo-store.service';
       <h3>Generated data</h3>
       <p class="af-field-hint">
         Deletes the local database, thumbnails, reports, and exported sets for
-        {{ activeProfile()?.name ?? 'the active profile' }}. Your original photos and other
-        profiles are never touched.
+        {{ activeLibrary()?.name ?? 'the active library' }}. Your original photos and other
+        libraries are never touched.
       </p>
       <div class="af-actions">
         @if (!confirmingClear()) {
@@ -199,7 +199,7 @@ export class SettingsComponent {
   private readonly settingsService = inject(SettingsService);
   private readonly api = inject(AURA_FRAME_API);
   readonly store = inject(PhotoStore);
-  readonly activeProfile = this.store.profileService.activeProfile;
+  readonly activeLibrary = this.store.libraryService.activeLibrary;
 
   // Local editable copy of the persisted settings, synced from the service.
   readonly model = signal<AppSettings>({ ...this.settingsService.settings() });
@@ -252,7 +252,7 @@ export class SettingsComponent {
     await this.refreshKeyStatus();
   }
 
-  // Probes the OpenAI API (key/reachability/resolved models) for the active profile.
+  // Probes the OpenAI API (key/reachability/resolved models) for the active library.
   async checkOpenAi(): Promise<void> {
     this.openaiProbe.set(await this.store.getOpenAiStatus());
   }

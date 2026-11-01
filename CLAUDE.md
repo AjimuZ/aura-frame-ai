@@ -62,7 +62,7 @@ git status
 npm run lint
 npm run build:angular
 npm run build:electron
-npm run test:profiles
+npm run test:libraries
 bash scripts/check.sh              # all checks; --node, --engine, --integration select subsets
 ```
 

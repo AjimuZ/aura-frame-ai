@@ -8,6 +8,8 @@
 - Copy acceptance criteria character for character into review criteria, since the runner compares exact text.
 - Verify a pre-existing working-tree change with the project checks and searches before reporting it done.
 - Keep banned terms base64-encoded in guard tests and match by whole identifier tokens (split on non-alphanumerics, underscores and camelCase boundaries) to avoid substring false positives.
+- When a rename touches an npm script name, describe it as 'the store test command is now X' instead of quoting the old name in the changelog.
+- Keep test files at their existing path when renaming their subject; change content only, because the runner refuses deleted or renamed test files.
 
 ---
 
@@ -108,4 +110,32 @@ I left the roadmap checkbox alone and found no real matches in scripts/ralph/ to
   - The new test does not depend on dist-electron, so it runs without building first.
   - Only the new test file was run this session; lint, builds and the full Node test glob were not run.
   - The profile rename remains for P01.2.2.
+---
+
+## 2026-11-01T19:15:11Z - P01.2.2
+- The earlier rename was already in the working tree, so I verified it and fixed one leftover. A case-insensitive search for `profile` in apps/, engine/, tests/ and package.json finds nothing. The old source files are already deleted and the renamed ones exist, so no removals are left for the supervising session. The only edit this session was in CHANGELOG.md, where a note quoted the old npm script name. I rephrased it to "The store test command is now `npm run test:libraries`."
+
+Checks I ran:
+- `npm run lint` passed.
+- `npm run build` passed, including `build:electron`.
+- `node --test "tests/**/*.test.cjs"` passed 7 of 7: the 4 library store tests, which keep the file name tests/profile-store.test.cjs, plus the 3 retired-terms guard tests.
+- The preload channel strings (`libraries:get`, `create`, `rename`, `activate`, `delete`) match the handlers in `libraries.ipc.ts`.
+- The library store has no legacy migration code.
+
+Not run: the containerised engine pytest. The engine diff is only two comment changes ("profile database" is now "library database" in `main.py` and `db.py`), so it should be unaffected, but that is unverified.
+
+Remaining matches outside the criteria, left alone:
+- docs/architecture.md lines 61-62 use "profile" as the Docker Compose term.
+- docs/assessment.md, docs/risks.md and docs/operations.md have unrelated uses. The assessment hit is "social profile" in a description of the old purpose.
+- `.claude/settings.json` and `scripts/ralph/` also match.
+
+I left the roadmap checkbox alone.
+- Files changed: CHANGELOG.md, CLAUDE.md, package.json, docs/architecture.md, docs/assessment.md, docs/security-privacy.md, docs/testing.md, tests/profile-store.test.cjs, engine/main.py, engine/src/db.py, apps/desktop/electron/main.ts, apps/desktop/electron/preload.ts, apps/desktop/electron/ipc/contracts.ts, apps/desktop/electron/ipc/analysis.ipc.ts, apps/desktop/electron/ipc/filesystem.ipc.ts, apps/desktop/electron/ipc/library-store.ts, apps/desktop/electron/ipc/libraries.ipc.ts, apps/desktop/angular/src/app/app.routes.ts, apps/desktop/angular/src/app/core/models/library.model.ts, apps/desktop/angular/src/app/core/services/library.service.ts, apps/desktop/angular/src/app/features/library-builder/, apps/desktop/angular/src/styles/_layout.scss
+- **Learnings for future iterations:**
+  - The rename is verified: lint, build, build:electron and all 7 Node tests pass, and preload channel strings match the main-process handlers.
+  - The old profile-named source files are already deleted from the working tree. The untracked renamed files (library.model.ts, library.service.ts, library-builder/, libraries.ipc.ts, library-store.ts) must be added when committing.
+  - tests/profile-store.test.cjs keeps its file name on purpose, because the runner scan refuses a renamed test file. The glob tests/*-store.test.cjs still matches it.
+  - The engine pytest in the container was not run this session; the engine change is comment-only.
+  - docs/architecture.md lines 61-62 still use 'profile' as the Docker Compose term; this is outside the criteria and is correct usage.
+  - Any changelog or progress note must avoid quoting the old npm script name, because the guard test and review rules treat the retired term as forbidden even in a rename note.
 ---

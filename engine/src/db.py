@@ -220,7 +220,7 @@ def save_review_session(
     return int(cur.lastrowid or 0)
 
 
-# Loads the most recently saved manual review session for the current profile database.
+# Loads the most recently saved manual review session for the current library database.
 def load_latest_review_session(conn: sqlite3.Connection) -> dict[str, Any] | None:
     row = conn.execute(
         "SELECT slot_assignments, locks, shortlist FROM review_sessions "

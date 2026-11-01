@@ -30,14 +30,14 @@ Results from 2026-11-01 on the reference PC.
 | Lint | `npm run lint` | Pass, exit 0 |
 | Electron build | `npm run build:electron` | Pass, exit 0 |
 | Angular build | `npm run build:angular` | Pass, exit 0 |
-| Profile store tests | `node --test tests/profile-store.test.cjs` | Pass, 4 of 4 |
+| Library store tests | `node --test "tests/*-store.test.cjs"` | Pass, 4 of 4 |
 | Engine tests, npm script | `npm run engine:test` | **Fails, exit 6:** no Python 3.12 runtime on this PC |
 | Engine tests, container | See below | Pass, 27 of 27, in 1.65 s, without the torch stack |
 | Design system color check | See [Design system](design-system.md#verification) | **Fails:** 13 literals outside the token file, fixed in P06 |
 | Angular unit tests | None exist | Gap |
 | End-to-end tests | None exist | Gap |
 
-`build:electron` must run before `node --test tests/profile-store.test.cjs`. `npm run test:profiles`
+`build:electron` must run before `node --test "tests/*-store.test.cjs"`. `npm run test:libraries`
 does both.
 
 ### Engine tests in a throwaway container

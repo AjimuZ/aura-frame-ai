@@ -23,6 +23,15 @@
 - The desktop app (Electron contracts, Angular models, mock API, dashboard) now uses `overallScore` and
   `styleScore`, matching the engine, and the package description calls the product a local AI photo
   curation tool.
+- The per-person collections are now named libraries across Electron, the preload bridge, Angular and
+  the engine comments. Bridge methods are `getLibraryState`, `createLibrary`, `renameLibrary`,
+  `activateLibrary` and `deleteLibrary`; IPC channels are `libraries:*`; the registry is `libraries.json`
+  with data under `libraries/<id>/`. The slot type is now `PhotoSlot`, and the review screen route and
+  screen are `library-builder`. The store test command is now `npm run test:libraries`.
+- The library store no longer migrates data from the earlier flat layout and no longer creates a
+  hard-coded personal name: a new installation starts with one library named "My library". Registries
+  and data written by earlier versions are not read; analysis must be run again, as with the score rename
+  above. The browser preview uses neutral sample library names.
 
 ### Added
 

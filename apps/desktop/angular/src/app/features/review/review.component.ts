@@ -10,10 +10,10 @@ import { ReasonTagComponent } from '../../shared/components/reason-tag/reason-ta
 import { FileUrlPipe } from '../../shared/pipes/file-url.pipe';
 import { PhotoStore } from '../../core/services/photo-store.service';
 import {
-  PROFILE_SLOT_LABELS,
+  PHOTO_SLOT_LABELS,
   type PhotoCategory,
   type PhotoItem,
-  type ProfileSlot,
+  type PhotoSlot,
 } from '../../core/models';
 
 type Filter =
@@ -44,7 +44,7 @@ type Filter =
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <af-page-header title="Review" [subtitle]="'Browse, filter, and curate photos for ' + (activeProfile()?.name ?? 'the active profile')">
+    <af-page-header title="Review" [subtitle]="'Browse, filter, and curate photos for ' + (activeLibrary()?.name ?? 'the active library')">
       <button class="af-button-secondary" (click)="store.refreshPhotos()">Refresh</button>
     </af-page-header>
 
@@ -70,7 +70,7 @@ type Filter =
           @for (photo of compared(); track photo.id) {
             <div>
               @if (photo.thumbnailPath) {
-                <img [src]="photo.thumbnailPath | fileUrl: photo.profileId" [alt]="photo.fileName" style="width:100%; border-radius:12px;" />
+                <img [src]="photo.thumbnailPath | fileUrl: photo.libraryId" [alt]="photo.fileName" style="width:100%; border-radius:12px;" />
               }
               <div style="display:flex; gap:8px; align-items:center; margin-top:8px;">
                 <af-score-badge [score]="photo.finalScore" />
@@ -98,7 +98,7 @@ type Filter =
         <aside class="af-card" style="position:sticky; top:0;">
           @if (selected(); as photo) {
             @if (photo.thumbnailPath) {
-              <img [src]="photo.thumbnailPath | fileUrl: photo.profileId" [alt]="photo.fileName" style="width:100%; border-radius:12px;" />
+              <img [src]="photo.thumbnailPath | fileUrl: photo.libraryId" [alt]="photo.fileName" style="width:100%; border-radius:12px;" />
             }
             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
               <af-score-badge [score]="photo.finalScore" />
@@ -208,7 +208,7 @@ type Filter =
 })
 export class ReviewComponent {
   readonly store = inject(PhotoStore);
-  readonly activeProfile = this.store.profileService.activeProfile;
+  readonly activeLibrary = this.store.libraryService.activeLibrary;
   readonly photos = this.store.photos;
 
   private readonly filter = signal<Filter>({ kind: 'all' });
@@ -307,8 +307,8 @@ export class ReviewComponent {
     this.selected.set(photo);
   }
 
-  slotLabel(slot: ProfileSlot): string {
-    return PROFILE_SLOT_LABELS[slot];
+  slotLabel(slot: PhotoSlot): string {
+    return PHOTO_SLOT_LABELS[slot];
   }
 
   promote(photo: PhotoItem): void {
@@ -321,7 +321,7 @@ export class ReviewComponent {
     this.refreshSelected(photo.id);
   }
 
-  assign(photo: PhotoItem, slot: ProfileSlot): void {
+  assign(photo: PhotoItem, slot: PhotoSlot): void {
     this.store.updatePhoto(photo.id, { bestSlot: slot, status: 'selected' });
     this.refreshSelected(photo.id);
   }

@@ -31,7 +31,7 @@ P00.1–P00.4 evidence (2026-11-01): see [assessment](assessment.md), [testing](
 **Depends on:** P00. **Areas:** repository, naming, checks.
 
 - [x] P01.1 Add `scripts/check.sh` as the single entry point for all checks.
-- [ ] P01.2 Remove the retired product vocabulary from code, prompts, schemas, names, comments,
+- [x] P01.2 Remove the retired product vocabulary from code, prompts, schemas, names, comments,
       tests and `package.json`. Rename `profile` to `library` and the AI fields to neutral names.
 - [ ] P01.3 Remove the hard-coded personal name from code, mock data and tests.
 - [ ] P01.4 Add the `LICENSE` file for the declared license, or change the declaration.

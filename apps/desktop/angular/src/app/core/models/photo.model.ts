@@ -10,7 +10,7 @@ export type PhotoCategory =
   | 'BAD'
   | 'REJECT';
 
-export type ProfileSlot =
+export type PhotoSlot =
   | 'main_photo'
   | 'second_photo'
   | 'full_body'
@@ -41,14 +41,14 @@ export interface GemmaPhotoReview {
   styleScore: number;
   contextScore: number;
   category: PhotoCategory;
-  bestSlot: ProfileSlot;
+  bestSlot: PhotoSlot;
   strengths: string[];
   weaknesses: string[];
   reason: string;
 }
 
 export interface PhotoItem {
-  profileId: string;
+  libraryId: string;
   id: string;
   filePath: string;
   thumbnailPath: string;
@@ -84,7 +84,7 @@ export interface PhotoItem {
   finalScore: number;
 
   category: PhotoCategory;
-  bestSlot: ProfileSlot;
+  bestSlot: PhotoSlot;
 
   status: PhotoStatus;
   rejectReason?: string;
@@ -110,12 +110,12 @@ export interface PhotoItem {
   inTop20?: boolean;
   inTop50?: boolean;
   inTop100?: boolean;
-  finalSelectedSlot?: ProfileSlot | '';
+  finalSelectedSlot?: PhotoSlot | '';
   estimatedCostUsd?: number;
 }
 
-// Human-readable labels for profile slots used in the Profile Builder.
-export const PROFILE_SLOT_LABELS: Record<ProfileSlot, string> = {
+// Human-readable labels for photo slots used in the Library Builder.
+export const PHOTO_SLOT_LABELS: Record<PhotoSlot, string> = {
   main_photo: 'Main Photo',
   second_photo: 'Second Photo',
   full_body: 'Full Body',
@@ -127,7 +127,7 @@ export const PROFILE_SLOT_LABELS: Record<ProfileSlot, string> = {
 };
 
 // The six ordered slots that make up the final curated set.
-export const FINAL_SET_SLOTS: ProfileSlot[] = [
+export const FINAL_SET_SLOTS: PhotoSlot[] = [
   'main_photo',
   'full_body',
   'activity_photo',

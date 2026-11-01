@@ -72,7 +72,7 @@ export interface ReviewSession {
 }
 
 export interface AnalysisStatus {
-  profileId: string | null;
+  libraryId: string | null;
   step: AnalysisStep;
   running: boolean;
   paused: boolean;
@@ -86,7 +86,7 @@ export interface AnalysisStatus {
 export type AnalysisEvent =
   | {
       type: 'progress';
-      profileId: string;
+      libraryId: string;
       step: AnalysisStep | string;
       current: number;
       total: number;
@@ -94,17 +94,17 @@ export type AnalysisEvent =
     }
   | {
       type: 'photo_scored';
-      profileId: string;
+      libraryId: string;
       photoId: string;
       finalScore: number;
       category: PhotoCategory | string;
     }
-  | { type: 'log'; profileId: string; level: 'info' | 'warning' | 'error'; message: string }
-  | { type: 'done'; profileId: string; message: string }
-  | { type: 'error'; profileId: string; message: string }
+  | { type: 'log'; libraryId: string; level: 'info' | 'warning' | 'error'; message: string }
+  | { type: 'done'; libraryId: string; message: string }
+  | { type: 'error'; libraryId: string; message: string }
   | {
       type: 'local_gate_progress';
-      profileId: string;
+      libraryId: string;
       current: number;
       total: number;
       hard_rejected: number;
@@ -113,7 +113,7 @@ export type AnalysisEvent =
     }
   | {
       type: 'openai_progress';
-      profileId: string;
+      libraryId: string;
       stage: string;
       current: number;
       total: number;
@@ -123,14 +123,14 @@ export type AnalysisEvent =
     }
   | {
       type: 'openai_photo_scored';
-      profileId: string;
+      libraryId: string;
       photo_id: string;
       stage: string;
       score: number;
       best_slot: string;
     }
-  | { type: 'budget_warning'; profileId: string; spent_estimate_usd: number; message: string }
-  | { type: 'budget_stopped'; profileId: string; spent_estimate_usd: number; message: string };
+  | { type: 'budget_warning'; libraryId: string; spent_estimate_usd: number; message: string }
+  | { type: 'budget_stopped'; libraryId: string; spent_estimate_usd: number; message: string };
 
 // Ordered steps shown in the Analysis screen stepper, with display labels.
 export const ANALYSIS_STEPS: { step: AnalysisStep; label: string }[] = [
@@ -143,7 +143,7 @@ export const ANALYSIS_STEPS: { step: AnalysisStep; label: string }[] = [
   { step: 'aesthetic', label: 'Scoring aesthetics' },
   { step: 'preranking', label: 'Pre-ranking candidates' },
   { step: 'gemma', label: 'Reviewing top candidates with the local model' },
-  { step: 'final_set', label: 'Building final profile set' },
+  { step: 'final_set', label: 'Building final set' },
 ];
 
 // Ordered steps shown for the optional OpenAI Quality Mode run.

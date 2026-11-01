@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from '@an
 import { FileUrlPipe } from '../../pipes/file-url.pipe';
 import { ScoreBadgeComponent } from '../score-badge/score-badge.component';
 import { CategoryChipComponent } from '../category-chip/category-chip.component';
-import { PROFILE_SLOT_LABELS, type PhotoItem } from '../../../core/models';
+import { PHOTO_SLOT_LABELS, type PhotoItem } from '../../../core/models';
 
 @Component({
   selector: 'af-photo-card',
@@ -21,7 +21,7 @@ import { PROFILE_SLOT_LABELS, type PhotoItem } from '../../../core/models';
     >
       <div style="position:relative;">
         @if (photo().thumbnailPath) {
-          <img class="af-photo-card__thumb" [src]="photo().thumbnailPath | fileUrl: photo().profileId" [alt]="photo().fileName" />
+          <img class="af-photo-card__thumb" [src]="photo().thumbnailPath | fileUrl: photo().libraryId" [alt]="photo().fileName" />
         } @else {
           <div class="af-photo-card__thumb" style="display:flex; align-items:center; justify-content:center; color:var(--af-text-muted);">No preview</div>
         }
@@ -43,5 +43,5 @@ export class PhotoCardComponent {
   readonly photo = input.required<PhotoItem>();
   readonly cardClick = output<PhotoItem>();
 
-  readonly slotLabel = computed(() => PROFILE_SLOT_LABELS[this.photo().bestSlot] ?? '');
+  readonly slotLabel = computed(() => PHOTO_SLOT_LABELS[this.photo().bestSlot] ?? '');
 }

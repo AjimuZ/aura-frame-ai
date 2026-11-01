@@ -3,12 +3,12 @@
 
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { AURA_FRAME_API } from '../tokens/aura-frame-api.token';
-import { ProfileService } from './profile.service';
+import { LibraryService } from './library.service';
 import {
   type AnalysisConfig,
   type AnalysisStatus,
   type PhotoItem,
-  type ProfileSlot,
+  type PhotoSlot,
   type ReviewSession,
   FINAL_SET_SLOTS,
 } from '../models';
@@ -19,7 +19,7 @@ export interface LogLine {
 }
 
 const IDLE_STATUS: AnalysisStatus = {
-  profileId: null,
+  libraryId: null,
   step: 'idle',
   running: false,
   paused: false,
@@ -31,17 +31,17 @@ const IDLE_STATUS: AnalysisStatus = {
 @Injectable({ providedIn: 'root' })
 export class PhotoStore {
   private readonly api = inject(AURA_FRAME_API);
-  readonly profileService = inject(ProfileService);
+  readonly libraryService = inject(LibraryService);
 
   readonly photos = signal<PhotoItem[]>([]);
   readonly status = signal<AnalysisStatus>({ ...IDLE_STATUS });
   readonly logs = signal<LogLine[]>([]);
   readonly selectedFolder = signal<string | null>(null);
 
-  // Manual curation state for the Review and Profile Builder screens.
+  // Manual curation state for the Review and Library Builder screens.
   readonly shortlist = signal<string[]>([]);
   readonly compareSelection = signal<string[]>([]);
-  // Per-slot lock: maps a profile slot to the photo id pinned into it.
+  // Per-slot lock: maps a photo slot to the photo id pinned into it.
   readonly lockedSlots = signal<Record<string, string>>({});
 
   // Aggregate dashboard statistics derived from the current photo set.
@@ -62,14 +62,14 @@ export class PhotoStore {
     };
   });
 
-  // The balanced final set of six photos keyed by profile slot. Locked slots keep their
+  // The balanced final set of six photos keyed by photo slot. Locked slots keep their
   // pinned photo; the rest are filled with the best remaining candidates.
   readonly finalSet = computed(() => {
     const photos = [...this.photos()].sort((a, b) => b.finalScore - a.finalScore);
     const byId = new Map(photos.map((p) => [p.id, p] as const));
     const locks = this.lockedSlots();
     const used = new Set<string>(Object.values(locks));
-    const set: { slot: ProfileSlot; photo: PhotoItem | null; locked: boolean }[] = [];
+    const set: { slot: PhotoSlot; photo: PhotoItem | null; locked: boolean }[] = [];
     for (const slot of FINAL_SET_SLOTS) {
       const lockedId = locks[slot];
       if (lockedId && byId.has(lockedId)) {
@@ -88,7 +88,7 @@ export class PhotoStore {
   constructor() {
     // Stream live analysis events into the status, logs, and scored photos.
     this.api.onProgress((event) => {
-      if (event.profileId !== this.profileService.activeProfileId()) {
+      if (event.libraryId !== this.libraryService.activeLibraryId()) {
         return;
       }
       if (event.type === 'progress') {
@@ -137,38 +137,38 @@ export class PhotoStore {
   }
 
   async initialize(): Promise<void> {
-    await this.profileService.load();
-    await this.loadActiveProfile();
+    await this.libraryService.load();
+    await this.loadActiveLibrary();
   }
 
-  private activeProfileId(): string {
-    const profileId = this.profileService.activeProfileId();
-    if (!profileId) {
-      throw new Error('No local profile is active.');
+  private activeLibraryId(): string {
+    const libraryId = this.libraryService.activeLibraryId();
+    if (!libraryId) {
+      throw new Error('No local library is active.');
     }
-    return profileId;
+    return libraryId;
   }
 
-  private resetProfileState(): void {
-    const profile = this.profileService.activeProfile();
+  private resetLibraryState(): void {
+    const library = this.libraryService.activeLibrary();
     this.photos.set([]);
-    this.status.set({ ...IDLE_STATUS, profileId: profile?.id ?? null });
+    this.status.set({ ...IDLE_STATUS, libraryId: library?.id ?? null });
     this.logs.set([]);
-    this.selectedFolder.set(profile?.inputFolder ?? null);
+    this.selectedFolder.set(library?.inputFolder ?? null);
     this.shortlist.set([]);
     this.compareSelection.set([]);
     this.lockedSlots.set({});
   }
 
-  private async loadActiveProfile(): Promise<void> {
-    const profileId = this.activeProfileId();
-    this.resetProfileState();
+  private async loadActiveLibrary(): Promise<void> {
+    const libraryId = this.activeLibraryId();
+    this.resetLibraryState();
     const [photos, status, session] = await Promise.all([
-      this.api.getPhotos(profileId),
-      this.api.getAnalysisStatus(profileId),
-      this.api.getReviewSession(profileId),
+      this.api.getPhotos(libraryId),
+      this.api.getAnalysisStatus(libraryId),
+      this.api.getReviewSession(libraryId),
     ]);
-    if (profileId !== this.profileService.activeProfileId()) {
+    if (libraryId !== this.libraryService.activeLibraryId()) {
       return;
     }
     this.photos.set(photos);
@@ -193,29 +193,29 @@ export class PhotoStore {
 
   // Loads the analyzed photo list from the engine output.
   async refreshPhotos(): Promise<void> {
-    const profileId = this.activeProfileId();
-    const photos = await this.api.getPhotos(profileId);
-    if (profileId === this.profileService.activeProfileId()) {
+    const libraryId = this.activeLibraryId();
+    const photos = await this.api.getPhotos(libraryId);
+    if (libraryId === this.libraryService.activeLibraryId()) {
       this.photos.set(photos);
     }
   }
 
   // Refreshes the cached analysis status from the bridge.
   async refreshStatus(): Promise<void> {
-    const profileId = this.activeProfileId();
-    const status = await this.api.getAnalysisStatus(profileId);
-    if (profileId === this.profileService.activeProfileId()) {
+    const libraryId = this.activeLibraryId();
+    const status = await this.api.getAnalysisStatus(libraryId);
+    if (libraryId === this.libraryService.activeLibraryId()) {
       this.status.set(status);
     }
   }
 
   // Opens the native folder picker and stores the chosen folder.
   async selectFolder(): Promise<string | null> {
-    const profileId = this.activeProfileId();
-    const folder = await this.api.selectPhotoFolder(profileId);
+    const libraryId = this.activeLibraryId();
+    const folder = await this.api.selectPhotoFolder(libraryId);
     if (folder) {
       this.selectedFolder.set(folder);
-      this.profileService.setInputFolder(profileId, folder);
+      this.libraryService.setInputFolder(libraryId, folder);
     }
     return folder;
   }
@@ -223,74 +223,74 @@ export class PhotoStore {
   // Starts the analysis pipeline for the given configuration.
   async startAnalysis(config: AnalysisConfig): Promise<void> {
     this.logs.set([]);
-    const profileId = this.activeProfileId();
+    const libraryId = this.activeLibraryId();
     this.status.set({
       ...IDLE_STATUS,
-      profileId,
+      libraryId,
       running: true,
       step: 'indexing',
       message: 'Starting...',
     });
-    await this.api.startAnalysis(profileId, config);
+    await this.api.startAnalysis(libraryId, config);
   }
 
   pause(): Promise<void> {
     this.status.update((s) => ({ ...s, paused: true }));
-    return this.api.pauseAnalysis(this.activeProfileId());
+    return this.api.pauseAnalysis(this.activeLibraryId());
   }
 
   resume(): Promise<void> {
     this.status.update((s) => ({ ...s, paused: false }));
-    return this.api.resumeAnalysis(this.activeProfileId());
+    return this.api.resumeAnalysis(this.activeLibraryId());
   }
 
   cancel(): Promise<void> {
     this.status.update((s) => ({ ...s, running: false, step: 'idle', message: 'Cancelled' }));
-    return this.api.cancelAnalysis(this.activeProfileId());
+    return this.api.cancelAnalysis(this.activeLibraryId());
   }
 
   openOutputFolder(): Promise<void> {
-    return this.api.openOutputFolder(this.activeProfileId());
+    return this.api.openOutputFolder(this.activeLibraryId());
   }
 
   openReportsFolder(): Promise<void> {
-    return this.api.openReportsFolder(this.activeProfileId());
+    return this.api.openReportsFolder(this.activeLibraryId());
   }
 
   // --- OpenAI Quality Mode (optional cloud flow) ---
 
   // Estimates the OpenAI cost for the gated set (no API calls).
   estimateOpenAiCost() {
-    return this.api.estimateOpenAiCost(this.activeProfileId());
+    return this.api.estimateOpenAiCost(this.activeLibraryId());
   }
 
-  // Probes OpenAI key/reachability/models for the active profile.
+  // Probes OpenAI key/reachability/models for the active library.
   getOpenAiStatus() {
-    return this.api.getOpenAiStatus(this.activeProfileId());
+    return this.api.getOpenAiStatus(this.activeLibraryId());
   }
 
   // Starts the optional OpenAI Quality Mode run (streams progress like the local analysis).
   async startOpenAiQuality(options: { budgetUsd?: number; stage?: string }): Promise<void> {
     this.logs.set([]);
-    const profileId = this.activeProfileId();
+    const libraryId = this.activeLibraryId();
     this.status.set({
       ...IDLE_STATUS,
-      profileId,
+      libraryId,
       running: true,
       step: 'broad_scan',
       message: 'Starting OpenAI Quality Mode...',
     });
-    await this.api.startOpenAiQuality(profileId, options);
+    await this.api.startOpenAiQuality(libraryId, options);
   }
 
   // Re-exports the OpenAI Quality Mode output folders + reports from stored results.
   exportOpenAiResults(): Promise<void> {
-    return this.api.exportOpenAiResults(this.activeProfileId());
+    return this.api.exportOpenAiResults(this.activeLibraryId());
   }
 
   // Exports one original photo through a native Save As dialog, regardless of its status.
   exportPhoto(photoId: string): Promise<boolean> {
-    return this.api.exportPhoto(this.activeProfileId(), photoId);
+    return this.api.exportPhoto(this.activeLibraryId(), photoId);
   }
 
   // Exports the current final set (or an explicit selection) to ordered folders.
@@ -300,7 +300,7 @@ export class PhotoStore {
       this.finalSet()
         .map((slot) => slot.photo?.id)
         .filter((id): id is string => !!id);
-    return this.api.exportFinalSet(this.activeProfileId(), ids);
+    return this.api.exportFinalSet(this.activeLibraryId(), ids);
   }
 
   // Applies a manual status or slot change to a single photo in the store.
@@ -327,8 +327,8 @@ export class PhotoStore {
     });
   }
 
-  // Pins or releases the photo currently shown in a profile slot.
-  toggleLock(slot: ProfileSlot, photoId: string | null): void {
+  // Pins or releases the photo currently shown in a photo slot.
+  toggleLock(slot: PhotoSlot, photoId: string | null): void {
     this.lockedSlots.update((locks) => {
       const next = { ...locks };
       if (next[slot]) {
@@ -340,7 +340,7 @@ export class PhotoStore {
     });
   }
 
-  isLocked(slot: ProfileSlot): boolean {
+  isLocked(slot: PhotoSlot): boolean {
     return !!this.lockedSlots()[slot];
   }
 
@@ -355,42 +355,42 @@ export class PhotoStore {
       locks[entry.slot] = entry.locked;
     }
     const session: ReviewSession = { slotAssignments, locks, shortlist: this.shortlist() };
-    return this.api.saveReviewSession(this.activeProfileId(), session);
+    return this.api.saveReviewSession(this.activeLibraryId(), session);
   }
 
-  async switchProfile(profileId: string): Promise<void> {
-    if (profileId === this.profileService.activeProfileId()) {
+  async switchLibrary(libraryId: string): Promise<void> {
+    if (libraryId === this.libraryService.activeLibraryId()) {
       return;
     }
     if (this.photos().length > 0) {
       await this.saveReviewSession();
     }
-    await this.profileService.activate(profileId);
-    await this.loadActiveProfile();
+    await this.libraryService.activate(libraryId);
+    await this.loadActiveLibrary();
   }
 
-  async createProfile(name: string): Promise<void> {
+  async createLibrary(name: string): Promise<void> {
     if (this.photos().length > 0) {
       await this.saveReviewSession();
     }
-    await this.profileService.create(name);
-    await this.loadActiveProfile();
+    await this.libraryService.create(name);
+    await this.loadActiveLibrary();
   }
 
-  async renameProfile(profileId: string, name: string): Promise<void> {
-    await this.profileService.rename(profileId, name);
+  async renameLibrary(libraryId: string, name: string): Promise<void> {
+    await this.libraryService.rename(libraryId, name);
   }
 
-  async deleteProfile(profileId: string): Promise<void> {
-    const wasActive = profileId === this.profileService.activeProfileId();
-    await this.profileService.delete(profileId);
+  async deleteLibrary(libraryId: string): Promise<void> {
+    const wasActive = libraryId === this.libraryService.activeLibraryId();
+    await this.libraryService.delete(libraryId);
     if (wasActive) {
-      await this.loadActiveProfile();
+      await this.loadActiveLibrary();
     }
   }
 
   async clearGeneratedData(): Promise<void> {
-    await this.api.clearGeneratedData(this.activeProfileId());
-    this.resetProfileState();
+    await this.api.clearGeneratedData(this.activeLibraryId());
+    this.resetLibraryState();
   }
 }

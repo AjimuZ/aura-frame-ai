@@ -25,10 +25,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/review/review.component').then((m) => m.ReviewComponent),
   },
   {
-    path: 'profile-builder',
+    path: 'library-builder',
     loadComponent: () =>
-      import('./features/profile-builder/profile-builder.component').then(
-        (m) => m.ProfileBuilderComponent,
+      import('./features/library-builder/library-builder.component').then(
+        (m) => m.LibraryBuilderComponent,
       ),
   },
   {

@@ -10,8 +10,8 @@ import { registerFilesystemIpc } from './ipc/filesystem.ipc';
 import { registerAnalysisIpc, disposeAnalysisIpc, isAnalysisRunning } from './ipc/analysis.ipc';
 import { registerSettingsIpc } from './ipc/settings.ipc';
 import { dataRoot } from './ipc/paths';
-import { ProfileRegistryStore } from './ipc/profile-store';
-import { registerProfilesIpc } from './ipc/profiles.ipc';
+import { LibraryRegistryStore } from './ipc/library-store';
+import { registerLibrariesIpc } from './ipc/libraries.ipc';
 
 const isDev = process.env['AURA_DEV'] === '1';
 const DEV_SERVER_URL = 'http://localhost:4200';
@@ -36,11 +36,11 @@ const MIME_BY_EXT: Record<string, string> = {
 
 // Serves a local image file, but only if it resolves inside the working directory.
 // This keeps the trust boundary narrow: originals and arbitrary paths are not exposed.
-function handleMediaRequest(profiles: ProfileRegistryStore, request: Request): Response {
-  const profileId = new URL(request.url).searchParams.get('profileId') ?? '';
+function handleMediaRequest(libraries: LibraryRegistryStore, request: Request): Response {
+  const libraryId = new URL(request.url).searchParams.get('libraryId') ?? '';
   const requested = new URL(request.url).searchParams.get('path') ?? '';
   try {
-    const resolved = profiles.resolveWorkingFile(profileId, requested);
+    const resolved = libraries.resolveWorkingFile(libraryId, requested);
     if (
       !resolved ||
       !fs.existsSync(resolved) ||
@@ -97,16 +97,16 @@ function hardenNavigation(window: BrowserWindow): void {
 
 void app.whenReady().then(() => {
   try {
-    const profiles = new ProfileRegistryStore(dataRoot());
-    profiles.initialize();
-    protocol.handle('afmedia', (request) => handleMediaRequest(profiles, request));
+    const libraries = new LibraryRegistryStore(dataRoot());
+    libraries.initialize();
+    protocol.handle('afmedia', (request) => handleMediaRequest(libraries, request));
     registerSettingsIpc();
-    registerFilesystemIpc(profiles);
-    registerProfilesIpc(profiles, isAnalysisRunning);
+    registerFilesystemIpc(libraries);
+    registerLibrariesIpc(libraries, isAnalysisRunning);
 
     const window = createWindow();
     hardenNavigation(window);
-    registerAnalysisIpc(() => BrowserWindow.getAllWindows(), profiles);
+    registerAnalysisIpc(() => BrowserWindow.getAllWindows(), libraries);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
@@ -116,7 +116,7 @@ void app.whenReady().then(() => {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    dialog.showErrorBox('AuraFrame profile migration failed', message);
+    dialog.showErrorBox('AuraFrame library store failed to start', message);
     app.quit();
   }
 });

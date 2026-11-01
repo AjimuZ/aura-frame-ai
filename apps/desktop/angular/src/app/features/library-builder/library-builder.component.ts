@@ -1,18 +1,18 @@
-// Profile Builder: shows the balanced final set of six photos by slot.
+// Library Builder: shows the balanced final set of six photos by slot.
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 import { ScoreBadgeComponent } from '../../shared/components/score-badge/score-badge.component';
 import { FileUrlPipe } from '../../shared/pipes/file-url.pipe';
 import { PhotoStore } from '../../core/services/photo-store.service';
-import { PROFILE_SLOT_LABELS, type ProfileSlot } from '../../core/models';
+import { PHOTO_SLOT_LABELS, type PhotoSlot } from '../../core/models';
 
 @Component({
-  selector: 'af-profile-builder',
+  selector: 'af-library-builder',
   standalone: true,
   imports: [PageHeaderComponent, ScoreBadgeComponent, FileUrlPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <af-page-header title="Profile Builder" [subtitle]="'A balanced set of six photos for ' + (activeProfile()?.name ?? 'the active profile')">
+    <af-page-header title="Library Builder" [subtitle]="'A balanced set of six photos for ' + (activeLibrary()?.name ?? 'the active library')">
       <button class="af-button-secondary" (click)="store.refreshPhotos()">Generate new set</button>
       <button class="af-button-secondary" (click)="save()">Save session</button>
       <button class="af-button-primary" (click)="export()">Export final set</button>
@@ -29,7 +29,7 @@ import { PROFILE_SLOT_LABELS, type ProfileSlot } from '../../core/models';
           </div>
           @if (slot.photo; as photo) {
             @if (photo.thumbnailPath) {
-              <img [src]="photo.thumbnailPath | fileUrl: photo.profileId" [alt]="photo.fileName" style="width:100%; aspect-ratio:4/5; object-fit:cover;" />
+              <img [src]="photo.thumbnailPath | fileUrl: photo.libraryId" [alt]="photo.fileName" style="width:100%; aspect-ratio:4/5; object-fit:cover;" />
             } @else {
               <div style="aspect-ratio:4/5; background:var(--af-bg-deep); display:flex; align-items:center; justify-content:center; color:var(--af-text-muted);">No preview</div>
             }
@@ -69,17 +69,17 @@ import { PROFILE_SLOT_LABELS, type ProfileSlot } from '../../core/models';
     </div>
   `,
 })
-export class ProfileBuilderComponent {
+export class LibraryBuilderComponent {
   readonly store = inject(PhotoStore);
   readonly finalSet = this.store.finalSet;
-  readonly activeProfile = this.store.profileService.activeProfile;
+  readonly activeLibrary = this.store.libraryService.activeLibrary;
   readonly saved = signal(false);
   readonly exportingPhotoId = signal<string | null>(null);
   readonly exportedPhotoId = signal<string | null>(null);
   readonly exportError = signal<string | null>(null);
 
-  label(slot: ProfileSlot): string {
-    return PROFILE_SLOT_LABELS[slot];
+  label(slot: PhotoSlot): string {
+    return PHOTO_SLOT_LABELS[slot];
   }
 
   export(): void {

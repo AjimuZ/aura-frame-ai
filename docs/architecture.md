@@ -110,8 +110,8 @@ under `ng serve` stays too.
 
 | Bridge method | Implementation in Electron main (target) |
 | --- | --- |
-| `getProfileState`, `createProfile`, `renameProfile`, `activateProfile` | Local registry, as today (renamed to libraries in P01) |
-| `deleteProfile` | Local registry, plus `DELETE /api/libraries/{id}/data` |
+| `getLibraryState`, `createLibrary`, `renameLibrary`, `activateLibrary` | Local registry, as today |
+| `deleteLibrary` | Local registry, plus `DELETE /api/libraries/{id}/data` |
 | `selectPhotoFolder` | Native dialog, as today. The mount happens before the next run |
 | `startAnalysis`, `pauseAnalysis`, `resumeAnalysis`, `cancelAnalysis`, `getAnalysisStatus` | `/api/libraries/{id}/runs` and `/runs/current` |
 | `onProgress` | Main consumes `GET /api/libraries/{id}/events` (SSE) and forwards it over IPC |
@@ -146,7 +146,7 @@ Verified on 2026-11-01. Details and defects are in the [assessment](assessment.m
 
 ```text
 Angular UI -> Electron renderer -> typed preload bridge -> Electron main process
-  -> Python engine as a child process (JSONL on stdout, one SQLite per profile)
+  -> Python engine as a child process (JSONL on stdout, one SQLite per library)
   -> OpenCV and MediaPipe measurements -> OpenCLIP and LAION aesthetic score on CPU
   -> Ollama HTTP client for local AI review
   -> optional OpenAI API flow in engine/src/cloud/
@@ -157,7 +157,7 @@ Angular UI -> Electron renderer -> typed preload bridge -> Electron main process
 | Today | Target | Package |
 | --- | --- | --- |
 | Electron 33.4.11 | A supported major version | P01 |
-| `apps/desktop/electron/ipc/profile-store.ts` | Stays, as libraries, without the legacy migration and hard-coded name | P01 |
+| `apps/desktop/electron/ipc/library-store.ts` | Done in P01: libraries, without the legacy migration and hard-coded name | P01 |
 | `apps/desktop/electron/ipc/analysis.ipc.ts` | Same channels, HTTP to the API instead of a child process | P02 |
 | `apps/desktop/electron/ipc/paths.ts` | Python paths removed | P02 |
 | `apps/desktop/electron/main.ts`, `filesystem.ipc.ts`, `settings.ipc.ts`, `preload.ts` | Stay, with small changes | P02 |

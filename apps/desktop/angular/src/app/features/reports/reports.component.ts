@@ -11,7 +11,7 @@ import type { PhotoCategory } from '../../core/models';
   imports: [PageHeaderComponent, EmptyStateComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <af-page-header title="Reports" [subtitle]="'Distribution and curation summary for ' + (activeProfile()?.name ?? 'the active profile')">
+    <af-page-header title="Reports" [subtitle]="'Distribution and curation summary for ' + (activeLibrary()?.name ?? 'the active library')">
       <button class="af-button-secondary" (click)="store.openReportsFolder()">Open reports folder</button>
     </af-page-header>
 
@@ -62,7 +62,7 @@ import type { PhotoCategory } from '../../core/models';
 export class ReportsComponent {
   readonly store = inject(PhotoStore);
   readonly photos = this.store.photos;
-  readonly activeProfile = this.store.profileService.activeProfile;
+  readonly activeLibrary = this.store.libraryService.activeLibrary;
 
   readonly distribution = computed(() => {
     const photos = this.photos();
