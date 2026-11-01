@@ -116,26 +116,68 @@
       }
     },
     {
-      "id": "P01.2.1",
-      "title": "Remove the retired vocabulary and add the test that keeps it out",
-      "description": "Remove the retired product vocabulary from code, prompts, schemas, names, comments, tests and `package.json`. Rename `profile` to `library` and the AI fields to neutral names.",
+      "id": "P01.2.1.1",
+      "title": "Neutralize the retired vocabulary in the engine and its prompts",
+      "description": "Rename the score fields and remove the retired vocabulary in engine/, and rewrite the prompts as general photograph judgment.",
+      "acceptanceCriteria": [
+        "Score fields in the engine schema, database, config and reports have neutral names",
+        "A search of engine/ for the retired terms finds nothing, using the same identifier-aware meaning as the later guard test",
+        "The local and cloud prompt texts describe general photograph judgment and contain no retired concept",
+        "The cloud flow gets vocabulary changes only and no new behavior"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Retired terms, base64: ZGF0aW5n. Never write them in plain text. Order is deliberate: the guard test comes last, so it needs no allowlist. The profile rename belongs to P01.2.2, not here. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. No data migration is needed, because a rerun recreates the data (ADR 0001). Electron and Angular follow in the next task, so record the old and new field names in your final report.",
+      "dependsOn": [
+        "P01.1"
+      ],
+      "splitFrom": "P01.2.1",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "P01.2 Remove the retired product vocabulary from code, prompts, schemas, names, comments,"
+      }
+    },
+    {
+      "id": "P01.2.1.2",
+      "title": "Neutralize the retired vocabulary in Electron, Angular and package.json",
+      "description": "Rename the matching fields in the Electron contracts, the Angular models, the mock API and the dashboard, and remove the term from package.json.",
+      "acceptanceCriteria": [
+        "Score fields in Electron contracts and Angular models have neutral names, and the JSON contract between them and the engine still matches",
+        "A search of apps/ and package.json for the retired terms finds nothing",
+        "The package.json description calls the product a local AI photo curation tool"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": "Retired terms, base64: ZGF0aW5n. Never write them in plain text. Order is deliberate: the guard test comes last, so it needs no allowlist. The profile rename belongs to P01.2.2, not here. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. The engine side was renamed by the previous task. Read its field names from engine/, do not rename them again.",
+      "dependsOn": [
+        "P01.2.1.1"
+      ],
+      "splitFrom": "P01.2.1",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "2. P01 — Foundation",
+        "line": "P01.2 Remove the retired product vocabulary from code, prompts, schemas, names, comments,"
+      }
+    },
+    {
+      "id": "P01.2.1.3",
+      "title": "Add the test that keeps the retired vocabulary out",
+      "description": "Add tests/retired-terms.test.cjs, and record the removal of the vocabulary in the documents.",
       "acceptanceCriteria": [
         "tests/retired-terms.test.cjs scans `git ls-files -co --exclude-standard` output, holds its term list base64-encoded, and fails naming file and line",
         "Matching is identifier-aware: snake_case and camelCase forms and any letter case match, while words that merely contain the letters, such as updating or validating, do not",
         "A test proves the matcher catches a planted term in a temporary file",
         "The test passes on the repository, including scripts/ralph/ and package.json",
-        "Score fields in the engine schema, database, config, reports, Electron contracts and Angular models have neutral names, and the JSON contract between them still matches",
-        "The local and cloud prompt texts describe general photograph judgment and contain no retired concept",
-        "The cloud flow gets vocabulary changes only and no new behavior",
         "docs/assessment.md and CHANGELOG.md record the change"
       ],
       "priority": 7,
       "passes": false,
-      "notes": "BLOCKED: P01.2.1.2: unknown dependency Add the retired-terms guard test; P01.2.1.3: unknown dependency Neutralize the retired vocabulary in the engine and the prompts\nRetired terms, base64: ZGF0aW5n. Never write them in plain text. No data migration is needed, because a rerun recreates the data (ADR 0001). The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
+      "notes": "Retired terms, base64: ZGF0aW5n. Never write them in plain text. Order is deliberate: the guard test comes last, so it needs no allowlist. The profile rename belongs to P01.2.2, not here. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. The words updating and validating in scripts/ralph/prd.json are ordinary words and must not match. Sessions cannot edit that file, so report any real match there.",
       "dependsOn": [
-        "P01.1"
+        "P01.2.1.2"
       ],
-      "splitFrom": "P01.2",
+      "splitFrom": "P01.2.1",
       "source": {
         "path": "docs/roadmap.md",
         "section": "2. P01 — Foundation",
@@ -145,7 +187,7 @@
     {
       "id": "P01.2.2",
       "title": "Rename profile to library across Electron, Angular and the engine",
-      "description": "Remove the retired product vocabulary from code, prompts, schemas, names, comments, tests and `package.json`. Rename `profile` to `library` and the AI fields to neutral names.",
+      "description": "Rename `profile` to `library` across Electron, the preload bridge, Angular, the engine and the tests. The retired vocabulary is already gone by this point.",
       "acceptanceCriteria": [
         "A case-insensitive search for `profile` in apps/, engine/ and package.json finds nothing",
         "Bridge methods, IPC channels, contracts, preload, the mock API, Angular services, models and UI text use library, and Angular and Electron still agree at run time",
@@ -157,7 +199,7 @@
       "passes": false,
       "notes": "Commit message: never name the project instructions file, because the validator refuses that word even inside a file name. Write \"project instructions\" instead. Sessions cannot delete or move files: rm, mv and git rm are not available to them. Finish every other edit, then block with the exact list of files to remove; the supervising session removes them and the runner verifies the result. The runner scan refuses a deleted or renamed test file, so edit test files in place and never remove one. So tests/profile-store.test.cjs keeps its file name for now and only its content changes. Source files such as profile-store.ts and the profile-builder feature folder are renames, which fall under the rule above.",
       "dependsOn": [
-        "P01.2.1"
+        "P01.2.1.3"
       ],
       "splitFrom": "P01.2",
       "source": {
@@ -268,11 +310,13 @@
       "notes": "",
       "dependsOn": [
         "P01.1",
-        "P01.2.1",
         "P01.2.2",
         "P01.3",
         "P01.5",
-        "P01.6"
+        "P01.6",
+        "P01.2.1.1",
+        "P01.2.1.2",
+        "P01.2.1.3"
       ],
       "source": {
         "reference": "docs/roadmap.md",
