@@ -496,7 +496,7 @@
       ],
       "priority": 18,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: still failing after 3 attempts: the review found the documentation inconsistent with the change; the review did not pass the change; `start.sh:271-272` still prints that the app does not use the services until P02.4. This change makes that false: `analysis:start` now brings the stack up and calls the API. It also contradicts `docs/operations.md:3` and `docs/operations.md:106`, which says the script prints only that the window is not launched because its container build comes in P02.5. Reword the message to match, keep it on stderr, and rerun `tests/start-sh.test.cjs`.; Closing the win",
       "dependsOn": [
         "P02.1",
         "P02.4.1"
