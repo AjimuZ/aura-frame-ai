@@ -26,6 +26,8 @@
 
 ### Added
 
+- `tests/retired-terms.test.cjs`, a guard test that fails, naming file and line, when the retired
+  product vocabulary reappears in any tracked or unignored file.
 - `scripts/check.sh`, one entry point for lint, builds, Node tests and the containerized engine tests,
   with `--node`, `--engine` and `--integration` subsets and visible SKIP lines.
 - Documentation index, requirements, roadmap with exit checks, testing guide with dated results, risks,

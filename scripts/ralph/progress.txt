@@ -7,6 +7,7 @@
 - When renaming a field that crosses layers, grep every spelling (snake_case, camelCase, DB column, config key, local variable) before declaring the rename complete.
 - Copy acceptance criteria character for character into review criteria, since the runner compares exact text.
 - Verify a pre-existing working-tree change with the project checks and searches before reporting it done.
+- Keep banned terms base64-encoded in guard tests and match by whole identifier tokens (split on non-alphanumerics, underscores and camelCase boundaries) to avoid substring false positives.
 
 ---
 
@@ -86,4 +87,25 @@ The edits are in `engine/config.yaml`, `engine/src/db.py`, `engine/src/final_ran
   - The desktop app now uses overallScore and styleScore, which map to the engine's overall_score and style_score.
   - Lint, both builds and the 4 Node tests pass. The engine pytest was not run in this session.
   - The guard test can search apps/ and package.json without an allowlist, because those searches find nothing.
+---
+
+## 2026-11-01T19:05:52Z - P01.2.1.3
+- I added tests/retired-terms.test.cjs and recorded it in docs/assessment.md and CHANGELOG.md. `node --test tests/retired-terms.test.cjs` passes all 3 tests on the repository, including scripts/ralph/ and package.json. I did not run `npm run lint`, the builds or the full Node test suite. The engine pytest was not run either.
+
+The test scans the output of `git ls-files -co --exclude-standard`, with git run through child_process with `shell:false`. It holds the term list base64-encoded. A violation is reported as `file:line`. Unreadable and binary files and the test file itself are skipped.
+
+Matching splits each line into whole words on underscores, hyphens and camelCase boundaries, then compares them case-insensitively. Words that merely contain the letters, such as updating or validating, do not match.
+
+The three tests:
+- **Repository scan:** no retired term appears anywhere in the repository.
+- **Planted term:** a term written to a temporary file is reported as `planted.txt:2`.
+- **Identifier forms:** snake_case, camelCase, upper-case, capitalised and hyphenated forms match. updating, validating, updatingState and validating_input do not.
+
+I left the roadmap checkbox alone and found no real matches in scripts/ralph/ to report.
+- Files changed: tests/retired-terms.test.cjs, docs/assessment.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The guard test passes on the whole repository with no allowlist; it only skips itself.
+  - The new test does not depend on dist-electron, so it runs without building first.
+  - Only the new test file was run this session; lint, builds and the full Node test glob were not run.
+  - The profile rename remains for P01.2.2.
 ---

@@ -86,8 +86,10 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 ## Retired vocabulary
 
 On 2026-11-01, the search for the retired product terms found 64 occurrences in 26 files, including
-the documents since replaced. The code is untouched, so these terms remain in the engine, the Electron
-contracts, the Angular models and `package.json`. P01.2 removes them, and a test keeps them out.
+the documents since replaced. The engine, the Electron contracts, the Angular models and `package.json`
+have since been cleaned. `tests/retired-terms.test.cjs` now scans every file listed by
+`git ls-files -co --exclude-standard`, matches whole identifier words in any letter case, and fails
+naming file and line. The profile rename is still pending (P01.2.2).
 
 ## How to improve the project
 
