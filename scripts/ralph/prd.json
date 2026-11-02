@@ -952,7 +952,7 @@
       ],
       "priority": 32,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: The pinned Face Landmarker entry requires the real upstream commit or URL, size in bytes and SHA-256 of face_landmarker.task. They are absent from the repository and the task notes, and I cannot obtain or verify them offline. The owner needs to supply those values in the task notes, or authorize a one-time lookup or download. Alternatively, the owner can split the model pin into its own task. After that, the rest of the task (the tasks-API rewrite, people_penalty, missing-model guidance) is feasible in one session.",
       "dependsOn": [
         "P04.3"
       ],
