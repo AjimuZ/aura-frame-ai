@@ -91,26 +91,82 @@ def embed_photos(photos: list[Photo], config: dict[str, Any], conn: Any) -> None
             events.progress("embeddings", i, total, f"embeddings {i}/{total}")
 
 
-# Greedy agglomerative clustering by cosine distance; assigns cluster_id to each photo.
+_DEFAULT_CLUSTER_DISTANCE = 0.12
+_DEFAULT_CLUSTER_SECONDS = 300.0
+_TIME_FORMATS = ("%Y:%m:%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S")
+
+
+# Capture time in seconds (naive wall clock) from EXIF DateTimeOriginal, else created_at; None when
+# missing or unparsable, so such a photo is grouped by embedding alone.
+def _capture_seconds(photo: Photo) -> float | None:
+    from datetime import datetime
+
+    for raw in (photo.exif.get("DateTimeOriginal"), photo.created_at):
+        text = str(raw).strip()[:19] if raw else ""
+        for fmt in _TIME_FORMATS:
+            try:
+                return datetime.strptime(text, fmt).timestamp()
+            except ValueError:
+                continue
+    return None
+
+
+# Groups non-rejected photos that have an embedding; sets cluster_id on each and returns the group
+# count. Method: complete linkage. Two photos are compatible when their cosine distance is at most
+# embeddings.cluster_distance and, when both have capture times, those are at most
+# embeddings.cluster_seconds apart. Compatible pairs are merged closest first (ties by photo id),
+# and two groups merge only if EVERY cross pair is compatible, so a chain of look-alikes cannot
+# drag unrelated photos together. Input is sorted by id first, so the partition does not depend on
+# input order; groups are numbered by their smallest member id. Vectors of different sizes are never
+# compared. Photos without a usable embedding keep cluster_id -1.
 def assign_clusters(photos: list[Photo], config: dict[str, Any], conn: Any) -> int:
+    cfg = config.get("embeddings", {})
+    distance = float(cfg.get("cluster_distance", _DEFAULT_CLUSTER_DISTANCE))
+    window = float(cfg.get("cluster_seconds", _DEFAULT_CLUSTER_SECONDS))
     vectors = db.load_embeddings(conn)
-    distance = float(config.get("embeddings", {}).get("cluster_distance", 0.12))
-    centroids: list[np.ndarray] = []
+    members = sorted(
+        (p for p in photos if p.status != "rejected" and vectors.get(p.id) is not None),
+        key=lambda p: p.id,
+    )
     for photo in photos:
-        vec = vectors.get(photo.id)
-        if vec is None or photo.status == "rejected":
+        photo.cluster_id = -1
+    n = len(members)
+    times = [_capture_seconds(p) for p in members]
+
+    edges: list[tuple[float, int, int]] = []
+    by_shape: dict[tuple[int, ...], list[int]] = {}
+    for idx, photo in enumerate(members):
+        by_shape.setdefault(vectors[photo.id].shape, []).append(idx)
+    for indices in by_shape.values():
+        matrix = np.stack([vectors[members[i].id] for i in indices]).astype(np.float64)
+        matrix /= np.linalg.norm(matrix, axis=1, keepdims=True) + 1e-8
+        for row, i in enumerate(indices):
+            dists = 1.0 - matrix[row + 1 :] @ matrix[row]
+            for offset in np.nonzero(dists <= distance)[0]:
+                j = indices[row + 1 + int(offset)]
+                if times[i] is not None and times[j] is not None and abs(times[i] - times[j]) > window:
+                    continue
+                edges.append((round(float(dists[offset]), 9), i, j))
+    edges.sort()
+
+    compatible = {(i, j) for _, i, j in edges}
+    groups: dict[int, list[int]] = {i: [i] for i in range(n)}
+    owner = list(range(n))
+    for _, i, j in edges:
+        a, b = owner[i], owner[j]
+        if a == b:
             continue
-        assigned = -1
-        for idx, centroid in enumerate(centroids):
-            # Vectors of another model (another size) are never comparable, so they never join a cluster.
-            if centroid.shape == vec.shape and _cosine_distance(vec, centroid) <= distance:
-                assigned = idx
-                break
-        if assigned == -1:
-            centroids.append(vec)
-            assigned = len(centroids) - 1
-        photo.cluster_id = assigned
-    return len(centroids)
+        if all((min(x, y), max(x, y)) in compatible for x in groups[a] for y in groups[b]):
+            for x in groups[b]:
+                owner[x] = a
+            groups[a].extend(groups.pop(b))
+
+    # members is sorted by id, so the smallest index in a group is its smallest member id.
+    ordered = sorted(groups.values(), key=min)
+    for cluster_id, group in enumerate(ordered):
+        for idx in group:
+            members[idx].cluster_id = cluster_id
+    return len(ordered)
 
 
 # Cosine distance between two vectors (0 = identical direction, 2 = opposite).

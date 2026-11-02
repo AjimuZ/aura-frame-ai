@@ -101,14 +101,22 @@ matching against fixed labels gives a content tag: `portrait`, `group`, `landsca
 Implemented in P04.3 (`embed_siglip2` in `engine/src/neural_stages.py`): batches of `models.siglip2.batch_size` give
 one float32 vector per photo, divided by its length, stored in the `embeddings` table with the model name. A zero,
 non-finite or wrongly shaped answer stores no vector, so grouping skips that photo; the old colour-histogram
-substitute is no longer used by `analyze`. Clustering never compares vectors of different sizes. Content tags are not
-implemented (P04.4), and the cluster distance of 0.12 was tuned for the old model and is revisited in P04.4.
+substitute is no longer used by `analyze`. Content tags are not implemented (P04.4).
 
 ### 5. Grouping
 
 Photos join a group when their embeddings are very close and, when capture times exist, they
 were taken close together. The result does not depend on input order. The highest prescore
 represents the group. The others stay available as alternates.
+
+Implemented in P04.4a (`assign_clusters` in `engine/src/embeddings.py`): complete-linkage grouping. A pair is
+compatible when its cosine distance is at most `embeddings.cluster_distance` (0.12) and, when both photos have a
+capture time (EXIF `DateTimeOriginal`, else `created_at`), the times are at most `embeddings.cluster_seconds` (300)
+apart. Compatible pairs merge closest first, and two groups merge only if every cross pair is compatible, so a
+chain of look-alikes cannot join unrelated photos. Photos are sorted by id first and groups are numbered by their
+smallest member id, so the result is the same for any input order. Photos with a missing or invalid time group by
+embedding alone; vectors of different sizes are never compared. Both values are untuned defaults for SigLIP 2:
+no real collection could be used to measure them, so they are revisited in P04.MEASURE.
 
 ### 6. People signals
 

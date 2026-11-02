@@ -4,6 +4,10 @@
 
 ### Added
 
+- Photo grouping no longer depends on the order of the input. Groups are built by complete linkage on SigLIP 2
+  embedding distance (`embeddings.cluster_distance`, 0.12) and, when both photos have a capture time, a time window
+  (`embeddings.cluster_seconds`, 300). Photos without a usable time group by embedding alone. Both values are
+  untuned defaults, not measured on a real collection.
 - `analyze` now scores each photo with Q-ReAlign (quality and aesthetics, values between 0 and 1) and embeds it with
   SigLIP 2, both in batches on the GPU, reading the working copy. A missing model, a missing GPU when `models.device`
   is `cuda`, or an unusable answer leaves the value unknown with a logged error code; no neutral score and no

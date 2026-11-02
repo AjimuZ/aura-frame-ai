@@ -66,6 +66,8 @@
 - Reject policy belongs in one place (the gate). Measurement stages only measure, and anything subjective is a soft flag.
 - Never gate a test on whether an optional package is installed; make the import fail through sys.modules so the same test runs in the light and the full environment.
 - Represent an unobtainable value as NULL or a missing row and validate range at the storage boundary, so no stage can store an invented neutral score.
+- For order-independent clustering, sort the inputs by a stable id, use a deterministic tie-break on the edge list, and number clusters by their smallest member id. Then test the partition against several shuffled inputs.
+- Complete linkage with an explicit pairwise-compatibility set stops chains of near-duplicates from merging unrelated items.
 
 ---
 
@@ -701,4 +703,15 @@ Privacy and security: no new network or filesystem access. Originals are still o
   - Model directories are plain names under the models volume (AURAFRAME_MODELS_DIR in the api container, models.dir elsewhere); model_dir_name refuses hub IDs and paths. fetch-models does not list the new models yet, so weights must be placed by hand.
   - To simulate a missing optional package in a test, use monkeypatch.setitem(sys.modules, name, None) instead of a skipif on find_spec; it runs everywhere.
   - Nothing ranks with the new Q-ReAlign values yet; the prescore that uses them comes in a later package.
+---
+
+## 2026-11-02T14:15:03Z - P04.4.1
+- assign_clusters now uses deterministic complete-linkage grouping over id-sorted photos, with a capture-time gate (embeddings.cluster_seconds, 300 s) and the cosine distance gate (cluster_distance, 0.12). `bash scripts/check.sh --engine` passed 333 of 333, including the 3 new tests. I did not run lint, the Angular or Electron builds, or the node tests. No node files changed.
+- Files changed: engine/src/embeddings.py, engine/config.yaml, engine/tests/test_clustering.py, docs/pipeline.md, docs/assessment.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - assign_clusters keeps its signature and still returns the group count. It now resets cluster_id to -1 on every photo it is given, then numbers groups by their smallest member id in sorted order.
+  - The time comes from EXIF DateTimeOriginal, else created_at, parsed as naive wall-clock time with three formats. Anything unparsable gives None, so that photo groups by embedding alone.
+  - The distance of 0.12 and the 300 s window are untuned defaults for SigLIP 2. P04.MEASURE should tune them on a collection the owner has authorised.
+  - Edge computation is O(n^2) per vector size, with numpy row dot products. Memory is only the compatible pairs. Revisit it if collections reach a very large size.
+  - The roadmap checkbox for P04.4a was left to the orchestrator. docs/roadmap.md was not edited, and the assessment row B10 is marked resolved.
 ---

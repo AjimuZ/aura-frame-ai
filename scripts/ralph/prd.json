@@ -911,8 +911,8 @@
         "A test proves that grouping gives the same groups for permuted input"
       ],
       "priority": 32,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "assign_clusters now uses deterministic complete-linkage grouping over id-sorted photos, with a capture-time gate (embeddings.cluster_seconds, 300 s) and the cosine distance gate (cluster_distance, 0.12). `bash scripts/check.sh --engine` passed 333 of 333, including the 3 new tests. I did not run lint, the Angular or Electron builds, or the node tests. No node files changed.",
       "dependsOn": [
         "P04.3"
       ],

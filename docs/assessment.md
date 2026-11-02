@@ -56,7 +56,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | B7 | Without AI, the suitability term falls back to the technical score, so it counts twice. Diversity is a constant 60 | `engine/src/final_ranker.py:67`, `:74` | Read |
 | B8 | A clean install has no aesthetic weights, and the fallback derives a score from vector spread and shows it as a real score. **Resolved in P04.3 for the new scoring path:** a missing Q-ReAlign or SigLIP 2 model stores an unknown value (NULL, or no embedding row) and a structured error, never a neutral number or a colour histogram. The old fallback in `engine/src/aesthetic.py` still feeds the legacy ranker and goes with it in P04.8 | `engine/src/neural_stages.py`, `engine/src/aesthetic.py:34`, `:68` | Run: `engine/tests/test_neural_stages.py` (missing model, unusable answers, failed batch) with fake models; the legacy fallback is read |
 | B9 | Penalties match free model text, in two languages | `engine/src/final_ranker.py:113`–`116` | Read |
-| B10 | Clustering depends on input order: first-fit, with the first member as centroid | `engine/src/embeddings.py:91` | Read |
+| B10 | Clustering depended on input order (first-fit). **Resolved in P04.4a:** `assign_clusters` is now complete-linkage over id-sorted photos with a capture-time gate | `engine/src/embeddings.py` | Run: `engine/tests/test_clustering.py` (permuted input, time gate, vector sizes) |
 
 ### Performance
 

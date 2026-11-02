@@ -111,7 +111,10 @@ embeddings:
   # together if you disable the aesthetic predictor. cluster_distance may need retuning.
   model: "ViT-L-14-quickgelu"
   pretrained: "openai"
+  # Complete-linkage grouping: every pair in a group is within cluster_distance (cosine) and,
+  # when both have capture times, within cluster_seconds. Untuned on real collections.
   cluster_distance: 0.12
+  cluster_seconds: 300
 
 aesthetic:
   enabled: true
