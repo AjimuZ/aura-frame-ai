@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "source": "Pins read on 2026-11-02 from the public Hugging Face API: 'revision' is the repository commit (model info 'sha'), 'sha256' the file's LFS object id (tree API 'lfs.oid'). 'target' is the file name in the models volume.",
+  "source": "Pins read on 2026-11-02 from the public Hugging Face API: 'revision' is the repository commit (model info 'sha'), 'sha256' the file's LFS object id (tree API 'lfs.oid'). 'target' is the file name in the models volume. The face-landmarker file is on Google Cloud Storage, which has no numbered release path: its 'revision' is the object generation id in the URL, which always serves the same bytes; 'sha256' was computed once from a one-time download authorised by the owner on 2026-11-02, and 'size_bytes' matches the object metadata.",
   "default": "qwen3.8-27b-iq2_xs",
   "models": [
     {
@@ -96,6 +96,21 @@
           "target": "mmproj-gemma-4-12b-it-BF16.gguf",
           "sha256": "2e269f906eb15169ee9ce880ea649bd6d42d4964c21f8ede10d0d0efc738bcbb",
           "size_bytes": 175115840
+        }
+      ]
+    },
+    {
+      "id": "face-landmarker",
+      "label": "MediaPipe Face Landmarker float16, people signals",
+      "files": [
+        {
+          "role": "weights",
+          "url": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task?generation=1683136941468629",
+          "revision": "1683136941468629",
+          "file": "face_landmarker.task",
+          "target": "face_landmarker.task",
+          "sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+          "size_bytes": 3758596
         }
       ]
     }

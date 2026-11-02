@@ -4,6 +4,16 @@
 
 ### Added
 
+- People signals now use the MediaPipe Face Landmarker (tasks API) instead of the unsupported legacy face detector.
+  Each photo gets a `peoplePenalty` between 0 and `face.max_penalty` (0.10): closed eyes (the eyeBlinkLeft and
+  eyeBlinkRight blendshapes) and a blurred main face (local sharpness inside the face box) lower it; a photo with no
+  face has a penalty of 0. No face vector is computed or stored, only a box, a rough head pose and two blink values.
+  The model `face_landmarker.task` (3.6 MB) is pinned in the fetch manifest by object generation id and SHA-256 and
+  is fetched only on request with `./start.sh --fetch-models face-landmarker`; without it `analyze` logs a
+  `model_file_missing` error with that command and applies no penalty. The fetcher now also accepts `.task` bundles
+  and Cloud Storage generation URLs (see ADR 0012). Nothing subtracts the penalty from a ranking yet, and the
+  legacy occlusion value is no longer measured. Tested with a fake landmarker and fake files (386 engine tests); the
+  real model, the real tasks API and a real download were not run.
 - Content tags: each photo with a SigLIP 2 embedding gets one zero-shot tag from the fixed 16-label list in
   `docs/pipeline.md` (no sensitive classes, no identity), stored in the new `content_tags` table. Without the model
   or its text tower no tag is stored. Tested with fake encoders only; the real model was not run.

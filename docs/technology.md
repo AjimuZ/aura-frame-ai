@@ -18,7 +18,7 @@ item marked "in use" exists in the code today.
 | Decoding | Pillow, pillow-heif (in use) | MIT-CMU, BSD-3-Clause | HEIC support | |
 | Quality and aesthetics | Q-ReAlign Mini via `transformers` >= 5.2 | Apache-2.0 | Same family as the strongest scorer in the published benchmark, GPU batches | See below |
 | Embeddings, tags | SigLIP 2 base (`google/siglip2-base-patch16-224`) | Apache-2.0 | One model for grouping, diversity and zero-shot tags | See below |
-| Faces | MediaPipe Face Landmarker, Tasks API | Apache-2.0 | Blink signals, no identity | Legacy `solutions` API in use today: unsupported upstream since 2023 |
+| Faces | MediaPipe Face Landmarker, Tasks API | Apache-2.0 | Blink signals, no identity | Tasks API in use since P04.4c; the legacy `solutions` API is gone. Model pinned by object generation, see [ADR 0012](decisions/0012-people-signals-face-landmarker.md) |
 | Local AI runtime | `llama-server`, CUDA image | MIT | No Ollama, GGUF quantizations, JSON Schema, sleeps when idle | See [ADR 0003](decisions/0003-llama-cpp-runtime.md) |
 | Local AI model | Qwen3.8-27B GSQ-RCO `IQ2_XS` | Apache-2.0 | Best expected fit, see [AI providers](ai-providers.md) | See [ADR 0004](decisions/0004-default-local-model.md) |
 | Cloud option | Codex CLI | Apache-2.0 | Owner decision | Direct OpenAI API flow, see [ADR 0007](decisions/0007-retire-openai-quality-mode.md) |

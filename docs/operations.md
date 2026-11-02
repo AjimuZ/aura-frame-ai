@@ -168,22 +168,33 @@ SHA-256, read on 2026-11-02 from the public Hugging Face API:
 | `qwen3.8-27b-iq2_s` | `Qwen3.8-27B-GSQ-RCO-IQ2_S.gguf`, `mmproj-Qwen3.8-27B-BF16.gguf` (shared) | 10.19 GB |
 | `qwen3.5-9b-q5_k_m` | `Qwen3.5-9B-Q5_K_M.gguf`, `mmproj-Qwen3.5-9B-BF16.gguf` | 7.50 GB |
 | `gemma-4-12b-q4_k_m` | `gemma-4-12b-it-Q4_K_M.gguf`, `mmproj-gemma-4-12b-it-BF16.gguf` | 7.30 GB |
+| `face-landmarker` | `face_landmarker.task`, the MediaPipe Face Landmarker for the people signals | 3.76 MB |
 
 Two upstream projectors are both named `mmproj-BF16.gguf`, so the manifest saves them under the names above.
-`./start.sh --fetch-models all` fetches every model, 33.41 GB, and a shared file only once. To serve a
-candidate, set `AURAFRAME_VISION_MODEL` and `AURAFRAME_VISION_MMPROJ` to `/models/<file>`.
+`./start.sh --fetch-models all` fetches every model, 33.41 GB plus the 3.76 MB Face Landmarker, and a shared file
+only once. To serve a candidate, set `AURAFRAME_VISION_MODEL` and `AURAFRAME_VISION_MMPROJ` to `/models/<file>`.
+
+`face-landmarker` is pinned differently: Google publishes it on Cloud Storage, which has no numbered release path, so
+the manifest names the object's immutable generation id (`...?generation=1683136941468629`) as its revision, with a
+SHA-256 computed once from a download the owner authorised and the size from the object metadata
+([ADR 0012](decisions/0012-people-signals-face-landmarker.md)). The engine reads it from `models.face_landmarker.file`
+and never downloads it. Without it, `analyze` logs a `model_file_missing` error that names
+`./start.sh --fetch-models face-landmarker`, finds no faces and applies no people penalty. Not observed: a real
+download of this file by the fetcher.
 
 How a file is accepted:
 
-1. The manifest is validated first: a 40-hex commit, a 64-hex SHA-256, a positive size, a plain file name, and the
-   `.gguf` or `.safetensors` format for every file. Pickle-based formats (`.bin`, `.pt`, `.pth`, `.pkl`, `.ckpt` and
+1. The manifest is validated first: a 40-hex commit (or, for a file pinned by URL, an https URL on
+   `storage.googleapis.com` whose only query is `generation=<revision>`), a 64-hex SHA-256, a positive size, a plain
+   file name, and the `.gguf`, `.safetensors` or `.task` format for every file. Pickle-based formats (`.bin`, `.pt`, `.pth`, `.pkl`, `.ckpt` and
    similar) can run code when they are loaded and are refused before any download.
 2. A file already in the volume with the pinned size and SHA-256 is kept. One that does not match is removed and
    downloaded again.
-3. The download comes from `https://huggingface.co/<repo>/resolve/<commit>/<file>`, never from a branch name, and
-   follows https redirects only. It goes to a hidden `.<name>.partial` file, which the listing in `start.sh` does not
+3. The download comes from `https://huggingface.co/<repo>/resolve/<commit>/<file>` (or the pinned generation URL),
+   never from a branch name or a `latest` alias, and follows https redirects only. It goes to a hidden `.<name>.partial` file, which the listing in `start.sh` does not
    see.
-4. The size, the SHA-256 and the first bytes (the GGUF magic, or a safetensors header) are checked. Only then does an
+4. The size, the SHA-256 and the first bytes (the GGUF magic, a safetensors header, or the ZIP header of a task
+   bundle) are checked. Only then does an
    atomic rename give the file its name. On any failure the partial file is deleted, so a model name only ever holds
    a verified file. Partial files left by an interrupted run are deleted on the next one. A download does not resume.
 5. Before downloading, the fetcher checks that the volume can be written and has room for the missing files.

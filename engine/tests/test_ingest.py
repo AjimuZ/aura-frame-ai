@@ -159,14 +159,17 @@ def test_each_original_is_decoded_once(
 def test_face_stage_reads_the_working_copy(
     tmp_path: Path, data_config: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    pytest.importorskip("mediapipe")
     from src.face_quality import score_faces
+
+    class NoFaces:
+        def detect(self, rgb: np.ndarray) -> list:
+            return []
 
     path = _textured(tmp_path / "faces.jpg", 1200, 900)
     recorder = DecodeRecorder(monkeypatch)
 
     photo = ingest_image(path, data_config)
-    score_faces(photo, data_config)
+    score_faces(photo, data_config, NoFaces())
 
     assert recorder.decodes_of(path) == 1
     assert recorder.opencv == [working_copy_path(data_config, photo.id)]

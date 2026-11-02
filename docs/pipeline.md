@@ -135,6 +135,21 @@ Runs only on photos with a detected face. MediaPipe Face Landmarker gives the fa
 sharpness. These produce a small penalty for closed eyes or a blurred face. A photo without
 faces has a penalty of zero. No face vector is computed or stored, and faces are never compared.
 
+Implemented in P04.4c (`engine/src/face_quality.py`, [ADR 0012](decisions/0012-people-signals-face-landmarker.md)):
+`score_faces` reads the working copy and runs the Face Landmarker (tasks API, image mode). The adapter reduces each
+face to a box, a rough head pose and the two blink values and drops the mesh, so nothing but scalars is kept. The
+largest face is the subject: its box gives size, centrality and local sharpness (the variance of the Laplacian inside
+the box, as before), and `eyes_visible_score` is how open both eyes are. The penalty is on the 0 to 1 scale of the
+prescore, stored as `people_penalty` in the photo record (`peoplePenalty`), at most `face.max_penalty` (0.10, hard
+cap 0.25): 0.6 for closed eyes (the worst face counts; the mean blink value from `face.blink_start` 0.45 to
+`face.blink_full` 0.80) and 0.4 for a blurred main face (clarity under `face.blur_clarity_below` 40). The values are
+untuned starting points. The prescore formula is not computed yet, so nothing subtracts the penalty yet.
+The model, `face_landmarker.task`, comes from the models volume (`models.face_landmarker.file`) and is never
+downloaded by the engine; fetch it on request with `./start.sh --fetch-models face-landmarker`. Without it the stage
+emits one `model_file_missing` error event with that command, no face is reported, and the penalty is 0. The legacy
+occlusion proxy is no longer measured. Verified with a fake landmarker only: the real model and the `mediapipe`
+tasks API have not run, and the box, blink and pose values are unchecked until P04.MEASURE.
+
 ### 7. Shortlist
 
 Takes the top K group representatives by prescore, with a limit per content tag so one theme

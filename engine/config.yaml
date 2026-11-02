@@ -32,6 +32,10 @@ models:
   siglip2:
     dir: "siglip2-base-patch16-224"
     batch_size: 32
+  # MediaPipe Face Landmarker bundle for the people signals (engine/src/face_quality.py): one plain `.task` file name
+  # inside the models volume. Fetched only on request: `./start.sh --fetch-models face-landmarker`.
+  face_landmarker:
+    file: "face_landmarker.task"
 
 input:
   photos_dir: "./data/input_originali"
@@ -74,6 +78,15 @@ face:
   eyes_weight: 0.15
   frontality_weight: 0.15
   min_detection_confidence: 0.5
+  # Faces the landmarker reports per photo, and the people penalty (0 to 1, subtracted from the prescore).
+  # The penalty is at most `max_penalty`: closed eyes (the eyeBlinkLeft/eyeBlinkRight mean, from `blink_start`
+  # to `blink_full`) weigh 0.6 and a blurred main face (face clarity under `blur_clarity_below`) weighs 0.4.
+  # A photo with no face has a penalty of 0. Untuned starting values.
+  max_faces: 8
+  max_penalty: 0.10
+  blink_start: 0.45
+  blink_full: 0.80
+  blur_clarity_below: 40
 
 ranking:
   technical_weight: 0.22

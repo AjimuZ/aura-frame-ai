@@ -1,12 +1,15 @@
 """Downloads the pinned model files into the models volume, and accepts a file only after its SHA-256 matches.
 
-Each file is pinned in manifest.json by repository, commit revision, file name, size and SHA-256. A download
-goes to a hidden partial file beside its target. It becomes the target by an atomic rename only after the
-size, the SHA-256 and the file format are checked. On any failure the partial file is removed, so a target
+Each file is pinned in manifest.json by repository, commit revision, file name, size and SHA-256. A file that
+does not come from Hugging Face is pinned by an https URL on an allowed host whose `generation` query is the
+revision (the immutable object id of a Google Cloud Storage object, which always serves the same bytes). A
+download goes to a hidden partial file beside its target. It becomes the target by an atomic rename only after
+the size, the SHA-256 and the file format are checked. On any failure the partial file is removed, so a target
 name only ever holds a verified file.
 
-Only GGUF and safetensors are accepted. Pickle-based formats can run code when they are loaded, so they are
-refused by name before any download, and by content after it.
+Only GGUF, safetensors and MediaPipe `.task` bundles (a ZIP archive of TFLite models, with no pickle) are
+accepted. Pickle-based formats can run code when they are loaded, so they are refused by name before any
+download, and by content after it.
 
 Standard library only: this module runs alone in the fetch-models image, apart from the engine.
 """
@@ -28,13 +31,18 @@ from typing import BinaryIO
 MANIFEST_PATH = Path(__file__).with_name("manifest.json")
 DEFAULT_MODELS_DIR = Path("/models")
 BASE_URL = "https://huggingface.co"
-ALLOWED_SUFFIXES = (".gguf", ".safetensors")
+ALLOWED_SUFFIXES = (".gguf", ".safetensors", ".task")
+# Hosts a non-Hugging Face pin may name. The pinned SHA-256 protects the content; the allow-list keeps the
+# manifest from pointing anywhere else by mistake.
+SOURCE_HOSTS = ("storage.googleapis.com",)
 # Formats that unpickle when loaded. Named only so that a refusal says why; the allow-list above decides.
 PICKLE_SUFFIXES = (".bin", ".pt", ".pth", ".pkl", ".pickle", ".ckpt", ".joblib", ".npy", ".npz")
 CHUNK_BYTES = 1024 * 1024
 READ_TIMEOUT_SECONDS = 60
 USER_AGENT = "auraframe-fetch-models"
 GGUF_MAGIC = b"GGUF"
+# A MediaPipe task bundle is a ZIP archive; a local file header starts it.
+ZIP_MAGIC = b"PK\x03\x04"
 # The safetensors reference loader refuses headers above 100 MB.
 MAX_SAFETENSORS_HEADER = 100 * 1024 * 1024
 
@@ -44,6 +52,7 @@ EXIT_INVALID = 2
 
 _REPO = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
 _REVISION = re.compile(r"^[0-9a-f]{40}$")
+_GENERATION = re.compile(r"^[0-9]{10,20}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _FILE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$")
 _MODEL_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
@@ -62,7 +71,11 @@ class ManifestError(ValueError):
 
 @dataclass(frozen=True)
 class PinnedFile:
-    """One file at one repository revision, with the size and SHA-256 it must have."""
+    """One file at one repository revision, with the size and SHA-256 it must have.
+
+    `source_url` is empty for a Hugging Face file. Otherwise it is the pinned https URL and `repo` only labels
+    the source in the log.
+    """
 
     repo: str
     revision: str
@@ -70,10 +83,13 @@ class PinnedFile:
     target: str
     sha256: str
     size_bytes: int
+    source_url: str = ""
 
     # Returns the download URL of this exact revision of the file; a branch name is never used.
     @property
     def url(self) -> str:
+        if self.source_url:
+            return self.source_url
         return f"{BASE_URL}/{self.repo}/resolve/{self.revision}/{urllib.parse.quote(self.file)}"
 
 
@@ -94,28 +110,44 @@ class Manifest:
     models: tuple[Model, ...]
 
 
-# Returns why a file name is not an accepted model format, or None when it is GGUF or safetensors.
+# Returns why a file name is not an accepted model format, or None when it is GGUF, safetensors or a task bundle.
 def format_problem(name: str) -> str | None:
     suffix = Path(name).suffix.lower()
     if suffix in ALLOWED_SUFFIXES:
         return None
     if suffix in PICKLE_SUFFIXES:
         return f"{name}: pickle-based formats can run code when loaded and are refused"
-    return f"{name}: only {' and '.join(ALLOWED_SUFFIXES)} files are accepted"
+    return f"{name}: only {', '.join(ALLOWED_SUFFIXES[:-1])} and {ALLOWED_SUFFIXES[-1]} files are accepted"
+
+
+# Returns the manifest URL of a pin when it is an https URL on an allowed host whose only query parameter is
+# `generation=<revision>`, so the URL names one immutable object. Raises ManifestError otherwise.
+def _source_url(value: object, revision: str, where: str) -> str:
+    if not isinstance(value, str):
+        raise ManifestError(f"{where}: 'url' must be a string")
+    parts = urllib.parse.urlsplit(value)
+    if parts.scheme != "https" or parts.hostname not in SOURCE_HOSTS or parts.fragment:
+        raise ManifestError(f"{where}: 'url' must be an https URL on {', '.join(SOURCE_HOSTS)}")
+    if parts.query != f"generation={revision}":
+        raise ManifestError(f"{where}: 'url' must be pinned with generation={revision}")
+    return value
 
 
 # Returns one validated pinned file from its manifest entry. Raises ManifestError naming the first problem.
+# An entry with a 'url' is pinned by an object generation id instead of a repository and a commit.
 def _pinned_file(entry: object, where: str) -> PinnedFile:
     if not isinstance(entry, dict):
         raise ManifestError(f"{where}: a file entry must be an object")
     fields = {key: entry.get(key) for key in ("repo", "revision", "file", "target", "sha256", "size_bytes")}
+    by_url = "url" in entry
     checks = (
-        ("repo", _REPO),
-        ("revision", _REVISION),
+        ("revision", _GENERATION if by_url else _REVISION),
         ("file", _FILE_NAME),
         ("target", _FILE_NAME),
         ("sha256", _SHA256),
     )
+    if not by_url:
+        checks = (("repo", _REPO), *checks)
     for key, pattern in checks:
         if not isinstance(fields[key], str) or not pattern.fullmatch(fields[key]):
             raise ManifestError(f"{where}: '{key}' is missing or malformed")
@@ -126,11 +158,15 @@ def _pinned_file(entry: object, where: str) -> PinnedFile:
         problem = format_problem(fields[key])
         if problem:
             raise ManifestError(f"{where}: {problem}")
+    if by_url:
+        fields["source_url"] = _source_url(entry["url"], fields["revision"], where)
+        fields["repo"] = urllib.parse.urlsplit(fields["source_url"]).hostname
     return PinnedFile(**fields)
 
 
-# Reads and validates the manifest. Every file must name a repository, a 40-hex commit, a 64-hex SHA-256, a
-# positive size and accepted formats; a target shared by two models must carry the same pin in both.
+# Reads and validates the manifest. Every file must name a repository and a 40-hex commit (or a pinned URL and
+# its generation id), a 64-hex SHA-256, a positive size and accepted formats; a target shared by two models must
+# carry the same pin in both.
 # Raises ManifestError on the first problem.
 def load_manifest(path: Path = MANIFEST_PATH) -> Manifest:
     try:
@@ -187,13 +223,16 @@ def sha256_of(path: Path) -> str:
 
 
 # Raises FetchError unless the first bytes of `path` are those of the format that `name` claims: the GGUF magic,
-# or a safetensors header (a little-endian length followed by a JSON object). `name` is the target name, since a
-# partial file carries another suffix. A pickle renamed to .gguf therefore fails here.
+# a safetensors header (a little-endian length followed by a JSON object), or the ZIP header of a task bundle.
+# `name` is the target name, since a partial file carries another suffix. A pickle renamed to .gguf therefore
+# fails here.
 def check_content_format(path: Path, name: str) -> None:
     suffix = Path(name).suffix.lower()
     with open(path, "rb") as handle:
         head = handle.read(9)
     if suffix == ".gguf" and head[:4] == GGUF_MAGIC:
+        return
+    if suffix == ".task" and head[:4] == ZIP_MAGIC:
         return
     if suffix == ".safetensors" and len(head) == 9:
         header_length = int.from_bytes(head[:8], "little")
@@ -340,6 +379,11 @@ def ensure_space(models_dir: Path, files: Iterable[PinnedFile]) -> None:
         raise FetchError(f"the models volume has {free} bytes free and needs {needed}; nothing was downloaded")
 
 
+# Returns a byte count for the model listing: megabytes below one gigabyte, otherwise gigabytes.
+def _human_size(size: int) -> str:
+    return f"{size / 1e6:.1f} MB" if size < 1_000_000_000 else f"{size / 1e9:.1f} GB"
+
+
 # Parses the command line. Positional names are model ids from the manifest, or 'all'.
 def _parse(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -368,7 +412,7 @@ def main(
         if args.list:
             for model in manifest.models:
                 size = sum(pinned.size_bytes for pinned in model.files)
-                log(f"{model.id}: {model.label}, {size / 1e9:.1f} GB")
+                log(f"{model.id}: {model.label}, {_human_size(size)}")
             return EXIT_OK
         files = select_files(manifest, args.models)
     except ManifestError as exc:

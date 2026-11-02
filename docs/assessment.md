@@ -76,7 +76,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | D4 | ~~`start.py` accepts the broken `.venv` as valid, because it checks only that the file exists~~ **Resolved in P01.5:** the host Python lookup is removed, and `start.py` is absent from the working tree. Since P02.4.2 `analysis:start` calls the containerised engine over HTTP, and `openai:start` fails with a clear message | Read: `apps/desktop/electron/ipc/paths.ts`, `analysis.ipc.ts` |
 | D5 | ~~A personal first name is hard-coded as the default library, in code, mock data and tests~~ **Fixed in P01.2.2:** the default is now "My library" and the mock data and tests use neutral names. **Guarded in P01.3:** the `package.json` author field is removed and `tests/personal-data.test.cjs` fails on user-home paths and on the owner name | Read: `apps/desktop/electron/ipc/library-store.ts` |
 | D6 | `package.json` declares MIT, but no `LICENSE` file exists | Run |
-| D7 | Face detection uses MediaPipe's legacy `solutions` API, with upstream support ended in 2023 | Read: `engine/src/face_quality.py:24` |
+| D7 | Face detection used MediaPipe's legacy `solutions` API, with upstream support ended in 2023. **Resolved in P04.4c:** `engine/src/face_quality.py` uses the Face Landmarker tasks API, with the model pinned in the fetch manifest ([ADR 0012](decisions/0012-people-signals-face-landmarker.md)) | Run: `engine/tests/test_face_quality.py` (fake landmarker; the real model and API were not run) |
 | D8 | `tqdm` is required but never imported | Read |
 | D9 | Primary button labels have 3.36:1 contrast, under the AA threshold | Run, see [Design system](design-system.md#measured-contrast) |
 | D10 | Angular has no unit tests, and no end-to-end test exists | Read |

@@ -26,7 +26,8 @@ class ModelUnavailable(Exception):
     """A model cannot be used, so its values stay unknown. The message names no host path.
 
     `code` is one of: not_configured, directory_missing, no_weights, unsafe_format, invalid_weights,
-    dependency_missing, cuda_unavailable, load_failed. `model` is the config key (qrealign, siglip2).
+    dependency_missing, cuda_unavailable, load_failed, file_missing. `model` is the config key (qrealign, siglip2,
+    face_landmarker).
     """
 
     def __init__(self, model: str, code: str, message: str) -> None:
@@ -90,6 +91,35 @@ def verify_model_dir(directory: Path, model: str) -> list[Path]:
                 f"{label}/{weight.name} is not a valid safetensors file ({exc.__class__.__name__})",
             ) from exc
     return weights
+
+
+# Returns the verified MediaPipe task bundle named by models.<model>.file in the models volume. The name must be one
+# plain `.task` file name, never a path or a URL, and the file must be a regular file that starts with the ZIP
+# header the fetcher also checks. Nothing is downloaded: a missing file raises ModelUnavailable (file_missing) with
+# the command that fetches the pinned model `fetch_id` on request. Other codes: not_configured, invalid_weights.
+def locate_task_file(config: dict[str, Any], model: str, fetch_id: str) -> Path:
+    name = (config.get("models", {}).get(model) or {}).get("file")
+    if not isinstance(name, str) or not _DIR_NAME.fullmatch(name) or ".." in name or not name.lower().endswith(".task"):
+        raise ModelUnavailable(
+            model,
+            "not_configured",
+            f"models.{model}.file must name one .task file of the models volume (see {_MODELS_GUIDE})",
+        )
+    path = models_root(config) / name
+    if path.is_symlink() or not path.is_file():
+        raise ModelUnavailable(
+            model,
+            "file_missing",
+            f"model file '{name}' is not in the models volume; download it on request with "
+            f"'./start.sh --fetch-models {fetch_id}' (see {_MODELS_GUIDE})",
+        )
+    try:
+        check_content_format(path, name)
+    except (FetchError, OSError) as exc:
+        raise ModelUnavailable(
+            model, "invalid_weights", f"{name} is not a valid task bundle ({exc.__class__.__name__})"
+        ) from exc
+    return path
 
 
 # Returns the verified model directory of a configured model. Raises ModelUnavailable when it is not configured,

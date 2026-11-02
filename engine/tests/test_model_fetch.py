@@ -46,6 +46,16 @@ OWNER_PINS = {
     ],
 }
 
+# The Face Landmarker pin supplied by the owner on 2026-11-02: the object generation id is the revision.
+FACE_PIN = {
+    "url": "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/"
+           "face_landmarker.task?generation=1683136941468629",
+    "revision": "1683136941468629",
+    "file": "face_landmarker.task",
+    "sha256": "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
+    "size_bytes": 3758596,
+}
+
 FAKE_GGUF = mf.GGUF_MAGIC + b"\x03\x00\x00\x00" + bytes(range(256)) * 40
 
 
@@ -93,17 +103,37 @@ def models_dir(tmp_path: Path) -> Path:
 def test_the_manifest_pins_exactly_the_owner_supplied_files():
     manifest = mf.load_manifest()
     assert manifest.default == "qwen3.8-27b-iq2_xs"
+    assert [model.id for model in manifest.models] == [*OWNER_PINS, "face-landmarker"]
     actual = {
         model.id: [(f.repo, f.revision, f.file, f.sha256, f.size_bytes) for f in model.files]
         for model in manifest.models
+        if model.id in OWNER_PINS
     }
     assert actual == OWNER_PINS
+
+
+def test_the_face_landmarker_is_pinned_by_object_generation_and_never_by_latest():
+    manifest = mf.load_manifest()
+    model = next(model for model in manifest.models if model.id == "face-landmarker")
+    assert len(model.files) == 1
+    pinned = model.files[0]
+    assert (pinned.revision, pinned.file, pinned.sha256, pinned.size_bytes) == (
+        FACE_PIN["revision"], FACE_PIN["file"], FACE_PIN["sha256"], FACE_PIN["size_bytes"],
+    )
+    assert pinned.target == "face_landmarker.task"
+    assert pinned.url == FACE_PIN["url"]
+    assert pinned.url.endswith(f"?generation={pinned.revision}")
+    # It is never fetched by a plain model selection: the default stays the language model.
+    assert manifest.default != "face-landmarker"
+    assert [f.target for f in mf.select_files(manifest, ["face-landmarker"])] == ["face_landmarker.task"]
 
 
 def test_every_manifest_file_has_a_revision_a_sha256_and_an_accepted_format():
     manifest = mf.load_manifest()
     targets = set()
     for model in manifest.models:
+        if model.id not in OWNER_PINS:
+            continue
         roles = [entry["role"] for entry in _raw_model(model.id)["files"]]
         assert roles == ["weights", "mmproj"], model.id
         for pinned in model.files:
@@ -129,7 +159,7 @@ def test_selection_defaults_to_the_default_model_and_never_repeats_a_target():
     assert [f.target for f in default] == ["Qwen3.8-27B-GSQ-RCO-IQ2_XS.gguf", "mmproj-Qwen3.8-27B-BF16.gguf"]
     both = mf.select_files(manifest, ["qwen3.8-27b-iq2_xs", "qwen3.8-27b-iq2_s"])
     assert [f.target for f in both].count("mmproj-Qwen3.8-27B-BF16.gguf") == 1
-    assert len(mf.select_files(manifest, ["all"])) == 7
+    assert len(mf.select_files(manifest, ["all"])) == 8
     with pytest.raises(mf.ManifestError, match="unknown model"):
         mf.select_files(manifest, ["not-a-model"])
 
@@ -281,4 +311,72 @@ def test_main_exit_codes_for_bad_names_a_missing_volume_and_a_full_disk(tmp_path
 def test_main_lists_the_models_without_touching_the_volume(tmp_path):
     lines: list[str] = []
     assert mf.main(["--list"], tmp_path / "missing", open_url=_no_download, log=lines.append) == mf.EXIT_OK
-    assert [line.split(":")[0] for line in lines] == list(OWNER_PINS)
+    assert [line.split(":")[0] for line in lines] == [*OWNER_PINS, "face-landmarker"]
+    assert lines[-1].endswith("3.8 MB")
+
+
+# Returns a task-bundle stand-in: the ZIP header followed by filler.
+def _fake_task() -> bytes:
+    return mf.ZIP_MAGIC + bytes(range(256)) * 8
+
+
+def test_a_task_bundle_is_accepted_by_its_zip_header_from_the_pinned_url(tmp_path, models_dir):
+    content = _fake_task()
+    url = FACE_PIN["url"]
+    pinned = mf.PinnedFile(
+        repo="storage.googleapis.com", revision=FACE_PIN["revision"], file="face_landmarker.task",
+        target="face_landmarker.task", sha256=hashlib.sha256(content).hexdigest(), size_bytes=len(content),
+        source_url=url,
+    )
+    calls: list[str] = []
+    assert mf.fetch_file(pinned, models_dir, _local_opener(_source(tmp_path, content), calls), log=lambda _: None) == "downloaded"
+    assert calls == [url]
+    assert (models_dir / "face_landmarker.task").read_bytes() == content
+
+
+def test_a_pickle_disguised_as_a_task_bundle_is_refused_by_content(tmp_path, models_dir):
+    disguised = pickle.dumps({"weights": list(range(100))})
+    pinned = _pin(disguised, target="face_landmarker.task")
+    with pytest.raises(mf.FetchError, match="not a valid .task"):
+        mf.fetch_file(pinned, models_dir, _local_opener(_source(tmp_path, disguised), []), log=lambda _: None)
+    assert list(models_dir.iterdir()) == []
+
+
+# Writes a manifest holding only a copy of the face-landmarker entry changed by `change`, and returns its path.
+def _face_manifest(tmp_path, change) -> "Path":
+    entry = {**FACE_PIN, "target": "face_landmarker.task"}
+    change(entry)
+    manifest = {"default": "face", "models": [{"id": "face", "files": [entry]}]}
+    path = tmp_path / "face-manifest.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    return path
+
+
+def test_a_url_pin_that_loads_matches_the_plain_entry(tmp_path):
+    manifest = mf.load_manifest(_face_manifest(tmp_path, lambda entry: None))
+    assert manifest.models[0].files[0].url == FACE_PIN["url"]
+
+
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        (lambda e: e.update(url=e["url"].replace("https://", "http://")), "https URL"),
+        (lambda e: e.update(url="https://example.com/mediapipe-models/f.task?generation=1683136941468629"), "https URL"),
+        (lambda e: e.update(url=e["url"].replace("generation=1683136941468629", "generation=1")), "generation="),
+        (lambda e: e.update(url=e["url"].split("?")[0]), "generation="),
+        (lambda e: e.update(url=e["url"] + "&alt=media"), "generation="),
+        (lambda e: e.update(revision="d562806dbafae37109975e970aae91b43e73b440"), "revision"),
+        (lambda e: e.update(revision="latest"), "revision"),
+        (lambda e: e.update(sha256="abc"), "sha256"),
+        (lambda e: e.update(size_bytes=0), "size_bytes"),
+        (lambda e: e.update(url=7), "url"),
+    ],
+)
+def test_the_manifest_rejects_an_unpinned_or_foreign_url(tmp_path, change, message):
+    with pytest.raises(mf.ManifestError, match=message):
+        mf.load_manifest(_face_manifest(tmp_path, change))
+
+
+def test_the_format_refusal_names_every_accepted_suffix():
+    problem = mf.format_problem("model.onnx")
+    assert problem is not None and ".gguf, .safetensors and .task" in problem

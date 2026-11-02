@@ -359,6 +359,7 @@ def _photo_from_camel(record: dict[str, Any]) -> Photo:
         occlusion_score=record.get("occlusionScore", 0.0),
         group_photo=record.get("groupPhoto", False),
         face_quality_score=record.get("faceQualityScore", 0.0),
+        people_penalty=record.get("peoplePenalty", 0.0),
         aesthetic_score=record.get("aestheticScore", 0.0),
         cluster_id=record.get("clusterId", -1),
         gemma=gemma,

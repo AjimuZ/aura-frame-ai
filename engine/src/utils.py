@@ -280,6 +280,8 @@ class Photo:
     occlusion_score: float = 0.0
     group_photo: bool = False
     face_quality_score: float = 0.0
+    # 0-1 deduction for closed eyes or a blurred main face, from the Face Landmarker; 0 when no face is found.
+    people_penalty: float = 0.0
     aesthetic_score: float = 0.0
     cluster_id: int = -1
     gemma: dict[str, Any] | None = None
@@ -368,6 +370,7 @@ class Photo:
             "occlusionScore": round(self.occlusion_score, 1),
             "groupPhoto": self.group_photo,
             "faceQualityScore": round(self.face_quality_score, 1),
+            "peoplePenalty": round(self.people_penalty, 3),
             "aestheticScore": round(self.aesthetic_score, 1),
             "clusterId": self.cluster_id,
             "numberOfFaces": self.number_of_faces,

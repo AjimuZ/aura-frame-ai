@@ -242,7 +242,7 @@ memory free at peak; no Ollama reference remains in the code; provider contract 
 - [x] P04.1 New ingest: content-hash IDs, working copies, one decode, orientation applied once.
 - [x] P04.2 Sanity gate that rejects only objective failures.
 - [x] P04.3 Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU.
-- [ ] P04.4 Order-independent grouping, content tags and people signals with no identity.
+- [x] P04.4 Order-independent grouping, content tags and people signals with no identity.
 - [ ] P04.5 Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache.
 - [ ] P04.6 Critique, diversity-aware selection, tiers, reports and exports.
 - [ ] P04.7 Persist per-stage progress so resume really works.
@@ -266,6 +266,15 @@ a logged `model_<reason>` error and unknown values. This addresses assessment it
 heavy packages moved to `engine/requirements-gpu.txt`. Not observed: any test run (the container pytest command was
 denied in this session), the real adapters, real weights, the pins in `requirements-gpu.txt`, and a full `analyze`
 run; real-model verification is P04.MEASURE.
+
+Progress 2026-11-02 (P04.4c): `engine/src/face_quality.py` now runs the MediaPipe Face Landmarker tasks API and
+derives a small `people_penalty` (0 without a face) from the blink blendshapes and the local sharpness of the main
+face box; no face vector is computed or stored ([Pipeline](pipeline.md#6-people-signals),
+[ADR 0012](decisions/0012-people-signals-face-landmarker.md)). The `face-landmarker` entry of the fetch manifest pins
+`face_landmarker.task` by object generation id and SHA-256, and nothing downloads it unless asked. This closes
+assessment item D7. Observed: `bash scripts/check.sh --engine` passed 386 of 386 engine tests (333 before this change;
+the new tests use a fake landmarker and fake files); `npm run lint` printed no findings. Not observed: the Angular and Electron builds and
+the node tests (no node file changed), the real model, the real tasks API, and a real download of the file.
 
 Exit: the regression corpus in [Testing](testing.md#regression-corpus-p04) passes; a run on 2,000
 synthetic images completes on the reference PC with recorded time and peak memory; the benchmark
