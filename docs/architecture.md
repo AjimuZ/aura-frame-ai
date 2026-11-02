@@ -70,16 +70,19 @@ from an internal network. `egress` has an internet route, and only `fetch-models
 ## Container stack
 
 Written in `compose.yaml` and `docker/` (P02.1), with `gateway`, `api` and `vision`, `fetch-models` since
-P03.2 ([Operations](operations.md#model-files)), and the `codex` sidecar since P05.1. The sidecar exists as an image
-and a service only: its default command prints the CLI version, and nothing sends it comparisons until the provider
-in P05.2. Decisions: [ADR 0010](decisions/0010-compose-stack-layout.md),
-[ADR 0011](decisions/0011-pinned-model-download.md), [ADR 0016](decisions/0016-codex-sidecar-image.md).
+P03.2 ([Operations](operations.md#model-files)), and the `codex` sidecar since P05.1. Since P05.2.2 its default
+command is an HTTP service on port `8090` that `api` calls over `backend` with a per-start token, and only
+`./start.sh --provider codex --codex-opt-in` or `--codex-login` starts it; no run sends it comparisons until the
+per-library opt-in (P05.2.3). Decisions: [ADR 0010](decisions/0010-compose-stack-layout.md),
+[ADR 0011](decisions/0011-pinned-model-download.md), [ADR 0016](decisions/0016-codex-sidecar-image.md),
+[ADR 0018](decisions/0018-codex-sidecar-transport.md).
 
 | Rule | Where it is set |
 | --- | --- |
 | Images pinned by digest | `vision` in `compose.yaml`; the base images in `docker/api/Dockerfile`, `docker/gateway/Dockerfile`, `docker/fetch-models/Dockerfile` and `docker/codex/Dockerfile` |
 | Internet route | `fetch-models`, on `egress` only, behind the profile `fetch`, with the `models` volume as its only mount; and `codex`, on exactly `backend` and `egress`, behind the profile `codex`, with the `exchange` tmpfs and the `codex-home` volume as its only mounts. `scripts/compose-policy.cjs` refuses any other service on a routed network other than `gateway` on `frontend` |
 | Codex config | `docker/codex/config.toml` (web search, history, analytics, feedback, telemetry and the shell tool off), rewritten into the `codex-home` volume by the entrypoint on every start |
+| `api` to `codex` | `docker/codex/sidecar-server.cjs` and `engine/src/providers/codex_sidecar.py`: one authenticated `POST /v1/run` per CLI start, `AURAFRAME_CODEX_TOKEN` passed by compose to these two services only, an allow-list of CLI arguments and files, a private folder in the `exchange` tmpfs per call |
 | Model files | Downloaded only by `./start.sh --fetch-models`, each pinned to a commit, a size and a SHA-256 in `engine/src/model_fetch/manifest.json` |
 | Non-root, `no-new-privileges`, all capabilities dropped, read-only root filesystem, `/tmp` on tmpfs | Every service, from `x-hardening` in `compose.yaml` |
 | GPU access | `compose.gpu.yaml`, an overlay, so the base file starts on a host without a GPU |

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Starts, inspects and stops the AuraFrame container stack; the contract is docs/operations.md#startsh.
 #
-# Usage: ./start.sh [--fetch-models [model|all]] [--provider local|codex|none] [--codex-login] [--cpu]
-#                   [--rebuild] [--backend-only] [--status] [--logs [service]] [--stop] [--help]
+# Usage: ./start.sh [--fetch-models [model|all]] [--provider local|codex|none] [--codex-opt-in]
+#                   [--codex-login [device|api-key]] [--cpu] [--rebuild] [--backend-only] [--status]
+#                   [--logs [service]] [--stop] [--help]
 #
 # Exit codes: 0 success, 1 failed prerequisite, 2 invalid arguments, 3 a service failed its health check.
 # After the window has run: 0 when it closed normally, 1 when it failed or the services could not be stopped,
@@ -16,6 +17,12 @@
 #   ends while this script runs, and the named volumes are kept.
 # - Only --fetch-models downloads model files, through the one-shot `fetch-models` service, and it then exits.
 #   Every other path explains missing model files and never fetches them.
+# - The codex sidecar, which sends anonymous copies off the computer, is started (`up` or `run` with the `codex`
+#   profile) only by --codex-login, which runs the sign-in alone, and by --provider codex together with
+#   --codex-opt-in. --provider codex alone is refused with exit 2 before anything runs.
+# - An API key for --codex-login api-key is read from this script's stdin into an unexported variable and reaches the
+#   sidecar only through the stdin of `codex login --with-api-key`. It is never an argument, an environment variable
+#   or a file, and it is never printed.
 
 set -u
 
@@ -41,9 +48,16 @@ WINDOW_LINUX="release/linux-unpacked/aura-frame-ai"
 # The host fallback: the Electron binary installed by `npm ci`, running the app that `npm run build` wrote.
 ELECTRON_WINDOWS="node_modules/electron/dist/electron.exe"
 ELECTRON_LINUX="node_modules/electron/dist/electron"
+# Profiles that --status, --logs, --stop and the stop after the window name, so they also reach the vision service
+# and the codex sidecar. Naming a profile there starts nothing; only `up` and `run` start services.
+SERVICE_PROFILES=(--profile local --profile codex)
 
 mode="start"
 provider=""
+codex_opt_in=0
+login_method="device"
+use_vision=0
+use_codex=0
 use_gpu=1
 rebuild=0
 backend_only=0
@@ -59,8 +73,11 @@ usage() {
 Usage: ./start.sh [options]
   (no option)                start the services and open the window
   --fetch-models [model|all] download the pinned model files, then exit (default: the default model)
-  --provider local|codex|none  choose the provider (codex is not available yet)
-  --codex-login              sign in to Codex with a ChatGPT account (not available yet)
+  --provider local|codex|none  choose the provider; codex also needs --codex-opt-in
+  --codex-opt-in             agree that resized, anonymous copies of compared photos go to OpenAI (codex only)
+  --codex-login [device|api-key]
+                             sign in to Codex, then exit: device (default) runs the ChatGPT device sign-in,
+                             api-key reads an API key from stdin (hidden prompt on a terminal)
   --cpu                      run without a GPU
   --rebuild                  rebuild the images and the desktop shell
   --backend-only             services only, for development
@@ -76,13 +93,6 @@ invalid_argument() {
   echo "start.sh: $1" >&2
   usage >&2
   exit 2
-}
-
-# not_available_yet FEATURE PACKAGE: explains a flag whose feature is planned and exits 1.
-# The flag is valid, so this is not a usage error; it counts as a missing prerequisite.
-not_available_yet() {
-  echo "start.sh: $1 is not available yet (planned in $2, see docs/roadmap.md). Nothing was downloaded or changed." >&2
-  exit 1
 }
 
 # set_mode MODE: records the single action flag and rejects a second one.
@@ -109,7 +119,18 @@ parse_arguments() {
           shift
         fi
         ;;
-      --codex-login) set_mode codex-login ;;
+      --codex-login)
+        set_mode codex-login
+        # The optional sign-in method is the next word, unless it is another flag.
+        if [ $# -gt 1 ] && [ "${2#-}" = "$2" ]; then
+          case "$2" in
+            device | api-key) login_method="$2" ;;
+            *) invalid_argument "unknown sign-in method '$2' (use device or api-key)" ;;
+          esac
+          shift
+        fi
+        ;;
+      --codex-opt-in) codex_opt_in=1 ;;
       --status) set_mode status ;;
       --stop) set_mode stop ;;
       --logs)
@@ -141,6 +162,18 @@ parse_arguments() {
     esac
     shift
   done
+  check_codex_opt_in
+}
+
+# check_codex_opt_in: refuses, with exit 2, --provider codex without --codex-opt-in, and --codex-opt-in with anything
+# else, so the codex profile never starts without an explicit agreement on this command line.
+check_codex_opt_in() {
+  if [ "$provider" = "codex" ] && [ "$mode" = "start" ] && [ "$codex_opt_in" -eq 0 ]; then
+    invalid_argument "--provider codex sends resized, anonymous copies of the compared photos to OpenAI. Add --codex-opt-in to agree; nothing was started."
+  fi
+  if [ "$codex_opt_in" -eq 1 ] && { [ "$provider" != "codex" ] || [ "$mode" != "start" ]; }; then
+    invalid_argument "--codex-opt-in applies only to a start with --provider codex"
+  fi
 }
 
 # fail_prerequisite MESSAGE: reports a missing prerequisite on stderr and exits 1.
@@ -229,11 +262,52 @@ fetch_models() {
   exit 0
 }
 
-# choose_provider: settles the provider and sets use_vision to 1 only when the local model can run.
-# Without a request, a missing model degrades to 'none'. An explicit '--provider local' fails instead.
+# codex_login: runs `codex login` once in a throwaway codex container, which keeps the credentials in the codex-home
+# volume, then exits 0 when the sign-in succeeded and 1 otherwise. No other service, token, GPU or photo folder is
+# involved. 'device' runs the ChatGPT device sign-in, which prints a link and a code. 'api-key' reads one line from
+# stdin, with a hidden prompt on a terminal, into an unexported variable, and printf, a builtin that starts no
+# process, writes it to the stdin of `codex login --with-api-key`. The key is never an argument or variable of docker.
+codex_login() {
+  local key=""
+  local base=(docker compose -f compose.yaml --profile codex run --rm --build)
+  if [ "$login_method" = "device" ]; then
+    echo "start.sh: starting the device sign-in in the codex sidecar; open the link it prints and enter the code."
+    "${base[@]}" codex codex login --device-auth ||
+      fail_prerequisite "The sign-in did not complete. See docs/ai-providers.md#sign-in."
+  else
+    if [ -t 0 ]; then
+      IFS= read -r -s -p "API key (input hidden): " key
+      echo >&2
+    else
+      IFS= read -r key
+    fi
+    key="${key%$'\r'}"
+    if [ -z "$key" ]; then
+      fail_prerequisite "No API key was given on stdin; nothing was changed."
+    fi
+    echo "start.sh: passing the API key to the codex sidecar through stdin."
+    printf '%s\n' "$key" | "${base[@]}" -T codex codex login --with-api-key
+    local status=$?
+    key=""
+    if [ "$status" -ne 0 ]; then
+      fail_prerequisite "The sign-in with the API key failed. See docs/ai-providers.md#sign-in."
+    fi
+  fi
+  echo "start.sh: signed in; the credentials stay in the codex-home volume. Start with './start.sh --provider codex --codex-opt-in'."
+  exit 0
+}
+
+# choose_provider: settles the provider and sets use_vision to 1 only when the local model can run, or use_codex to 1
+# for the opted-in codex sidecar. Without a request, a missing model degrades to 'none'. An explicit
+# '--provider local' fails instead.
 choose_provider() {
   use_vision=0
+  use_codex=0
   if [ "$provider" = "none" ]; then
+    return 0
+  fi
+  if [ "$provider" = "codex" ]; then
+    use_codex=1
     return 0
   fi
   if models_present; then
@@ -256,7 +330,8 @@ generate_token() {
   head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'
 }
 
-# prepare_environment: exports the per-session token and the defaults the stack reads.
+# prepare_environment: exports the per-session token and the defaults the stack reads. With --provider codex it also
+# exports a second, independent token that only `api` and the codex sidecar receive, for their calls over `backend`.
 # The exported variables are inherited by docker compose; none is ever put on a command line.
 prepare_environment() {
   AURAFRAME_API_TOKEN="$(generate_token)"
@@ -264,6 +339,13 @@ prepare_environment() {
     fail_prerequisite "Could not generate a session token from /dev/urandom."
   fi
   export AURAFRAME_API_TOKEN
+  if [ "$provider" = "codex" ]; then
+    AURAFRAME_CODEX_TOKEN="$(generate_token)"
+    if [ "${#AURAFRAME_CODEX_TOKEN}" -lt 32 ]; then
+      fail_prerequisite "Could not generate the sidecar token from /dev/urandom."
+    fi
+    export AURAFRAME_CODEX_TOKEN
+  fi
   export AURAFRAME_PORT="${AURAFRAME_PORT:-8420}"
 }
 
@@ -377,6 +459,9 @@ start_stack() {
   if [ "$use_vision" -eq 1 ]; then
     profile_args=(--profile local)
   fi
+  if [ "$use_codex" -eq 1 ]; then
+    profile_args+=(--profile codex)
+  fi
   if [ "$rebuild" -eq 1 ]; then
     compose ${profile_args[@]+"${profile_args[@]}"} build --no-cache ||
       fail_prerequisite "Building the images failed."
@@ -400,6 +485,9 @@ start_stack() {
 # report_started: tells what is running and, with --backend-only, where the token is kept.
 report_started() {
   echo "start.sh: services are healthy on http://127.0.0.1:${AURAFRAME_PORT} (provider: ${provider})."
+  if [ "$use_codex" -eq 1 ]; then
+    echo "start.sh: the codex sidecar runs. Copies leave the computer only for a library that also confirms opt-in in the app."
+  fi
   if [ "$backend_only" -eq 1 ]; then
     write_token_file
     echo "start.sh: the session token is in ${TOKEN_FILE} (ignored by Git). Stop with './start.sh --stop'."
@@ -414,7 +502,7 @@ stop_services_once() {
   fi
   services_stopped=1
   echo "start.sh: stopping the services; the data stays."
-  if ! compose --profile local down; then
+  if ! compose "${SERVICE_PROFILES[@]}" down; then
     echo "start.sh: the services could not be stopped. Run './start.sh --stop'." >&2
     return 1
   fi
@@ -462,37 +550,33 @@ run_window() {
 
 # show_status: prints the state and health of every service.
 show_status() {
-  compose --profile local ps
+  compose "${SERVICE_PROFILES[@]}" ps
 }
 
 # show_logs: follows the logs of one service, or of all of them.
 show_logs() {
   if [ -n "$logs_service" ]; then
-    compose --profile local logs --follow "$logs_service"
+    compose "${SERVICE_PROFILES[@]}" logs --follow "$logs_service"
   else
-    compose --profile local logs --follow
+    compose "${SERVICE_PROFILES[@]}" logs --follow
   fi
 }
 
 # stop_stack: stops and removes the containers and networks; the named volumes stay.
 stop_stack() {
-  compose --profile local down
+  compose "${SERVICE_PROFILES[@]}" down
 }
 
 parse_arguments "$@"
-
-case "$mode" in
-  codex-login) not_available_yet "--codex-login" "P05.2" ;;
-esac
-if [ "$provider" = "codex" ]; then
-  not_available_yet "--provider codex" "P05.2"
-fi
 
 check_docker
 
 case "$mode" in
   fetch-models)
     fetch_models
+    ;;
+  codex-login)
+    codex_login
     ;;
   status)
     show_status

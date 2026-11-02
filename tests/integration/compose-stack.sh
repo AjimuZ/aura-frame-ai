@@ -4,7 +4,8 @@
 # Proves that api and vision cannot reach the internet, that /photos cannot be written, and that only
 # gateway publishes a port, on 127.0.0.1. Also proves that the one-shot fetch-models service reaches the
 # internet but no other service, sees no photos, and can write the models volume even when vision created it,
-# and that `up` does not start the opt-in codex sidecar.
+# and that `up` does not start the opt-in codex sidecar. Then starts that sidecar alone and proves its isolation, its
+# token check, and that api reaches the CLI in it through the HTTP transport (`codex --version` only, no sign-in).
 # Exits 0 only when every assertion holds.
 #
 # It runs under its own project name, with its own volumes, and removes them on exit. It reads no personal
@@ -50,7 +51,7 @@ docker_path() {
 
 # cleanup: removes the containers, networks and volumes of this project, and the temporary folders.
 cleanup() {
-  compose --profile fetch down -v --remove-orphans --timeout 5 >/dev/null 2>&1
+  compose --profile fetch --profile codex down -v --remove-orphans --timeout 5 >/dev/null 2>&1
   rm -rf "${photos_dir:-}" "${exports_dir:-}"
 }
 
@@ -168,6 +169,9 @@ token="$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')"
 export AURAFRAME_API_TARGET=core
 export AURAFRAME_PORT="$port"
 export AURAFRAME_API_TOKEN="$token"
+# The api-to-sidecar secret, set before the first `up` so api and the codex sidecar share it, as start.sh does.
+AURAFRAME_CODEX_TOKEN="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
+export AURAFRAME_CODEX_TOKEN
 AURAFRAME_PHOTOS_DIR="$(docker_path "$photos_dir")"
 AURAFRAME_EXPORTS_DIR="$(docker_path "$exports_dir")"
 export AURAFRAME_PHOTOS_DIR AURAFRAME_EXPORTS_DIR
@@ -333,6 +337,53 @@ if [ -z "$(compose --profile codex ps -a -q codex 2>/dev/null | tr -d '\r')" ]; 
   pass "codex is not started by up"
 else
   fail "codex was started by up"
+fi
+# Started on purpose here, as `--provider codex --codex-opt-in` would, to prove the api-to-sidecar transport. Only the
+# CLI's `--version` runs: no sign-in, no image and no request beyond the stack.
+if compose --profile codex up -d --build --wait --wait-timeout 120 --quiet-pull codex; then
+  pass "codex starts and passes its health check with the per-start token"
+  uid="$(compose --profile codex exec -T codex id -u | tr -d '\r')"
+  if [ -n "$uid" ] && [ "$uid" != "0" ]; then
+    pass "codex runs as uid $uid"
+  else
+    fail "codex runs as uid '${uid}'"
+  fi
+  if compose --profile codex exec -T codex sh -c 'test ! -e /photos && test ! -e /data && test ! -e /models && test ! -e /exports && test ! -e /var/run/docker.sock'; then
+    pass "codex sees no photos, data, models, exports or Docker socket"
+  else
+    fail "codex sees a mount it must not have"
+  fi
+  output="$(compose --profile codex exec -T codex sh -c 'touch /etc/probe' 2>&1)"
+  if [[ "$output" == *"Read-only file system"* ]]; then
+    pass "codex has a read-only root filesystem"
+  else
+    fail "codex wrote to /etc or failed for another reason: $output"
+  fi
+  # shellcheck disable=SC2016 # Python source, run inside the api container.
+  code="$(compose exec -T api python -c '
+import httpx
+print(httpx.post("http://codex:8090/v1/run", json={"args": ["--version"]}, timeout=10).status_code)
+' 2>/dev/null | tr -d '\r')"
+  if [ "$code" = "401" ]; then
+    pass "the sidecar refuses a call from api without the token (401)"
+  else
+    fail "the sidecar answered '$code' to a call without the token"
+  fi
+  code="$(compose exec -T api python -c '
+import tempfile
+from pathlib import Path
+from src.providers.codex_sidecar import SidecarRunner
+with tempfile.TemporaryDirectory() as folder:
+    print(SidecarRunner.from_environment("http://codex:8090")(["codex", "--version"], Path(folder), 30.0))
+' 2>&1 | tr -d '\r' | tail -n 1)"
+  if [ "$code" = "0" ]; then
+    pass "api runs the CLI in the sidecar through the transport (codex --version exits 0)"
+  else
+    fail "the transport from api to the CLI failed: $code"
+  fi
+else
+  compose --profile codex logs --tail 40 codex
+  fail "codex did not start or failed its health check"
 fi
 
 echo "Vision image"

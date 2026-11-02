@@ -1,5 +1,6 @@
 # codex image: the pinned Codex CLI for the optional, opt-in judge, run as an unprivileged user. It holds the CLI,
-# its fixed config and the entrypoint only; the engine, the photos and the data are never copied in.
+# its fixed config, the entrypoint and the HTTP front that `api` calls; the engine, the photos and the data are never
+# copied in.
 #
 # Pins read from the registries on 2026-11-02: the node:22-slim linux/amd64 manifest digest below, and
 # @openai/codex 0.166.0, whose registry integrity npm checks on install:
@@ -23,9 +24,11 @@ RUN npm install -g @openai/codex@0.166.0 \
 
 COPY config.toml /etc/auraframe/codex/config.toml
 COPY entrypoint.sh /usr/local/lib/auraframe/codex-entrypoint.sh
+COPY sidecar-server.cjs /usr/local/lib/auraframe/codex-sidecar.cjs
 
 WORKDIR /exchange
 USER 10001:10001
 ENTRYPOINT ["/bin/sh", "/usr/local/lib/auraframe/codex-entrypoint.sh"]
-# Placeholder until the provider (P05.2) gives the sidecar its comparison runner: prints the version and exits.
-CMD ["codex", "--version"]
+# The HTTP front that `api` calls on the backend network (ADR 0018). `./start.sh --codex-login` replaces this command
+# with `codex login`, so the sign-in runs in the same image, user and Codex home.
+CMD ["node", "/usr/local/lib/auraframe/codex-sidecar.cjs"]

@@ -4,6 +4,17 @@
 
 ### Added
 
+- `./start.sh --provider codex` now starts the opt-in Codex sidecar, but only with `--codex-opt-in` on the same command
+  line, which states that resized, anonymous copies of the compared photos go to OpenAI; without it the script exits 2
+  before any Docker call. `./start.sh --codex-login` runs the ChatGPT device sign-in in a throwaway sidecar, and
+  `./start.sh --codex-login api-key` reads an API key from stdin (hidden prompt on a terminal) and hands it to
+  `codex login --with-api-key` through stdin only, never as an argument, variable or file. The credentials stay in the
+  `codex-home` volume. `api` reaches the CLI through a small HTTP service in the sidecar on the internal `backend`
+  network, gated by a per-start token (`AURAFRAME_CODEX_TOKEN`) that only the two services receive; it runs only
+  `codex --version` or the engine's `codex exec` shape, in a private folder of the exchange tmpfs that is removed after
+  each call (ADR 0018). `--stop`, `--status`, `--logs` and the stop after the window now also reach the sidecar. No run
+  sends a copy yet: the per-library confirmation in the app is planned (P05.2.3). Tested with stubs, a fake CLI and an
+  in-memory sidecar; the image build, a real sign-in and a real call have not been run.
 - The engine has a Codex CLI provider (`engine/src/providers/codex.py`) as a building block. It does nothing until it
   is built with explicit opt-in: without it no copy is checked, no file is written and no process starts, and no
   setting in `engine/config.yaml` can turn it on. Each verdict is one `codex exec` start in a fresh private folder
@@ -17,8 +28,8 @@
   uid 10001 on a read-only root, and installs a config with web search, history, analytics, feedback, telemetry and
   the shell tool off, rewritten into the new `codex-home` volume on every start. It joins `backend` and `egress` and
   mounts only a tmpfs at `/exchange` and `codex-home`; the compose policy refuses photos, data, models, exports or
-  the Docker socket in it, and `codex-home` in any other service (ADR 0016). It only prints its version for now:
-  nothing sends it comparisons until the Codex provider (P05.2), and the image has not been built yet.
+  the Docker socket in it, and `codex-home` in any other service (ADR 0016). Its default command, first a version
+  print, is now the HTTP front described above; the image has not been built yet.
 - Critique, diversity-aware selection, reports and exports as engine building blocks. The finalists (the final set,
   default 25) get a structured critique after the rank is fixed, and the critique cannot change the rank or the
   selection. Maximal marginal relevance with `lambda = 0.75` over SigLIP 2 similarity gives nested Top 10, 25, 50 and
@@ -96,7 +107,7 @@
   and the model files, warns when Docker has less than 10 GB, generates a new session token per start and
   passes it only through the environment, and downloads a model only with `--fetch-models` (see below). Exit codes
   are 0, 1 (prerequisite), 2 (invalid arguments) and 3 (health check). It is tested with stubbed tools only, not
-  against a real Docker daemon. `--codex-login` and `--provider codex` say that they are not available yet.
+  against a real Docker daemon. `--codex-login` and `--provider codex` came later, with the Codex sidecar (above).
 - Electron main has a module that starts and stops the container stack for a chosen photo folder. It checks
   that the folder is an existing directory, runs Docker without a shell, and passes the folder and a fresh
   per-session token only through the environment, so neither appears in a command line, event or reply.

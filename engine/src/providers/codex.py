@@ -8,8 +8,8 @@ verdict schema, and removes the folder whatever happened. Every CLI start counts
 `max_calls`; at the cap the provider refuses further calls and reports `degraded`, so the run goes
 on with the local prescore. No method raises.
 
-How the `api` container reaches the sidecar is not decided here: the command and the runner are
-injectable, and the real transport comes with the stack wiring (P05.2.2, P05.3).
+The command and the runner are injectable. In the stack, `api` has no CLI of its own and uses the
+`SidecarRunner` of `codex_sidecar.py`, which hands each start to the sidecar over the internal network.
 """
 
 import json
@@ -88,8 +88,10 @@ class CodexSettings:
 
     Opt-in is deliberately not a setting: a configuration file can never turn the provider on.
     Always build it with `from_mapping`, which clamps every limit and validates the names.
+    `endpoint` is the sidecar's HTTP service on the internal `backend` network.
     """
 
+    endpoint: str = "http://codex:8090"
     model: str = ""
     reasoning_effort: str = "low"
     timeout_seconds: float = 180.0
@@ -98,12 +100,15 @@ class CodexSettings:
     max_calls: int = 200
     max_consecutive_failures: int = 3
 
-    # Builds settings from the `ai.codex` mapping. Unknown keys are ignored, numbers are clamped, and a
-    # model name or effort the CLI could misread raises ValueError.
+    # Builds settings from the `ai.codex` mapping. Unknown keys are ignored, numbers are clamped, and an
+    # endpoint that is not http(s), or a model name or effort the CLI could misread, raises ValueError.
     @classmethod
     def from_mapping(cls, values: Mapping[str, Any] | None) -> "CodexSettings":
         raw = values or {}
         defaults = cls()
+        endpoint = str(raw.get("endpoint") or defaults.endpoint).strip().rstrip("/")
+        if not endpoint.startswith(("http://", "https://")):
+            raise ValueError("The Codex sidecar endpoint must start with http:// or https://.")
         model = str(raw.get("model") or "").strip()
         if model and not _MODEL_NAME.fullmatch(model):
             raise ValueError("The Codex model name may hold only letters, digits, '.', '_', ':' and '-'.")
@@ -111,6 +116,7 @@ class CodexSettings:
         if effort not in REASONING_EFFORTS:
             raise ValueError(f"The Codex reasoning effort must be one of {', '.join(REASONING_EFFORTS)}.")
         return cls(
+            endpoint=endpoint,
             model=model,
             reasoning_effort=effort,
             timeout_seconds=_bounded(

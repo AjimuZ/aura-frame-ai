@@ -21,6 +21,8 @@ ai:
   # purpose: only the per-library confirmation turns the provider on, never this file. Not wired into a run yet.
   # Each CLI start, retries included, counts against max_calls (1-20000).
   codex:
+    # HTTP service of the sidecar on the internal backend network (docker/codex/sidecar-server.cjs).
+    endpoint: "http://codex:8090"
     # Empty uses the CLI's own default model.
     model: ""
     reasoning_effort: "low"

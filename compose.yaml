@@ -9,6 +9,7 @@
 #   so no `up` starts it, and only `./start.sh --fetch-models` runs it. It sees the models volume and nothing else.
 # - `codex` is the optional Codex CLI sidecar, on `backend` and `egress`, behind the profile `codex`. It sees an
 #   exchange tmpfs and its own credentials volume, never the photos, the data, the models or the Docker socket.
+#   `api` hands it calls over HTTP on `backend`, so `api` keeps no internet route and no shared volume.
 # - Rules enforced by `bash scripts/check.sh --compose` (scripts/compose-policy.cjs).
 
 name: auraframe
@@ -68,6 +69,8 @@ services:
       HF_HOME: /models/huggingface
       HF_HUB_OFFLINE: "1"
       HF_HUB_DISABLE_TELEMETRY: "1"
+      # Shared with the opt-in codex sidecar; empty, and then unused, unless start.sh ran with --provider codex.
+      AURAFRAME_CODEX_TOKEN: ${AURAFRAME_CODEX_TOKEN:-}
     volumes:
       # The default is an empty ignored folder, so a start without a chosen folder sees no photos.
       - type: bind
@@ -165,10 +168,11 @@ services:
     networks:
       - egress
 
-  # Optional judge of the opt-in Codex provider (ADR 0005, ADR 0016). Behind the profile `codex`, so no plain `up`
-  # starts it. It mounts only the `exchange` tmpfs, where anonymous resized copies will be put, and the `codex-home`
-  # volume with the credentials and the config that the entrypoint rewrites on every start. Its default command only
-  # prints the CLI version; the provider that sends it comparisons is P05.2.
+  # Optional judge of the opt-in Codex provider (ADR 0005, ADR 0016, ADR 0018). Behind the profile `codex`, which only
+  # `./start.sh --provider codex --codex-opt-in` and `--codex-login` name. It mounts only the `exchange` tmpfs, where
+  # each call's anonymous resized copies live in a private folder, and the `codex-home` volume with the credentials
+  # and the config that the entrypoint rewrites on every start. Its HTTP service on port 8090 is reached by `api` over
+  # `backend`, with the per-start AURAFRAME_CODEX_TOKEN; without that token it does not start.
   codex:
     <<: *hardening
     build:
@@ -179,6 +183,16 @@ services:
     pids_limit: 256
     tmpfs:
       - /tmp:size=64m
+    environment:
+      AURAFRAME_CODEX_TOKEN: ${AURAFRAME_CODEX_TOKEN:-}
+    expose:
+      - "8090"
+    healthcheck:
+      test: ["CMD", "node", "/usr/local/lib/auraframe/codex-sidecar.cjs", "--health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     volumes:
       - type: tmpfs
         target: /exchange

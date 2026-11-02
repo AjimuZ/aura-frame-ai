@@ -25,7 +25,7 @@ Status: **target design**. The final section lists what the current code does to
 | `api` to internet | Data leak from a bug or a dependency | `backend` is an internal network with no route out. An exit check proves it |
 | Image content to AI | Text inside a photo tries to steer the model | Output limited by JSON Schema, no tools available, and reasons are escaped when rendered |
 | AI output to UI and reports | Script injection | Treated as untrusted text, always escaped, and never rendered as HTML |
-| `api` to `codex` | Exposure of originals to a service with internet | Only anonymous, resized, EXIF-free copies cross this boundary, into a tmpfs. No path, name or database is mounted |
+| `api` to `codex` | Exposure of originals to a service with internet | Only anonymous, resized, EXIF-free copies cross this boundary, over an HTTP call on `backend` that needs a per-start token, into a tmpfs. No path, name or database is mounted |
 | `codex` to OpenAI | Image content leaves the computer | Off by default, opt-in per library, call limit, all Codex tools and telemetry off |
 | `fetch-models` to internet | Tampered model files | Pinned repository revisions, sizes and SHA-256 checks, https only, and a file is renamed into place only after it passes. This service never sees photos and cannot reach the other services (implemented in P03.2) |
 | Model file loading | Code execution from model files | GGUF, safetensors and MediaPipe `.task` bundles (a ZIP of TFLite models, no pickle) only, by name and by first bytes (the `.task` entry arrived in P04.4c, with the Face Landmarker pinned by object generation id). Pickle-based formats are refused before any download (implemented in P03.2 for the downloads). The Q-ReAlign and SigLIP 2 loaders (P04.3, `engine/src/model_loader.py`, `engine/src/gpu_models.py`) read `.safetensors` only, check the header, take one plain directory name of the models volume (no hub identifier, no path), and pass `local_files_only`, `use_safetensors` and no remote code; a test scans the source for download calls. Real checkpoints have not been loaded yet |
@@ -119,8 +119,8 @@ Verified on 2026-11-01 by reading the source.
   plain `up` starts it; exactly `backend` and `egress`; a tmpfs at `/exchange` and the `codex-home` volume as its only
   mounts, so no photos, data, exports, models or Docker socket; uid 10001 on a read-only root; web search, history,
   analytics, feedback, telemetry and the shell tool off in its config, which the entrypoint rewrites on every start.
-  `bash scripts/check.sh --compose` enforces these rules from the resolved configuration. Nothing calls it yet (P05.2),
-  and its image has not been built, so none of this has been observed in a running container
+  `bash scripts/check.sh --compose` enforces these rules from the resolved configuration. Its image has not been
+  built, so none of this has been observed in a running container
   ([ADR 0016](decisions/0016-codex-sidecar-image.md)).
 - Since P05.2.1 (2026-11-02), the engine's Codex provider (`engine/src/providers/codex.py`) acts only when built with
   `opted_in=True`; no configuration key can set that. Without it, no file is written and no process starts. It accepts
@@ -130,6 +130,25 @@ Verified on 2026-11-01 by reading the source.
   `engine/tests/test_codex_provider.py` proves with a fake CLI that what it receives carries no EXIF, ICC, comment,
   file name, photo folder or API key. Nothing calls the provider yet, and the transport to the sidecar is open
   ([ADR 0017](decisions/0017-codex-provider-gate-and-cap.md)).
+- Since P05.2.2 (2026-11-02), the sidecar is reached and started as follows
+  ([ADR 0018](decisions/0018-codex-sidecar-transport.md)):
+  - `api` calls an HTTP service in the sidecar (`docker/codex/sidecar-server.cjs`, port `8090`, exposed on `backend`
+    only and never published). `api` gains no network, volume or capability, and no Docker socket is involved.
+  - Every run needs `AURAFRAME_CODEX_TOKEN`, a per-start secret separate from the session token that only `api` and
+    the sidecar receive. The sidecar does not start without it, compares it in constant time, and never passes it to
+    the CLI.
+  - The sidecar runs only `codex --version` or the engine's `codex exec` shape (`--sandbox read-only`, the neutral
+    files `a.jpg`, `b.jpg`, `schema.json`, `verdict.json`); `login`, a sandbox bypass, another sandbox mode or a path
+    is refused before anything starts. Each call has a private folder in the `exchange` tmpfs, removed afterwards, and
+    nothing of a request is logged.
+  - `./start.sh --provider codex` refuses to start without `--codex-opt-in`, and no other path starts the `codex`
+    profile except `--codex-login`, which runs the sign-in alone. The engine still sends nothing until the per-library
+    confirmation exists (P05.2.3).
+  - `./start.sh --codex-login api-key` passes the key only through the stdin of `codex login --with-api-key`: not an
+    argument, an environment variable or a file, and never printed.
+  - Remaining exposure: the token is readable in the sidecar's `/proc/1/environ` by its own user, and anything on
+    `backend` can reach port `8090`, which still needs the token. Tested with stubs, a fake CLI and an in-memory
+    sidecar; not observed in a running container.
 - A personal first name was hard-coded as the default library name, which broke the project rule
   against personal data in code. Fixed in P01.2.2; see [assessment](assessment.md#environment-and-repository).
   The `package.json` author field no longer holds a personal name, and `tests/personal-data.test.cjs`

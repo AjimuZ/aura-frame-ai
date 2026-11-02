@@ -3,10 +3,12 @@
 Status: the contract and the local llama-server provider are **implemented** in `engine/src/providers`
 (P03.1), tested against a fake server only. They are **not yet wired into the pipeline**, and no model has been
 run. The Codex CLI provider is **implemented in the engine** since P05.2.1 (`engine/src/providers/codex.py`,
-[ADR 0017](decisions/0017-codex-provider-gate-and-cap.md)) and tested against a fake CLI only; its transport to the
-sidecar, `--provider codex`, `--codex-login` and the opt-in dialog are **planned** ([P05](roadmap.md)). The sidecar
-image, config and volumes exist since P05.1 ([ADR 0016](decisions/0016-codex-sidecar-image.md)) but have not been
-built or run, and nothing calls them yet. The pipeline still uses the legacy client
+[ADR 0017](decisions/0017-codex-provider-gate-and-cap.md)) and tested against a fake CLI only. Its transport to the
+sidecar, `--provider codex --codex-opt-in` and `--codex-login` are **implemented** since P05.2.2
+([ADR 0018](decisions/0018-codex-sidecar-transport.md)), tested with stubs, a fake CLI and an in-memory sidecar; the
+per-library opt-in dialog, and with it any run that uses the provider, is **planned** (P05.2.3). The sidecar image,
+config and volumes exist since P05.1 ([ADR 0016](decisions/0016-codex-sidecar-image.md)) but have not been built or
+run. The pipeline still uses the legacy client
 until [P03](roadmap.md) and [P04](roadmap.md) land. Decisions: [ADR 0003](decisions/0003-llama-cpp-runtime.md),
 [ADR 0004](decisions/0004-default-local-model.md),
 [ADR 0005](decisions/0005-codex-cli-provider.md).
@@ -201,7 +203,11 @@ acceptable only because the shell tool is off, and the container holds no origin
 | Method | Command | Billing | Data handling, per upstream documentation |
 | --- | --- | --- | --- |
 | ChatGPT account | `./start.sh --codex-login` (runs `codex login --device-auth`) | Plan limits | Follows the workspace's access and retention settings |
-| API key | Settings screen: Electron keeps the key encrypted, and passes it to `codex login --with-api-key` through stdin | API rates | Follows the API organization's retention and data-sharing settings |
+| API key | `./start.sh --codex-login api-key`: reads the key from stdin (hidden prompt on a terminal) and passes it to `codex login --with-api-key` through stdin only. Planned: a Settings screen where Electron keeps the key encrypted and passes it the same way | API rates | Follows the API organization's retention and data-sharing settings |
+
+Both run once in a throwaway container of the `codex` service and exit; nothing else starts. The key is never an
+argument, an environment variable or a file, and is never printed (implemented in P05.2.2, tested with stubs only;
+no real sign-in has run).
 
 Check your own account's data controls before opting in, because they decide whether content
 may be used to improve models. Credentials stay in the `codex-home` volume. Upstream says to
@@ -209,8 +215,9 @@ treat `auth.json` like a password.
 
 ### Opt-in and limits
 
-- The sidecar starts only with `--provider codex`, and each library must also confirm opt-in in
-  the UI. The dialog states what is sent, and the number of calls the run will make.
+- The sidecar starts only with `./start.sh --provider codex --codex-opt-in`; `--provider codex` alone exits `2`
+  before anything runs. Each library must also confirm opt-in in the UI (planned, P05.2.3). The dialog states what
+  is sent, and the number of calls the run will make.
 - `codex.max_calls` caps each run (default 200). The tournament stops at the cap and ranks with
   the verdicts it has.
 - `codex.model` is optional. Unset, the CLI's own default applies, so the project does not go
@@ -248,10 +255,29 @@ Settings (`ai.codex` in `engine/config.yaml`, built by `CodexSettings.from_mappi
 | `retry_delay_seconds` (times the attempt number) | 2 | 0 to 10 |
 | `max_calls` (CLI starts per run) | 200 | 1 to 20,000 |
 | `max_consecutive_failures` (for the guard) | 3 | 1 to 20 |
+| `endpoint` (the sidecar's HTTP service, P05.2.2) | `http://codex:8090` | `http://` or `https://` |
 
-Not yet decided or observed: how the `api` container hands a call to the sidecar (the default runner needs `codex`
-in the same container, which `api` does not have; P05.2.2 and P05.3), the flags against the real CLI 0.166.0,
-and whether the CLI's structured output accepts `maxLength` and `maxItems` in the verdict schemas.
+### Transport
+
+**Status: implemented (P05.2.2), tested with an in-memory sidecar and a fake CLI only**
+([ADR 0018](decisions/0018-codex-sidecar-transport.md)). `api` has no CLI, so `sidecar_provider(settings,
+opted_in=...)` in `engine/src/providers/codex_sidecar.py` builds the provider with a `SidecarRunner`:
+
+- Each CLI start is one `POST /v1/run` to `ai.codex.endpoint` on the internal `backend` network, with
+  `Authorization: Bearer <AURAFRAME_CODEX_TOKEN>`. The body holds the arguments without the command name, only the
+  files `a.jpg`, `b.jpg` and `schema.json` of the call folder in base64, and the timeout. The answer's verdict text is
+  written back as `verdict.json`, and `CodexProvider` validates it as before.
+- The sidecar (`docker/codex/sidecar-server.cjs`, Node built-ins only, port `8090`) runs only `codex --version` or the
+  `codex exec` shape shown above, in a fresh private folder of its `exchange` tmpfs, removed afterwards, with
+  `shell: false`, no stdin, output discarded and an environment of `PATH`, `HOME`, `CODEX_HOME` and the locale. It
+  answers `400` for anything else, `401` without the token, `409` while another call runs, `413` over 24 MiB and
+  `502` when the CLI cannot start; the runner turns these into `unreachable`, and a timeout into `timeout`.
+- Without the token (a start without `--provider codex`), `sidecar_provider` raises `ValueError`, and the sidecar
+  itself does not start.
+
+Not yet decided or observed: the flags against the real CLI 0.166.0, whether the CLI's structured output accepts
+`maxLength` and `maxItems` in the verdict schemas, and the transport in a running stack (the integration check covers
+it with `codex --version` but has not been run).
 
 ## No provider
 

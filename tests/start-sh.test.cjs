@@ -18,12 +18,17 @@ const STUBS = {
 printf '%s\\n' "$*" >> "$STUB_DIR/docker.argv"
 printf 'MSYS_NO_PATHCONV=%s\\n' "\${MSYS_NO_PATHCONV-unset}" >> "$STUB_DIR/docker.env"
 if [ -n "\${AURAFRAME_API_TOKEN-}" ]; then printf '%s' "$AURAFRAME_API_TOKEN" > "$STUB_DIR/docker.token"; fi
+if [ -n "\${AURAFRAME_CODEX_TOKEN-}" ]; then printf '%s' "$AURAFRAME_CODEX_TOKEN" > "$STUB_DIR/docker.codex-token"; fi
 case " $* " in
   " info ") [ -z "\${STUB_DAEMON_DOWN-}" ]; exit $? ;;
   *" info --format "*) printf '%s\\n' "\${STUB_MEM:-${16 * GIB}}"; exit 0 ;;
   " compose version ") [ -z "\${STUB_NO_COMPOSE-}" ]; exit $? ;;
   *" run "*electron-builder*) exit "\${STUB_BUILD_EXIT:-0}" ;;
   *" run "*fetch-models*) exit "\${STUB_FETCH_EXIT:-0}" ;;
+  *" run "*" codex login "*)
+    cat > "$STUB_DIR/login.stdin"
+    env > "$STUB_DIR/login.env"
+    exit "\${STUB_LOGIN_EXIT:-0}" ;;
   *" run "*) printf '%s' "\${STUB_LISTING-}"; exit 0 ;;
   *" up "*) exit "\${STUB_UP_EXIT:-0}" ;;
   *" down "*) exit "\${STUB_DOWN_EXIT:-0}" ;;
@@ -78,10 +83,11 @@ function writeWindow(dir, relative) {
 
 // Runs a copy of start.sh in a fresh directory with stub tools first on PATH.
 // `without` lists stub names to leave out; `env` sets STUB_* variables; `edit` rewrites the copied script text.
-// `window: false` leaves the built window out; `files` creates more files (relative path to content) first.
+// `window: false` leaves the built window out; `files` creates more files (relative path to content) first; `input`
+// is written to the script's stdin, a pipe and never a terminal.
 // By default the window stub sits at the Linux shell path, and the Windows constant is pointed at it too, because
 // Git Bash cannot run a script named `.exe`. Returns the result and file readers.
-function runStart(args, { env = {}, without = [], edit = (script) => script, window = true, files = {} } = {}) {
+function runStart(args, { env = {}, without = [], edit = (script) => script, window = true, files = {}, input = '' } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auraframe-start-'));
   const stubs = path.join(dir, 'bin');
   fs.mkdirSync(stubs);
@@ -115,9 +121,11 @@ function runStart(args, { env = {}, without = [], edit = (script) => script, win
   };
   delete childEnv.MSYS_NO_PATHCONV;
   delete childEnv.AURAFRAME_API_TOKEN;
+  delete childEnv.AURAFRAME_CODEX_TOKEN;
   const result = spawnSync('bash', ['./start.sh', ...args], {
     cwd: dir,
     env: childEnv,
+    input,
     encoding: 'utf8',
     shell: false,
     timeout: 60_000,
@@ -157,6 +165,12 @@ test('exits 2 on an invalid argument, before any prerequisite', () => {
     ['--fetch-models', '--stop'],
     ['--fetch-models', 'Not/A-Model'],
     ['--fetch-models', 'all', 'extra'],
+    ['--codex-login', 'bogus'],
+    ['--codex-login', '--stop'],
+    ['--codex-opt-in'],
+    ['--codex-opt-in', '--provider', 'local'],
+    ['--provider', 'codex', '--codex-opt-in', '--status'],
+    ['--codex-login', '--codex-opt-in'],
   ];
   for (const args of cases) {
     const run = runStart(args, { without: ['docker'] });
@@ -181,6 +195,10 @@ test('accepts every flag of the contract', () => {
     ['--fetch-models'],
     ['--fetch-models', 'all'],
     ['--fetch-models', 'qwen3.5-9b-q5_k_m'],
+    ['--provider', 'codex', '--codex-opt-in'],
+    ['--codex-opt-in', '--provider', 'codex', '--backend-only'],
+    ['--codex-login'],
+    ['--codex-login', 'device'],
   ];
   for (const args of cases) {
     const run = runStart(args);
@@ -222,7 +240,7 @@ test('runs the window after the services are healthy, then stops them once and k
 
   const downs = downLines(run);
   assert.equal(downs.length, 1, 'down runs exactly once');
-  assert.match(downs[0], /--profile local down$/);
+  assert.match(downs[0], /--profile local --profile codex down$/);
   assert.doesNotMatch(run.read('docker.argv'), /--volumes|\s-v\s.*down/);
   assert.match(run.stdout, /opening the desktop window\. Closing it stops the services; the data stays\./);
   assert.doesNotMatch(`${run.stdout}${run.stderr}`, /not launched|launching it is not implemented/);
@@ -261,7 +279,7 @@ test('Ctrl+C or a termination closes the window, stops the services once and kee
     assert.equal(run.read('window.survived'), '', `${signal}: the window was ended`);
     const downs = downLines(run);
     assert.equal(downs.length, 1, `${signal}: down runs exactly once`);
-    assert.match(downs[0], /--profile local down$/);
+    assert.match(downs[0], /--profile local --profile codex down$/);
     assert.doesNotMatch(run.read('docker.argv'), /--volumes/);
   }
 });
@@ -435,15 +453,124 @@ test('the default model of the manifest is the one vision and start.sh expect', 
   assert.deepEqual(MODEL_LISTING.trim().split('\n'), model.files.map((file) => file.target));
 });
 
-test('says "not available yet" for planned flags and runs nothing', () => {
-  const cases = [['--codex-login'], ['--provider', 'codex']];
+// Returns the docker command lines that name the codex profile with `up` or `run`, the two that start services.
+function codexStartLines(run) {
+  return run.read('docker.argv').split('\n').filter((line) => /--profile codex/.test(line) && / (up|run) /.test(` ${line} `));
+}
+
+test('--provider codex without --codex-opt-in is refused before anything runs', () => {
+  for (const args of [['--provider', 'codex'], ['--provider', 'codex', '--backend-only'], ['--provider', 'codex', '--cpu']]) {
+    const run = runStart(args);
+    assert.equal(run.status, 2, `${args.join(' ')}: ${run.stderr}`);
+    assert.match(run.stderr, /sends resized, anonymous copies of the compared photos to OpenAI/);
+    assert.match(run.stderr, /--codex-opt-in/);
+    assert.equal(run.read('docker.argv'), '', 'no docker call, so the codex profile never starts');
+    assert.equal(run.read('window.argv'), '');
+  }
+  const script = fs.readFileSync(START_SH, 'utf8');
+  assert.doesNotMatch(script, /not_available_yet/);
+});
+
+test('--provider codex --codex-opt-in starts the codex profile with its own token, outside every argument', () => {
+  const run = runStart(['--provider', 'codex', '--codex-opt-in', '--backend-only']);
+  assert.equal(run.status, 0, run.stderr);
+  const [up] = upLines(run);
+  assert.match(up, /--profile codex up /);
+  assert.doesNotMatch(up, /--profile local/, 'the local vision service is not started for the codex provider');
+  assert.deepEqual(codexStartLines(run), [up]);
+  assert.doesNotMatch(run.read('docker.argv'), /run --rm --no-deps --entrypoint ls vision/, 'no model listing is needed');
+
+  const codexToken = run.read('docker.codex-token');
+  const apiToken = run.read('docker.token');
+  assert.match(codexToken, /^[0-9a-f]{64}$/);
+  assert.notEqual(codexToken, apiToken, 'the sidecar token is independent of the session token');
+  for (const log of ['docker.argv', 'curl.argv', 'curl.stdin', 'data/session-token']) {
+    assert.ok(!run.read(log).includes(codexToken), `${log} must not contain the sidecar token`);
+  }
+  assert.ok(!run.stdout.includes(codexToken) && !run.stderr.includes(codexToken));
+  assert.match(run.stdout, /provider: codex/);
+  assert.match(run.stdout, /only for a library that also confirms opt-in in the app/);
+});
+
+test('no other start, status or stop path starts the codex profile or makes its token', () => {
+  const cases = [[], ['--provider', 'local'], ['--provider', 'none'], ['--backend-only'], ['--status'], ['--logs'], ['--stop'], ['--fetch-models']];
   for (const args of cases) {
     const run = runStart(args);
-    assert.equal(run.status, 1, args.join(' '));
-    assert.match(run.stderr, /not available yet/);
-    assert.equal(run.read('docker.argv'), '', 'no docker call');
-    assert.equal(run.read('curl.argv'), '', 'no download');
+    assert.equal(run.status, 0, `${args.join(' ')}: ${run.stderr}`);
+    assert.deepEqual(codexStartLines(run), [], args.join(' '));
+    assert.equal(run.read('docker.codex-token'), '', args.join(' '));
   }
+});
+
+test('--stop, --status, --logs and the stop after the window also reach the codex sidecar', () => {
+  const lines = (args) => runStart(args).read('docker.argv').split('\n').filter(Boolean).pop();
+  assert.match(lines(['--stop']), /--profile local --profile codex down$/);
+  assert.match(lines(['--status']), /--profile local --profile codex ps$/);
+  assert.match(lines(['--logs', 'codex']), /--profile local --profile codex logs --follow codex$/);
+  const run = runStart(['--provider', 'codex', '--codex-opt-in']);
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(downLines(run)[0], /--profile local --profile codex down$/);
+});
+
+// Returns the docker command lines that run a sign-in.
+function loginLines(run) {
+  return run.read('docker.argv').split('\n').filter((line) => / login /.test(` ${line} `));
+}
+
+test('--codex-login runs only the device sign-in in a throwaway sidecar, then exits', () => {
+  for (const args of [['--codex-login'], ['--codex-login', 'device']]) {
+    const run = runStart(args);
+    assert.equal(run.status, 0, `${args.join(' ')}: ${run.stderr}`);
+    assert.deepEqual(loginLines(run), [
+      'compose -f compose.yaml --profile codex run --rm --build codex codex login --device-auth',
+    ]);
+    assert.deepEqual(upLines(run), [], 'no service is started');
+    assert.deepEqual(downLines(run), []);
+    assert.equal(run.read('nvidia-smi.argv'), '', 'no GPU is needed');
+    assert.equal(run.read('docker.token'), '', 'no session token is made');
+    assert.equal(run.read('docker.codex-token'), '');
+    assert.equal(run.read('window.argv'), '', 'no window');
+    assert.match(run.stdout, /credentials stay in the codex-home volume/);
+  }
+  const failed = runStart(['--codex-login'], { env: { STUB_LOGIN_EXIT: '1' } });
+  assert.equal(failed.status, 1);
+  assert.match(failed.stderr, /sign-in did not complete/);
+});
+
+test('--codex-login api-key passes the key to the sidecar through stdin only', () => {
+  const key = 'sk-test-0123456789abcdefSECRET';
+  const run = runStart(['--codex-login', 'api-key'], { input: `${key}\n` });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(loginLines(run), [
+    'compose -f compose.yaml --profile codex run --rm --build -T codex codex login --with-api-key',
+  ]);
+  assert.equal(run.read('login.stdin'), `${key}\n`, 'the sign-in reads exactly the key on its stdin');
+  assert.ok(!run.read('docker.argv').includes(key), 'the key is not in any docker argument');
+  assert.ok(!run.read('login.env').includes(key), 'the key is not in the environment docker sees');
+  assert.ok(!run.stdout.includes(key) && !run.stderr.includes(key), 'the key is never printed');
+  assert.deepEqual(upLines(run), []);
+
+  const crlf = runStart(['--codex-login', 'api-key'], { input: `${key}\r\n` });
+  assert.equal(crlf.read('login.stdin'), `${key}\n`, 'a Windows line ending is not part of the key');
+
+  const empty = runStart(['--codex-login', 'api-key'], { input: '' });
+  assert.equal(empty.status, 1);
+  assert.match(empty.stderr, /No API key was given on stdin/);
+  assert.deepEqual(loginLines(empty), [], 'no sign-in runs without a key');
+
+  const refused = runStart(['--codex-login', 'api-key'], { input: `${key}\n`, env: { STUB_LOGIN_EXIT: '1' } });
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /sign-in with the API key failed/);
+  assert.ok(!refused.stderr.includes(key));
+});
+
+test('the API key is read into an unexported variable and written by the printf builtin', () => {
+  const script = fs.readFileSync(START_SH, 'utf8').replace(/\r\n/g, '\n');
+  const body = /\ncodex_login\(\) \{\n([\s\S]*?)\n\}\n/.exec(script)[1];
+  assert.match(body, /local key=""/);
+  assert.match(body, /IFS= read -r -s -p "API key \(input hidden\): " key/);
+  assert.match(body, /printf '%s\\n' "\$key" \| "\$\{base\[@\]\}" -T codex codex login --with-api-key/);
+  assert.doesNotMatch(body, /export [^\n]*key|--with-api-key [^\n]*\$key|-e [A-Z_]*KEY/i);
 });
 
 test('sets MSYS_NO_PATHCONV=1 on Windows only', () => {

@@ -1,4 +1,5 @@
-// Guard test: the Codex sidecar image pins its base and CLI, installs the documented config, and keeps it current.
+// Guard test: the Codex sidecar image pins its base and CLI, installs the documented config, keeps it current, and is
+// wired to `api` through its HTTP front and the per-start token.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -60,14 +61,25 @@ test('the image pins the base by digest and the CLI by exact version, and runs a
   assert.match(dockerfile, /^ENV [\s\S]*CODEX_HOME=\/codex-home/m);
 });
 
-test('the image copies only its config and entrypoint from a context that holds nothing else', () => {
+test('the image copies only its config, entrypoint and HTTP front from a context that holds nothing else', () => {
   const dockerfile = read('docker', 'codex', 'Dockerfile');
   const copies = dockerfile.split(/\r?\n/).filter((line) => /^(COPY|ADD) /.test(line));
   assert.deepEqual(copies, [
     'COPY config.toml /etc/auraframe/codex/config.toml',
     'COPY entrypoint.sh /usr/local/lib/auraframe/codex-entrypoint.sh',
+    'COPY sidecar-server.cjs /usr/local/lib/auraframe/codex-sidecar.cjs',
   ]);
-  assert.deepEqual(fs.readdirSync(SIDECAR_DIR).sort(), ['Dockerfile', 'config.toml', 'entrypoint.sh']);
+  assert.deepEqual(fs.readdirSync(SIDECAR_DIR).sort(), ['Dockerfile', 'config.toml', 'entrypoint.sh', 'sidecar-server.cjs']);
+  assert.match(dockerfile, /^CMD \["node", "\/usr\/local\/lib\/auraframe\/codex-sidecar\.cjs"\]$/m);
+});
+
+test('the HTTP front needs no package beyond Node itself', () => {
+  const server = read('docker', 'codex', 'sidecar-server.cjs');
+  const modules = [...server.matchAll(/require\('([^']+)'\)/g)].map((match) => match[1]);
+  assert.ok(modules.length > 0);
+  for (const name of modules) {
+    assert.match(name, /^node:/, `${name} would need an install in the image`);
+  }
 });
 
 test('the entrypoint rewrites the config in the Codex home on every start, before the command runs', () => {
@@ -96,4 +108,18 @@ test('compose builds the sidecar from its own folder, behind the codex profile, 
   assert.match(service, /\n {4}profiles: \[codex\]\n/);
   assert.match(service, /\n {4}user: "10001:10001"\n/);
   assert.match(compose, /\nvolumes:\n(?: {2}\S+: \{\}\n)* {2}codex-home: \{\}/);
+});
+
+test('compose gives the sidecar and api the per-start token, and exposes the HTTP front on the backend only', () => {
+  const compose = read('compose.yaml');
+  const block = (name) => new RegExp(`\\n {2}${name}:\\n([\\s\\S]*?)(?=\\n {2}\\S|\\nnetworks:)`).exec(compose)[1];
+  const codex = block('codex');
+  const api = block('api');
+  for (const service of [codex, api]) {
+    assert.match(service, /\n {6}AURAFRAME_CODEX_TOKEN: \$\{AURAFRAME_CODEX_TOKEN:-\}\n/);
+  }
+  assert.match(codex, /\n {4}expose:\n {6}- "8090"\n/);
+  assert.doesNotMatch(codex, /\n {4}ports:/);
+  assert.match(codex, /test: \["CMD", "node", "\/usr\/local\/lib\/auraframe\/codex-sidecar\.cjs", "--health"\]/);
+  assert.ok(/\n {4}endpoint: "http:\/\/codex:8090"\r?\n/.test(read('engine', 'config.yaml')), 'engine/config.yaml points ai.codex at the sidecar');
 });

@@ -2,11 +2,11 @@
 
 Status: **partly implemented** ([P02](roadmap.md)). `compose.yaml` and `start.sh` exist, and the desktop app's
 analysis handlers call the stack over HTTP ([Bridge mapping](architecture.md#bridge-mapping)). Of the `start.sh`
-contract below, the services, the checks, the token, the exit codes, the window and `--fetch-models`
-([Model files](#model-files)) are implemented. The window is tested with stubs only and has not been opened by
-`start.sh` on a real host yet, and no model file has been downloaded yet. `--codex-login` and `--provider codex` are
-planned, and the script says so (see [Not available yet](#not-available-yet)). To run the current code, see
-[Running the current code](#running-the-current-code).
+contract below, the services, the checks, the token, the exit codes, the window, `--fetch-models`
+([Model files](#model-files)), and `--provider codex --codex-opt-in` and `--codex-login` ([Codex sidecar](#codex-sidecar),
+since P05.2.2) are implemented. The window and the Codex flags are tested with stubs only: no window has been opened
+by `start.sh` on a real host, no model file has been downloaded, and the sidecar image has not been built or signed
+in. To run the current code, see [Running the current code](#running-the-current-code).
 
 ## Compose stack
 
@@ -18,6 +18,7 @@ AURAFRAME_API_TOKEN=<at least 16 characters> AURAFRAME_PHOTOS_DIR=<folder> \
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `AURAFRAME_API_TOKEN` | none | Session token. `api` refuses to start without one |
+| `AURAFRAME_CODEX_TOKEN` | empty | Secret shared by `api` and the `codex` sidecar, at least 32 characters. The sidecar refuses to start without it; `start.sh` makes one per start with `--provider codex` |
 | `AURAFRAME_PHOTOS_DIR` | `./data/no-photos` | Folder mounted read-only at `/photos` |
 | `AURAFRAME_EXPORTS_DIR` | `./data/output` | Folder mounted at `/exports`. The API writes `/exports/<library id>/output` (copies) and `/exports/<library id>/reports` there. The app sets it to `exports/` in its `userData` folder |
 | `AURAFRAME_PORT` | `8420` | Port of `gateway` on `127.0.0.1` |
@@ -28,10 +29,12 @@ AURAFRAME_API_TOKEN=<at least 16 characters> AURAFRAME_PHOTOS_DIR=<folder> \
 - `vision` does not become healthy until its model files are in the `models` volume. Only
   `./start.sh --fetch-models` fills it ([Model files](#model-files)). Until then, run without the profile.
 - `fetch-models` sits behind the profile `fetch`, so no `up` starts it, with or without `--profile local`.
-- `codex`, the optional Codex CLI sidecar (P05.1), sits behind the profile `codex` in the same way. It has no use yet:
-  its default command prints the CLI version and exits, and nothing in `start.sh` or the app names the profile until
-  P05.2. It mounts only the `exchange` tmpfs and the `codex-home` volume, never the photos, data, exports, models or
-  the Docker socket ([ADR 0016](decisions/0016-codex-sidecar-image.md)). Its image has not been built yet.
+- `codex`, the optional Codex CLI sidecar (P05.1), sits behind the profile `codex` in the same way. Only
+  `./start.sh --provider codex --codex-opt-in` and `./start.sh --codex-login` start it, and the app never does. Its
+  default command is a small HTTP service on port `8090`, reached by `api` over `backend` with
+  `AURAFRAME_CODEX_TOKEN`; without that token it does not start ([ADR 0018](decisions/0018-codex-sidecar-transport.md)).
+  It mounts only the `exchange` tmpfs and the `codex-home` volume, never the photos, data, exports, models or the
+  Docker socket ([ADR 0016](decisions/0016-codex-sidecar-image.md)). Its image has not been built yet.
 - On Linux, create the exports folder first, writable by uid 10001 (for example `chown 10001:10001` on it).
   Docker otherwise creates it as root. The API runs as uid 10001 and writes copies and reports there: when it
   cannot, an export or an analysis start answers HTTP 409 `export_folder_unwritable` and the window shows
@@ -60,8 +63,9 @@ compatible GPU, the application runs on CPU with `ai.provider: none`.
 ```bash
 ./start.sh                                # start the services and open the window
 ./start.sh --fetch-models [model|all]     # download the pinned model files, then exit
-./start.sh --provider local|codex|none    # choose the AI provider
-./start.sh --codex-login                  # sign in to Codex with a ChatGPT account
+./start.sh --provider local|none         # choose the AI provider
+./start.sh --provider codex --codex-opt-in  # the opt-in Codex judge; copies of compared photos leave the computer
+./start.sh --codex-login [device|api-key] # sign in to Codex, then exit
 ./start.sh --cpu                          # run without a GPU
 ./start.sh --rebuild                      # rebuild the images and the desktop shell
 ./start.sh --backend-only                 # services only, for development
@@ -114,7 +118,8 @@ Behaviour as implemented:
   Because the token is the one the services already accept, the window shows the results of earlier runs at once,
   and a run started from it sends the same token. A window started separately has no token to inherit: it generates
   its own, sends nothing until its first run, and that run makes compose recreate `api` with the new token.
-- When the window closes, the script runs `docker compose --profile local down` once and keeps the volumes. Ctrl+C
+- When the window closes, the script runs `docker compose --profile local --profile codex down` once and keeps the
+  volumes. Ctrl+C
   (SIGINT), SIGTERM and SIGHUP end the window first, then do the same. The exit code is `0` after a normal close,
   `1` when the window exited with another code or `down` failed (the script then says to run `--stop`), and `130`,
   `143` or `129` after a signal. On Windows the window is a native program, so the `kill` from Git Bash is expected
@@ -122,7 +127,8 @@ Behaviour as implemented:
   `docker compose up` of its own in flight at that moment, it may finish after that `down`: run `./start.sh --stop`.
 - Tested with stubs only (`tests/start-sh.test.cjs`). Not observed: the real window opened by the script, Ctrl+C in a
   real terminal, and the Linux shell path.
-- `--status`, `--logs [service]` and `--stop` only run the matching `docker compose` command.
+- `--status`, `--logs [service]` and `--stop` only run the matching `docker compose` command, with
+  `--profile local --profile codex` so they reach every service that may run. Naming a profile there starts nothing.
   `--stop` keeps the volumes.
 - `--fetch-models [model|all]` checks Docker only, then runs
   `docker compose -f compose.yaml --profile fetch run --rm --build fetch-models [model|all]` and exits: `0` when every
@@ -130,14 +136,29 @@ Behaviour as implemented:
   no window. A model name that is not a plain lowercase id exits `2`. No other path of the script, and nothing in
   the desktop app, names the `fetch` profile.
 
-### Not available yet
+### Codex sidecar
 
-These flags are valid, but their feature comes later. Each prints a "not available yet" message and exits
-`1` without calling Docker or downloading anything:
+Implemented in P05.2.2 and tested with stubs only (`tests/start-sh.test.cjs`); see
+[AI providers](ai-providers.md#codex-cli-provider) for what the provider sends.
 
-| Flag | Planned in |
-| --- | --- |
-| `--codex-login`, `--provider codex` | P05.2 |
+- `--provider codex` needs `--codex-opt-in` on the same command line, which states that resized, anonymous copies of
+  the compared photos go to OpenAI. Without it the script exits `2` before any Docker call, so the `codex` profile
+  never starts. `--codex-opt-in` with anything else, such as `--provider local` or `--status`, also exits `2`.
+- With both, the start adds `--profile codex` to `up`, leaves `vision` out and lists no model files. It exports a
+  second token, `AURAFRAME_CODEX_TOKEN` (64 hex characters, independent of the session token), which only `api` and
+  the sidecar receive through compose. It is never an argument, never printed and never written to a file.
+- Opt-in on the command line only lets the sidecar run. The engine sends nothing until a library also confirms opt-in
+  in the app, and that dialog is planned in P05.2.3, so today no run sends a copy.
+- `--codex-login` (or `--codex-login device`) checks Docker only, then runs
+  `docker compose -f compose.yaml --profile codex run --rm --build codex codex login --device-auth` and exits: `0` when
+  the sign-in succeeded, `1` otherwise. The CLI prints a link and a code to enter in a browser.
+- `--codex-login api-key` reads one line from stdin, with a hidden prompt when stdin is a terminal, and passes it to
+  `docker compose ... run --rm --build -T codex codex login --with-api-key` through stdin only, written by the `printf`
+  builtin. The key is never an argument, an environment variable or a file, and is never printed. An empty line exits
+  `1` and runs nothing. For example: `./start.sh --codex-login api-key < key-file`, or type it at the prompt.
+- Both sign-ins keep the credentials in the `codex-home` volume, need no GPU, make no session token, start no other
+  service and open no window.
+- Not observed: the image build, a real sign-in, the hidden prompt on a real terminal, and a start with the sidecar.
 
 ## First start
 

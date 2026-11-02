@@ -96,7 +96,7 @@ them for `start.sh`: exit codes 2, 1 and 3, the token absent from every argument
 `MSYS_NO_PATHCONV=1` and the memory warning). Not observed: `start.sh` against a real Docker daemon, so the
 `compose run` listing of the models volume and `up --wait` are verified only through stubs. Not built yet:
 the window (P02.4, P02.5), `--fetch-models` (P03.2), `--codex-login` and `--provider codex` (P05.2); those
-flags printed "not available yet" and exited 1 (`--fetch-models` works since P03.2). The file needs its executable bit in Git
+flags printed "not available yet" and exited 1 (`--fetch-models` works since P03.2, the Codex flags since P05.2.2). The file needs its executable bit in Git
 (`git update-index --chmod=+x start.sh`), which this session could not set.
 
 Progress 2026-11-01: P02.4.1 added `apps/desktop/electron/compose-stack.ts` and `tests/compose-stack.test.cjs`.
@@ -348,6 +348,21 @@ Observed: `bash scripts/check.sh --engine` passed 500 of 500 engine tests, inclu
 observed: the real CLI, a real account, the sidecar image. Still open in P05.2: the transport from `api` to the
 sidecar (the default runner needs the CLI in the same container), `--provider codex`, `--codex-login` and the
 opt-in dialog.
+
+Progress 2026-11-02 (P05.2.2, part of P05.2): the sidecar's default command is now an HTTP front
+(`docker/codex/sidecar-server.cjs`, port `8090` on `backend`) that runs only `codex --version` or the engine's
+`codex exec` shape, in a private folder of the `exchange` tmpfs, for callers holding the per-start
+`AURAFRAME_CODEX_TOKEN`; `SidecarRunner` and `sidecar_provider` in `engine/src/providers/codex_sidecar.py` are the
+`api` side. `start.sh --provider codex` exits 2 without `--codex-opt-in` and with it adds `--profile codex` and the
+token; `--codex-login [device|api-key]` runs the sign-in in a throwaway sidecar, with an API key only on the stdin of
+`codex login --with-api-key` ([ADR 0018](decisions/0018-codex-sidecar-transport.md),
+[Operations](operations.md#codex-sidecar)). Observed: `npm run build:electron && node --test "tests/**/*.test.cjs"`
+passed 226 with 1 skipped (the existing symlink case), including the 13 new cases of
+`tests/codex-sidecar-server.test.cjs` and the new `start.sh` cases; `bash scripts/check.sh --engine` passed 523 of 523,
+including the 23 cases of `engine/tests/test_codex_sidecar.py`; `bash scripts/check.sh --compose` passed 3 of 3;
+`npm run lint` printed no findings. Not observed: the image build, a real sign-in, the hidden prompt on a terminal,
+and `bash scripts/check.sh --integration` with its new sidecar assertions. Still open in P05.2: the per-library
+opt-in dialog and the run wiring (P05.2.3).
 
 Exit: the contract and data-shape tests pass; without opt-in the sidecar is not running and no call
 can happen; a real run with the owner's account completes on synthetic images.

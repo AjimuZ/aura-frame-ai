@@ -1,6 +1,7 @@
 """Vision providers: the contract, the local llama-server implementation and the opt-in Codex CLI one."""
 
 from .codex import CodexProvider, CodexSettings
+from .codex_sidecar import SidecarRunner, sidecar_provider
 from .contract import (
     Comparison,
     Critique,
@@ -28,8 +29,10 @@ __all__ = [
     "ProviderHealth",
     "ProviderSettings",
     "ProviderStatus",
+    "SidecarRunner",
     "VisionProvider",
     "compare_or_prescore",
     "prepare_copy",
     "prescore_comparison",
+    "sidecar_provider",
 ]
