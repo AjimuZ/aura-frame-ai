@@ -1119,21 +1119,63 @@
       }
     },
     {
-      "id": "P05.2",
-      "title": "Implement the provider, opt-in, call cap and `--codex-login`.",
-      "description": "Implement the provider, opt-in, call cap and `--codex-login`.",
+      "id": "P05.2.1",
+      "title": "P05.2.1 Codex provider in the engine: schema output, failure handling, call cap and opt-in gate, tested with a fake CLI",
+      "description": "Add engine/src/providers/codex.py implementing the provider contract. It sends the sidecar only anonymous resized copies. Add a per-run call cap and an opt-in gate, so that without opt-in no call is made. It falls back to local scoring on failure. No real call is made in tests; use a fake CLI.",
       "acceptanceCriteria": [
         "Tests with a fake CLI cover schema output, failure, the call cap, and no opt-in meaning no call",
-        "A data-shape test proves that what reaches the sidecar has no EXIF, file name or path",
-        "Opt-in is required both by `--provider codex` and per library in the UI, and the dialog states what is sent and the number of calls",
-        "`--codex-login` runs the device sign-in, and the API key reaches the sidecar only through stdin"
+        "A data-shape test proves that what reaches the sidecar has no EXIF, file name or path"
       ],
       "priority": 40,
       "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. No real call is made in tests. Off by default, and the local pipeline must keep working fully with it disabled. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. Run checks through `bash scripts/check.sh`. Never run a model download, and never read personal-data folders. ",
+      "notes": "",
       "dependsOn": [
         "P05.1"
       ],
+      "splitFrom": "P05.2",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "P05.2 Implement the provider, opt-in, call cap and `--codex-login`."
+      }
+    },
+    {
+      "id": "P05.2.2",
+      "title": "P05.2.2 --codex-login and --provider codex in start.sh, with the API key passed only through stdin",
+      "description": "Replace the not_available_yet stubs in start.sh. --codex-login runs the device sign-in in the sidecar. --provider codex requires the opt-in flag and starts the codex profile. The API key reaches the sidecar only through stdin, never argv or env. Extend the shell and integration checks.",
+      "acceptanceCriteria": [
+        "`--codex-login` runs the device sign-in, and the API key reaches the sidecar only through stdin",
+        "Opt-in is required both by `--provider codex` and per library in the UI, and the dialog states what is sent and the number of calls"
+      ],
+      "priority": 40,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.1",
+        "P05.2.1"
+      ],
+      "splitFrom": "P05.2",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "P05.2 Implement the provider, opt-in, call cap and `--codex-login`."
+      }
+    },
+    {
+      "id": "P05.2.3",
+      "title": "P05.2.3 Per-library opt-in dialog in the UI, stating what is sent and the number of calls",
+      "description": "Add a per-library Codex opt-in (stored in the library registry in Electron main, typed IPC, validated). The Angular dialog states exactly what is sent (resized, EXIF-stripped anonymous copies) and the number of calls. The API refuses a codex run without both opt-ins.",
+      "acceptanceCriteria": [
+        "Opt-in is required both by `--provider codex` and per library in the UI, and the dialog states what is sent and the number of calls"
+      ],
+      "priority": 40,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.1",
+        "P05.2.2"
+      ],
+      "splitFrom": "P05.2",
       "source": {
         "path": "docs/roadmap.md",
         "section": "6. P05 — Codex CLI provider",
@@ -1170,7 +1212,9 @@
       "passes": false,
       "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. NEEDS THE OWNER: needs the owner's account and synthetic images only, and spends the owner's plan or API usage.",
       "dependsOn": [
-        "P05.2"
+        "P05.2.1",
+        "P05.2.2",
+        "P05.2.3"
       ],
       "source": {
         "path": "docs/roadmap.md",
@@ -1191,7 +1235,9 @@
       "passes": false,
       "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Commit message: never name the project instructions file, because the validator refuses that word even inside a file name. Write \"project instructions\" instead. NEEDS THE OWNER: ADR 0007 requires the owner to confirm before this removal. The dedicated test file for the old flow must also be removed by the owner or the supervising session in its own commit, because the runner scan refuses it. Sessions cannot delete or move files: rm, mv and git rm are not available to them. Finish every other edit, then block with the exact list of files to remove; the supervising session removes them and the runner verifies the result. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
       "dependsOn": [
-        "P05.2"
+        "P05.2.1",
+        "P05.2.2",
+        "P05.2.3"
       ],
       "source": {
         "path": "docs/roadmap.md",
@@ -1212,10 +1258,12 @@
       "passes": false,
       "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. NEEDS THE OWNER: the real run uses the owner's account.",
       "dependsOn": [
-        "P05.2",
         "P05.3",
         "P05.4",
-        "P05.5"
+        "P05.5",
+        "P05.2.1",
+        "P05.2.2",
+        "P05.2.3"
       ],
       "source": {
         "reference": "docs/roadmap.md",
