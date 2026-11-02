@@ -90,6 +90,12 @@ Verified on 2026-11-01 by reading the source.
   fails if one leaves the source. That test reads source only: the behavior has not yet been observed in
   the running app on this version. The legacy key storage uses the `safeStorage` synchronous calls, which
   the 45.2.1 type definitions mark as deprecated but still provide; P05 removes that flow.
+- Since P02.EXIT (2026-11-02) the navigation lock allows only the built `index.html` itself, or in development only
+  the dev server's origin. It used to allow any `file://` URL and any URL that began with `http://localhost:4200`,
+  such as a look-alike host. `tests/renderer-isolation.test.cjs` loads the compiled main process and preload against
+  a stand-in for `electron` and checks the window options, the single `auraFrame` bridge of functions, a CSP with no
+  network source, denied new windows and refused navigations. Chromium enforcing them in a real renderer is not
+  observed.
 - Electron main sends no request, and so never the session token, until `docker compose up` has succeeded in
   this session, and it stops at the next start or stop. Before that, reads return their fallbacks and writes are
   refused. Tested with a fake server and a fake Docker in `tests/analysis-http.test.cjs` and

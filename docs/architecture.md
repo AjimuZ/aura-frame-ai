@@ -43,7 +43,7 @@ only client of the API.
 
 | Responsibility | Status | Notes |
 | --- | --- | --- |
-| Hardened window, navigation lock, CSP | Stays | `contextIsolation`, `sandbox`, no `nodeIntegration` |
+| Hardened window, navigation lock, CSP | Stays | `contextIsolation`, `sandbox`, no `nodeIntegration`. Navigation is allowed only to the built `index.html`, or to the dev server's origin in development |
 | `window.auraFrame` bridge and IPC channels | Stays | Angular keeps calling the same interface |
 | Library registry, per-library host folder | Stays | Host paths stay here. Containers see only `/photos` |
 | Native folder and save dialogs, opening folders | Stays | |

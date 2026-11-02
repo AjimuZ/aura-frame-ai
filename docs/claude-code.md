@@ -33,7 +33,33 @@ This repository has no `.claude/skills/` or `.claude/commands/`, and must not ge
 | `audit-change.ps1` | After changes and configuration changes | Logs content-free entries for key configuration files |
 | `notify.ps1` | Permission or idle prompt | Generic Windows notification |
 
-When the architecture moves to containers, the hook rules need a review (P02).
+When the architecture moves to containers, the hook rules need a review (P02). That review follows.
+
+### Hook review after the container move (P02, 2026-11-02)
+
+Read: `.claude/settings.json` and the four scripts in `.claude/hooks/`. Nothing was changed: sessions cannot edit
+`.claude/settings.json`, and the hook scripts are the owner's guard, so each change below is a proposal for the owner.
+
+Still sound:
+
+- `guard-tool-use.ps1` still denies writes outside the repository and to `img/`, `data/input_originali`,
+  `data/working`, `data/output`, `data/reports` and `thumbnails/`. `start.sh` and a bare compose still write exports
+  to `./data/output`, which stays protected. The hook still never approves anything.
+- `format-changed-file.ps1` and `notify.ps1` touch nothing the container move changed.
+- No hook contacts a network service, and none logs file content.
+
+Gaps the containers opened, with the proposed change:
+
+| Gap | Proposed change |
+| --- | --- |
+| The generated data (database, thumbnails, working copies, review sessions) now lives in the Docker volume `auraframe_data`, which no rule covers. `docker compose exec api ...`, `docker cp` or `docker run -v auraframe_data:...` can read it, and `docker volume rm`, `docker volume prune`, `docker system prune --volumes` or `docker compose down -v` can delete it, review decisions included | Deny `docker volume rm` and `prune`, `docker system prune`, `down` with `-v` or `--volumes`, and `docker cp`, in `guard-tool-use.ps1` |
+| The app's exports and reports now sit in `exports/<library id>/` under the app's `userData` folder, outside the repository. Writes there are already denied (outside the repository), reads are not | Add a `Read` deny for that folder in `.claude/settings.json`, and the folder name to the protected shell tokens |
+| `data/session-token`, written by `./start.sh --backend-only`, is a live session secret that no rule covers | Add `Read(/data/session-token)` to the deny list |
+| The upload patterns do not include `docker push`, `docker login` or `npm publish` | Add them to the upload patterns |
+| `curl` with `-d` is denied in a command line, which also blocks a typed request to the local gateway on `127.0.0.1`. A script file that does the same, such as `tests/integration/backend-run.sh`, is not inspected | None needed: keep the denial, and keep such requests in reviewed scripts run through `bash scripts/check.sh` |
+| `audit-change.ps1` watches `CLAUDE.md`, `.claude/settings.json`, `package.json`, `engine/config.yaml` and `.gitignore`, but the trust boundary now also lives in `compose.yaml`, `compose.gpu.yaml`, `docker/`, `start.sh`, `scripts/check.sh`, `scripts/compose-policy.cjs` and `tests/integration/` | Add those paths to the monitored list |
+| Every hook runs `powershell.exe`. On a Linux host, which `start.sh` now supports, the guard cannot start, and a hook that fails without exit code 2 does not block the call, so the guard is silently absent there | Run the guard with `pwsh` where it exists, or record that sessions on Linux run without the guard |
+| The user's chosen photo folder can be anywhere on disk, so no fixed rule protects it | None possible with fixed paths: the read-only mount in the containers is what protects the originals |
 
 ## Subagents
 

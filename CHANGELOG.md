@@ -72,8 +72,18 @@
   the token file. If the services later refuse the token (HTTP 401 or 403), the window stops sending requests and
   says that the services are unavailable. Tested with stubbed tools, a fake Docker and a fake server only; the real
   window opened by the script and Ctrl+C in a real terminal have not been observed.
+- `bash scripts/check.sh --backend-run` starts the services with `./start.sh --backend-only` on a synthetic folder,
+  completes a `fast` run through the API, checks that the photos are listed by ID and the folder is unchanged, then
+  stops the services. It passed on the reference PC on CPU, without a window or a local model. It stops services that
+  were already running.
+- `tests/renderer-isolation.test.cjs` checks the window's trust boundary through the compiled main process and preload:
+  no Node, only `window.auraFrame`, a page CSP with no network source, no new windows and no navigation away.
 
 ### Changed
+
+- The window can no longer navigate to another local file, or in development to a host that only starts like the dev
+  server's address. Before, any `file://` URL was allowed. The app itself never navigates, so nothing visible
+  changes.
 
 - Electron moves from 33.4.11, which was out of support, to 45.2.1, and `electron-builder` from 25.1.8 to
   26.18.0. Working on the app now needs Node.js 22.12 or newer, and the first `electron` run downloads the

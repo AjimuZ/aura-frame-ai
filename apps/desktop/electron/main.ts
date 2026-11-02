@@ -5,6 +5,7 @@
 
 import { app, BrowserWindow, dialog, protocol } from 'electron';
 import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { registerFilesystemIpc } from './ipc/filesystem.ipc';
 import {
   registerAnalysisIpc,
@@ -73,12 +74,40 @@ function createWindow(): BrowserWindow {
   return window;
 }
 
+// Returns true only when a navigation target is the app's own page: the dev server's origin in development, else the
+// built index.html itself. Another local file, a look-alike host or an unparsable URL returns false. The router uses
+// hash locations, so moves inside the app never change the path and never need another URL.
+function isAppPage(url: string): boolean {
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    return false;
+  }
+  if (isDev) {
+    return target.origin === new URL(DEV_SERVER_URL).origin;
+  }
+  const index = pathToFileURL(path.join(ANGULAR_DIST, 'index.html'));
+  return target.protocol === 'file:' && target.host === '' && comparablePath(target) === comparablePath(index);
+}
+
+// Returns a file URL's path decoded, and lowercased on Windows, so the escaping Chromium chooses and the case of a
+// drive letter do not decide the comparison. An undecodable path returns the raw one, which then fails to match.
+function comparablePath(url: URL): string {
+  let decoded = url.pathname;
+  try {
+    decoded = decodeURIComponent(url.pathname);
+  } catch {
+    // Kept raw on purpose.
+  }
+  return process.platform === 'win32' ? decoded.toLowerCase() : decoded;
+}
+
 // Prevent the renderer from opening external windows or navigating away from the app.
 function hardenNavigation(window: BrowserWindow): void {
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event) => {
-    const allowed = isDev ? DEV_SERVER_URL : 'file://';
-    if (!event.url.startsWith(allowed)) {
+    if (!isAppPage(event.url)) {
       event.preventDefault();
     }
   });

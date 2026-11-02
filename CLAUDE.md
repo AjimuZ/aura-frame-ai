@@ -64,6 +64,7 @@ npm run build:angular
 npm run build:electron
 npm run test:libraries
 bash scripts/check.sh              # all checks; --node, --engine, --compose, --integration select subsets
+bash scripts/check.sh --backend-run  # start.sh --backend-only, a fast run on synthetic images, then --stop
 docker compose config --quiet
 ```
 

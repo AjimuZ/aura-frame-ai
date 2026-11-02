@@ -181,6 +181,20 @@ Observed: `bash scripts/check.sh` passed (8 of 8: lint, both builds, `start.sh` 
 and 1 skipped, the symlink case, the engine container tests 190 of 190, and both compose checks). Not observed: the
 real window opened by the script, a `fast` run from it, Ctrl+C in a real terminal, and the Linux shell path.
 
+Evidence 2026-11-02 (P02.EXIT), on the reference PC: `bash scripts/check.sh --integration` passed (3 of 3; the
+network, read-only, port, Docker socket, token and Host assertions all hold). The new `tests/renderer-isolation.test.cjs`
+(8 of 8, no new dependency) checks the window options, the single `window.auraFrame` bridge of functions, a CSP with no
+network source, denied new windows and refused navigations, through the compiled main process and preload. It led to a
+tighter navigation lock: only the built `index.html`, or the dev server's origin in development, where any `file://` URL
+and look-alike hosts used to pass. `bash scripts/check.sh --backend-run` passed: `./start.sh --backend-only --cpu
+--provider none` on 6 synthetic images, a `fast` run through the API ending with step `done` (6 of 6), the photos listed
+by ID and the folder unchanged; it then stopped the services. The hook rules were reviewed as
+[Claude Code](claude-code.md#hook-review-after-the-container-move-p02-2026-11-02) asks: nothing changed, and six
+proposals are left for the owner. `bash scripts/check.sh` passed (8 of 8: 164 Node tests with 163 passed and 1 skipped,
+the symlink case, and the engine container tests 190 of 190). Still not observed, so the P02 exit is not met in full:
+`./start.sh` opening the window, a folder chosen in the native dialog, a `fast` run from the window, closing it stopping
+the services, a GPU, and Chromium enforcing the renderer settings (the host has no Electron binary).
+
 ## 4. P03 — Local AI runtime
 
 **Depends on:** P02. **Areas:** providers, models.

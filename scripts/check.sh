@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Single entry point for every project check; exits 0 only when all selected checks pass.
 #
-# Usage: bash scripts/check.sh [--node] [--engine] [--compose] [--integration]
+# Usage: bash scripts/check.sh [--node] [--engine] [--compose] [--integration] [--backend-run]
 #   --node         lint, Angular build, Electron build, Node tests in tests/
 #   --engine       engine tests in a throwaway container (mounts engine/ read-only)
 #   --compose      `docker compose config --quiet` and the static hardening policy, without starting anything
 #   --integration  --compose, then starts the stack on a synthetic folder and tests its isolation
-#   (no flag)      --node, --engine and --compose; the integration check is left out
+#   --backend-run  `./start.sh --backend-only` on a synthetic folder, a `fast` run through the API, then
+#                  `./start.sh --stop`; it stops the project's services, including ones already running
+#   (no flag)      --node, --engine and --compose; the integration check and the backend run are left out
 #
 # A check whose files do not exist prints a visible SKIP line. A failing check
 # is named in the summary and makes the exit code non-zero.
@@ -19,16 +21,18 @@ run_node=0
 run_engine=0
 run_compose=0
 run_integration=0
+run_backend=0
 for arg in "$@"; do
   case "$arg" in
     --node) run_node=1 ;;
     --engine) run_engine=1 ;;
     --compose) run_compose=1 ;;
     --integration) run_integration=1 ;;
-    *) echo "Unknown option: $arg (use --node, --engine, --compose, --integration)" >&2; exit 2 ;;
+    --backend-run) run_backend=1 ;;
+    *) echo "Unknown option: $arg (use --node, --engine, --compose, --integration, --backend-run)" >&2; exit 2 ;;
   esac
 done
-if [ $((run_node + run_engine + run_compose + run_integration)) -eq 0 ]; then
+if [ $((run_node + run_engine + run_compose + run_integration + run_backend)) -eq 0 ]; then
   run_node=1
   run_engine=1
   run_compose=1
@@ -141,6 +145,16 @@ if [ "$run_integration" -eq 1 ]; then
     echo "FAIL: compose integration" >&2
   else
     run_check "compose integration" bash tests/integration/compose-stack.sh
+  fi
+fi
+
+if [ "$run_backend" -eq 1 ]; then
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker not found; the backend run needs it" >&2
+    failed+=("backend run")
+    echo "FAIL: backend run" >&2
+  else
+    run_check "backend run" bash tests/integration/backend-run.sh
   fi
 fi
 

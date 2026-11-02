@@ -18,7 +18,8 @@ A failing check is named in the summary and gives exit 1. A check whose files do
 | `--engine` | Engine tests in the throwaway container below. Fails if Docker is missing |
 | `--compose` | `docker compose config --quiet`, with and without the `local` profile and the GPU overlay, then the static policy in `scripts/compose-policy.cjs`. Starts nothing |
 | `--integration` | `--compose`, then starts the stack on a synthetic folder and tests its isolation from inside. See [below](#container-isolation) |
-| none | `--node`, `--engine` and `--compose`; the integration check is left out |
+| `--backend-run` | `./start.sh --backend-only` on a synthetic folder, a `fast` run through the API, then `./start.sh --stop`. See [below](#backend-run) |
+| none | `--node`, `--engine` and `--compose`; the integration check and the backend run are left out |
 
 Status: written in P01.1; its first full run is not yet recorded here.
 
@@ -33,9 +34,11 @@ Results from 2026-11-01 on the reference PC.
 | Angular build | `npm run build:angular` | Pass, exit 0 |
 | Library store tests | `node --test "tests/*-store.test.cjs"` | Pass, 4 of 4 |
 | Electron hardening guard | `node --test tests/electron-hardening.test.cjs` | Pass, 3 of 3. Reads source and lockfile only. It does not start the app |
+| Renderer isolation | `node --test tests/renderer-isolation.test.cjs` | Pass, 8 of 8 (2026-11-02, P02.EXIT). Loads the compiled `main.js` and `preload.js` against a stand-in for `electron`, with no new dependency. Covers: the window's `webPreferences` are exactly the preload, `contextIsolation`, `sandbox` and no `nodeIntegration`; the preload, run in an empty V8 context with a `require` that serves only `electron`, exposes one key, `auraFrame`, made only of functions, each making one `invoke` on a channel main handles; progress events reach the page without the IPC event; the CSP of the source and built `index.html` names no network source; new windows are denied; navigation is refused to any URL other than the built `index.html` (another local file, a UNC host, `http`, `data:`), and in development to anything but the dev server's origin (a look-alike host is refused). Gap: Chromium enforcing these settings in a real renderer is not observed, because the host has no Electron binary (`npm ci` was not run on it) |
 | Engine tests, container | See below | Pass, 190 of 190 (re-run 2026-11-02 after P02.4.5), without the torch stack. The export and run tests use synthetic images and a stub engine, and prove that copies go under the exports root and never under `/data`, that a symlinked folder or file is not followed, that nothing is copied unless every ID passes, and that a folder the API user cannot write gives a structured 409. As the container runs as root, the unwritable case is simulated (a file in place of the folder, and `os.access` returning false); a real uid 10001 against a host folder was not observed |
 | Compose configuration and policy | `bash scripts/check.sh --compose` | Pass, exit 0 |
-| Container isolation | `bash scripts/check.sh --integration` | Pass, all assertions hold, with the `core` stage of `api`, no GPU and no model |
+| Container isolation | `bash scripts/check.sh --integration` | Pass, all assertions hold, with the `core` stage of `api`, no GPU and no model (re-run 2026-11-02, P02.EXIT: network, read-only, port, socket, token and Host assertions all hold) |
+| Backend run | `bash scripts/check.sh --backend-run` | Pass on 2026-11-02 (P02.EXIT): `./start.sh --backend-only --cpu --provider none` with the `full` image, 6 synthetic images, a `fast` run that ended with step `done` (6 of 6) in about 3 s, a `done` event and no `error` event in the stream, the 6 photos listed by ID, and the folder unchanged. Gap: no window, no GPU and no local model |
 | `start.sh` contract | `node --test tests/start-sh.test.cjs` | Pass, 26 of 26 (2026-11-02, P02.WINDOW), with stubbed `docker`, `nvidia-smi`, `curl`, `uname` and window. Covers exit codes 2, 1 and 3, the token never being an argument, the model guidance, `MSYS_NO_PATHCONV=1`, the memory warning, the window (run after the services, the token only in its environment, the host fallback, one `down` that keeps the volumes after a close, a failure, SIGINT or SIGTERM), and the desktop shell build (digest pin required, the recorded pins chosen by host platform, build inputs only, read-only). The stubbed tests cannot reach a real daemon, so the real run is the next row |
 | Desktop shell build, real | `./start.sh --rebuild --cpu` | Pass on 2026-11-02 on the reference PC: exit 0, and the `:wine` image wrote the NSIS installer and `win-unpacked/` into `release/`, then the services became healthy ([Operations](operations.md#desktop-shell-build)). Gap: the built app not run, the GPU variant cut by the session's 10-minute limit before its exit code, no Linux host |
 | Electron compose stack | `node --test tests/compose-stack.test.cjs` | Pass, 18 of 19 and 1 skipped (the symlink case, when the OS refuses symlinks). Uses a fake `spawn`: checks the argv, `shell: false`, the photo folder, the exports folder (`AURAFRAME_EXPORTS_DIR`) and the token only in `env`, the exports folder absent from the argv and refused when relative, a file, inside the photo folder or holding it, `-f compose.gpu.yaml` added when `nvidia-smi -L` succeeds and left out when it fails or is missing (probe run with `shell: false`), `down` naming the same files as `up`, the token absent from replies and events, when `isUp` holds, and `down` waiting for an `up` in flight. Gap: not run against a real Docker daemon or a real `nvidia-smi` |
@@ -94,13 +97,30 @@ Limits: `api` is built from the `core` stage, and `vision` runs `sleep` instead 
 the check has no model and must not download one. Neither the GPU overlay nor the `full` stage is started.
 The check needs internet access for its control, and fails on an offline host.
 
+### Backend run
+
+`tests/integration/backend-run.sh` runs `./start.sh --backend-only --cpu --provider none` with a temporary photo
+folder and a temporary exports folder, then draws synthetic images into the photo folder with a throwaway container
+of the `api` image that has no network. It reads the token from `data/session-token`, starts a `fast` run for the
+library `exit-check-synthetic` through the gateway, and polls `runs/current` for up to 8 minutes.
+
+| Property | How it is shown |
+| --- | --- |
+| The path without the window works | `POST .../runs` answers 202, and `runs/current` ends with `"step":"done"` |
+| The engine did not fail | The replayed event stream has a `done` event and no `error` event |
+| Results are served by ID | `GET .../photos` lists one `IMG_` ID per synthetic image |
+| Originals stay unchanged | Name, size and checksum of every file match before and after the run |
+
+On exit it deletes the library's generated data through the API and runs `./start.sh --stop`, which keeps the
+volumes. Unlike `--integration`, it uses the real project `auraframe` and its volumes, so it also stops services
+that were running before it. The token file stays, as after any `--backend-only` start, and is stale once the
+services stop. It downloads no model; the `full` image must already be built, or the first start builds it.
+
 ## Planned checks
 
 | Package | Check | Exit condition |
 | --- | --- | --- |
 | P01 | Retired-terms search | No match in the repository. The test holds the term list in encoded form so the repository stays clean |
-| P02 | Token and Host test | Requests without the session token, or with a foreign `Host`, are refused |
-| P02 | Electron hardening test | The renderer has no Node, no network and only `window.auraFrame`, and cannot navigate away |
 | P02 | Smoke test | `./start.sh` on a synthetic folder completes a `fast` run end to end, through the window |
 | P03 | Provider contract tests | Fake server: valid, invalid, timeout, missing model |
 | P03 | Bake-off report | Accuracy, order stability, time, peak memory, for each candidate on this PC |
