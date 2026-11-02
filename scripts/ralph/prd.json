@@ -1162,20 +1162,66 @@
       }
     },
     {
-      "id": "P05.2.3",
-      "title": "P05.2.3 Per-library opt-in dialog in the UI, stating what is sent and the number of calls",
-      "description": "Add a per-library Codex opt-in, enforced on the API run request (refuse a codex run unless both the command-line opt-in and this per-library opt-in are set), stored in the Electron registry with typed, validated IPC, and surfaced in an Angular dialog that states exactly what is sent (resized, EXIF-stripped anonymous copies) and the number of calls (the configured cap). This spans the engine API, Electron main/IPC and the Angular UI.",
+      "id": "P05.2.3.1",
+      "title": "Refuse a codex run on the API unless the command-line and per-library opt-ins are both set",
+      "description": "In the engine API run request, add a validated per-library codex opt-in field. Refuse a provider=codex run with a structured error unless both the --provider codex opt-in and the per-library opt-in are present. Add engine tests covering each missing-consent case, and update the docs and changelog.",
+      "acceptanceCriteria": [
+        "A codex run request is refused with a structured error unless both the command-line opt-in and the per-library opt-in are set",
+        "Engine tests cover the refusal and the accepted case, and the local pipeline is unchanged when codex is off"
+      ],
+      "priority": 40,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.1",
+        "P05.2.2"
+      ],
+      "splitFrom": "P05.2.3",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "P05.2 Implement the provider, opt-in, call cap and `--codex-login`."
+      }
+    },
+    {
+      "id": "P05.2.3.2",
+      "title": "Store the per-library Codex opt-in in the Electron registry with typed, validated IPC",
+      "description": "Add the per-library codex opt-in flag to the library registry in Electron main. Expose a narrow typed preload IPC to get and set it with validation in main. Forward the flag on the run request to the API. Add Node tests in tests/*.test.cjs.",
+      "acceptanceCriteria": [
+        "The per-library opt-in is persisted in the registry, defaults to off, and is reachable only through typed, validated IPC",
+        "The run request carries the flag, and Node tests cover validation and persistence"
+      ],
+      "priority": 40,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P05.1",
+        "P05.2.2",
+        "P05.2.3.1"
+      ],
+      "splitFrom": "P05.2.3",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "6. P05 — Codex CLI provider",
+        "line": "P05.2 Implement the provider, opt-in, call cap and `--codex-login`."
+      }
+    },
+    {
+      "id": "P05.2.3.3",
+      "title": "Add the Angular per-library Codex opt-in dialog stating what is sent and the number of calls",
+      "description": "Add an accessible standalone dialog. It states that only resized, EXIF-stripped anonymous copies are sent, never originals, names, paths or location. It shows the configured call cap and sets the per-library opt-in through the typed IPC. Use the design tokens and update the docs, roadmap and changelog.",
       "acceptanceCriteria": [
         "Opt-in is required both by `--provider codex` and per library in the UI, and the dialog states what is sent and the number of calls"
       ],
       "priority": 40,
       "passes": false,
-      "notes": "UNBLOCKED by the owner's supervising session on 2026-11-02: the preflight's split was right about the three-way boundary (API run-request refusal, Electron registry/IPC, Angular dialog) but two of the three children named a sibling by its proposed title in `dependsOn` (\"P05.2.3a\", \"P05.2.3b\"), which `apply_split` cannot resolve since real child ids are only assigned once the split lands. I fixed the root cause in the global preflight prompt (assets/prompts/preflight.md, outside this repository) so a fresh split relies only on `sequential` for intra-split ordering. I also touched this description so the task is treated as a new version and gets a fresh preflight instead of replaying the broken split.",
+      "notes": "",
       "dependsOn": [
         "P05.1",
-        "P05.2.2"
+        "P05.2.2",
+        "P05.2.3.2"
       ],
-      "splitFrom": "P05.2",
+      "splitFrom": "P05.2.3",
       "source": {
         "path": "docs/roadmap.md",
         "section": "6. P05 — Codex CLI provider",
@@ -1214,7 +1260,9 @@
       "dependsOn": [
         "P05.2.1",
         "P05.2.2",
-        "P05.2.3"
+        "P05.2.3.1",
+        "P05.2.3.2",
+        "P05.2.3.3"
       ],
       "source": {
         "path": "docs/roadmap.md",
@@ -1237,7 +1285,9 @@
       "dependsOn": [
         "P05.2.1",
         "P05.2.2",
-        "P05.2.3"
+        "P05.2.3.1",
+        "P05.2.3.2",
+        "P05.2.3.3"
       ],
       "source": {
         "path": "docs/roadmap.md",
@@ -1263,7 +1313,9 @@
         "P05.5",
         "P05.2.1",
         "P05.2.2",
-        "P05.2.3"
+        "P05.2.3.1",
+        "P05.2.3.2",
+        "P05.2.3.3"
       ],
       "source": {
         "reference": "docs/roadmap.md",
