@@ -5,11 +5,15 @@
 #                   [--rebuild] [--backend-only] [--status] [--logs [service]] [--stop] [--help]
 #
 # Exit codes: 0 success, 1 failed prerequisite, 2 invalid arguments, 3 a service failed its health check.
+# After the window has run: 0 when it closed normally, 1 when it failed or the services could not be stopped,
+# 130 after Ctrl+C (SIGINT), 129 after SIGHUP and 143 after SIGTERM.
 #
 # Invariants:
 # - Arguments are validated before anything else runs, so exit 2 never depends on the host.
 # - The session token is generated per start and travels only through the environment (and, with
-#   --backend-only, an ignored local file). It is never part of a command line.
+#   --backend-only, an ignored local file). It is never part of a command line. The window inherits it.
+# - Without --backend-only, the services started here are stopped exactly once when the window ends, however it
+#   ends while this script runs, and the named volumes are kept.
 # - Nothing here downloads a model. Missing model files are explained, never fetched.
 
 set -u
@@ -29,6 +33,13 @@ TOKEN_FILE="data/session-token"
 # AURAFRAME_BUILDER_IMAGE supplies another pin without editing this file.
 BUILDER_IMAGE_WINDOWS="electronuserland/builder@sha256:f3a8d451994c881d0972e7b1846ee4d4fdc15eb41fc6b1f350b38cbf99ca90fe"
 BUILDER_IMAGE_LINUX="electronuserland/builder@sha256:22c93521ff6ea682e7ef153bb4846d90b769aa3b3f3f3be9ec9090aabc3e877c"
+# The desktop shell that the builder writes, per host platform. The Windows name was observed on 2026-11-02; the
+# Linux one is electron-builder's default for this package and has not been observed.
+WINDOW_WINDOWS="release/win-unpacked/AuraFrame AI.exe"
+WINDOW_LINUX="release/linux-unpacked/aura-frame-ai"
+# The host fallback: the Electron binary installed by `npm ci`, running the app that `npm run build` wrote.
+ELECTRON_WINDOWS="node_modules/electron/dist/electron.exe"
+ELECTRON_LINUX="node_modules/electron/dist/electron"
 
 mode="start"
 provider=""
@@ -36,6 +47,9 @@ use_gpu=1
 rebuild=0
 backend_only=0
 logs_service=""
+window_cmd=()
+window_pid=""
+services_stopped=0
 
 # usage: prints the flag list; used for --help and after an invalid argument.
 usage() {
@@ -284,7 +298,50 @@ build_desktop_shell() {
     fail_prerequisite "Building the desktop shell failed in $image. See docs/operations.md#desktop-shell-build."
 }
 
-# start_stack: builds what changed, starts the services and waits for their health checks.
+# locate_window: sets window_cmd to the desktop window and succeeds, or fails when there is none. The shell built
+# into release/ comes first. The host fallback needs the Electron binary from `npm ci` and the output of
+# `npm run build`, and runs the app in this folder. Paths are relative to the project folder, the working directory.
+locate_window() {
+  local shell_path electron
+  case "$(uname -s 2>/dev/null)" in
+    MINGW* | MSYS* | CYGWIN*)
+      shell_path="$WINDOW_WINDOWS"
+      electron="$ELECTRON_WINDOWS"
+      ;;
+    *)
+      shell_path="$WINDOW_LINUX"
+      electron="$ELECTRON_LINUX"
+      ;;
+  esac
+  if [ -f "$shell_path" ] && [ -x "$shell_path" ]; then
+    window_cmd=("./$shell_path")
+    return 0
+  fi
+  if [ -f "$electron" ] && [ -x "$electron" ] && [ -f dist-electron/main.js ] &&
+    [ -f dist/aura-frame/browser/index.html ]; then
+    window_cmd=("./$electron" .)
+    return 0
+  fi
+  return 1
+}
+
+# prepare_window: finds the window before any service starts, and builds the shell once when it is missing, so a
+# start that cannot open a window exits 1 without leaving services behind.
+prepare_window() {
+  if locate_window; then
+    return 0
+  fi
+  if [ "$rebuild" -eq 0 ]; then
+    echo "start.sh: no desktop window was found; building it into release/ (this needs the internet)." >&2
+    build_desktop_shell
+    if locate_window; then
+      return 0
+    fi
+  fi
+  fail_prerequisite "No desktop window is available. Run './start.sh --rebuild', or build it on the host with 'npm ci && npm run build'. See docs/operations.md#desktop-shell-build."
+}
+
+# start_stack: builds what changed, finds the window, starts the services and waits for their health checks.
 start_stack() {
   local profile_args=()
   if [ "$use_vision" -eq 1 ]; then
@@ -297,6 +354,9 @@ start_stack() {
       build_desktop_shell
     fi
   fi
+  if [ "$backend_only" -eq 0 ]; then
+    prepare_window
+  fi
   # Compose rebuilds an image only when its sources changed, thanks to the layer cache.
   if ! compose ${profile_args[@]+"${profile_args[@]}"} up -d --build --wait --wait-timeout "$HEALTH_TIMEOUT_SECONDS"; then
     echo "start.sh: a service failed its health check. Run './start.sh --status' and './start.sh --logs'." >&2
@@ -307,16 +367,67 @@ start_stack() {
   fi
 }
 
-# report_started: tells what is running. The window is not launched yet, see the note printed.
+# report_started: tells what is running and, with --backend-only, where the token is kept.
 report_started() {
   echo "start.sh: services are healthy on http://127.0.0.1:${AURAFRAME_PORT} (provider: ${provider})."
   if [ "$backend_only" -eq 1 ]; then
     write_token_file
     echo "start.sh: the session token is in ${TOKEN_FILE} (ignored by Git). Stop with './start.sh --stop'."
+  fi
+}
+
+# stop_services_once: stops the services after the window and keeps the named volumes. Runs `down` at most once,
+# whichever of the normal end, a signal or the exit trap comes first. Returns 1 when `down` failed.
+stop_services_once() {
+  if [ "$services_stopped" -eq 1 ]; then
     return 0
   fi
-  echo "start.sh: the desktop window is not launched by this script yet: '--rebuild' builds it into release/, but launching it is not implemented." >&2
-  echo "start.sh: the services stay up; stop them with './start.sh --stop'." >&2
+  services_stopped=1
+  echo "start.sh: stopping the services; the data stays."
+  if ! compose --profile local down; then
+    echo "start.sh: the services could not be stopped. Run './start.sh --stop'." >&2
+    return 1
+  fi
+}
+
+# on_signal CODE: ends the window, waits for it, stops the services and exits with CODE. Further signals are
+# ignored meanwhile, so a second Ctrl+C cannot cut the stop short.
+on_signal() {
+  trap '' INT TERM HUP
+  if [ -n "$window_pid" ]; then
+    kill "$window_pid" 2>/dev/null
+    wait "$window_pid" 2>/dev/null
+  fi
+  stop_services_once
+  exit "$1"
+}
+
+# run_window: runs the window until it closes, then stops the services and exits; it never returns.
+# The token reaches the window only through the inherited environment, with the project folder beside it so a
+# packaged window finds compose.yaml. The window runs as a child this script waits for: a signal then interrupts
+# the wait at once and reaches the trap, even when the window is a native program that sees no terminal signal.
+run_window() {
+  local status=0
+  trap 'on_signal 130' INT
+  trap 'on_signal 129' HUP
+  trap 'on_signal 143' TERM
+  trap 'stop_services_once' EXIT
+  AURAFRAME_PROJECT_DIR="$(pwd -W 2>/dev/null || pwd)"
+  export AURAFRAME_PROJECT_DIR
+  echo "start.sh: opening the desktop window. Closing it stops the services; the data stays."
+  "${window_cmd[@]}" &
+  window_pid=$!
+  wait "$window_pid" || status=$?
+  window_pid=""
+  if [ "$status" -ne 0 ]; then
+    echo "start.sh: the desktop window exited with code ${status}." >&2
+  fi
+  stop_services_once || status=1
+  trap - EXIT
+  if [ "$status" -ne 0 ]; then
+    exit 1
+  fi
+  exit 0
 }
 
 # show_status: prints the state and health of every service.
@@ -371,3 +482,6 @@ prepare_environment
 choose_provider
 start_stack
 report_started
+if [ "$backend_only" -eq 0 ]; then
+  run_window
+fi

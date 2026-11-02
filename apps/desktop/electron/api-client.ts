@@ -1,7 +1,8 @@
 // HTTP client of the engine API for the Electron main process: the only place that attaches the session token.
 // It talks to the gateway on 127.0.0.1 only, sends nothing until this session's services are up, and never follows
 // a redirect. Failures carry fixed messages, never server text or socket details, and any answer that contains
-// the token is refused before a caller sees it.
+// the token is refused before a caller sees it. A 401 or 403 means the services no longer accept the token, so it
+// closes the session's gate again.
 
 import * as http from 'node:http';
 import type { ComposeStack } from './compose-stack';
@@ -45,6 +46,9 @@ const REFUSAL_MESSAGES = new Map<string, string>([
 ]);
 
 export const REQUEST_FAILED_MESSAGE = 'The request to the analysis service failed.';
+// Given for a 401 or 403, and shown in the window when the gate closes for that reason.
+export const SERVICES_UNAVAILABLE_MESSAGE =
+  'The analysis services are unavailable, because they refused this session. Start an analysis to restart them.';
 
 // Returns the text of a failure that may reach the renderer. Anything but a client error gets a fixed message,
 // because other errors can carry a path, an address or a token.
@@ -67,8 +71,9 @@ export interface ApiClientOptions {
   // Port of the gateway on 127.0.0.1. There is deliberately no host option.
   port: number;
   // Supplies the Authorization header, read per request and never stored or returned, and says whether a
-  // request may be sent at all. One object, so the token cannot be wired without its gate.
-  session: Pick<ComposeStack, 'authorizationHeader' | 'isUp'>;
+  // request may be sent at all. One object, so the token cannot be wired without its gate. `tokenRefused`, when
+  // present, is called for every 401 or 403 and must close that gate.
+  session: Pick<ComposeStack, 'authorizationHeader' | 'isUp'> & Partial<Pick<ComposeStack, 'tokenRefused'>>;
   // Limit on one whole media exchange. Injected so a test can use a short one.
   mediaTimeoutMs?: number;
 }
@@ -259,7 +264,7 @@ export class ApiClient {
       request.on('response', (response) => {
         if (response.statusCode !== 200) {
           response.resume();
-          fail(new ApiClientError('refused', REFUSED_MESSAGE, response.statusCode));
+          fail(this.refusal(response.statusCode) ?? new ApiClientError('refused', REFUSED_MESSAGE, response.statusCode));
           return;
         }
         const feed = createSseParser((data) => {
@@ -394,7 +399,7 @@ export class ApiClient {
       request.on('response', (response) => {
         const contentType = (response.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
         if (response.statusCode !== 200 || !MEDIA_CONTENT_TYPES.has(contentType)) {
-          fail(new ApiClientError('refused', REFUSED_MESSAGE, response.statusCode));
+          fail(this.refusal(response.statusCode) ?? new ApiClientError('refused', REFUSED_MESSAGE, response.statusCode));
           return;
         }
         const chunks: Buffer[] = [];
@@ -422,8 +427,20 @@ export class ApiClient {
     });
   }
 
+  // For a 401 or 403, closes the session's gate and returns the error to raise; returns null for any other status,
+  // which says nothing about the token. The gateway answers 403 to a foreign Host and the API 401 to a wrong token.
+  private refusal(status: number | undefined): ApiClientError | null {
+    if (status !== 401 && status !== 403) return null;
+    this.options.session.tokenRefused?.();
+    return new ApiClientError('services_unavailable', SERVICES_UNAVAILABLE_MESSAGE, status);
+  }
+
   // Returns the parsed body of a success; throws ApiClientError for a refusal or an unusable body.
   private interpret(status: number, text: string): unknown {
+    const refused = this.refusal(status);
+    if (refused) {
+      throw refused;
+    }
     if (text.includes(this.secret())) {
       throw badResponse();
     }

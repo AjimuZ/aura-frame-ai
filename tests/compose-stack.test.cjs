@@ -8,7 +8,9 @@ const test = require('node:test');
 const {
   ComposeStack,
   FolderValidationError,
+  composeDirectory,
   generateSessionToken,
+  takeInheritedSessionToken,
   validateExportsFolder,
   validatePhotoFolder,
 } = require('../dist-electron/compose-stack.js');
@@ -66,6 +68,7 @@ function newStack(options = {}) {
     exportsDir,
     spawn: stub.spawn,
     createToken: options.createToken,
+    inheritedToken: options.inheritedToken,
     onEvent: (event) => events.push(event),
     baseEnv: { PATH: '/usr/bin' },
   });
@@ -343,4 +346,101 @@ test('the token reaches docker only through the environment and never leaves mai
   assert.ok(!JSON.stringify(replies).includes(token));
   assert.ok(!JSON.stringify(events).includes(token));
   assert.ok(!calls.some((call) => call.args.some((arg) => arg.includes(token))));
+});
+
+test('main inherits the token from the environment and removes it there', (t) => {
+  const root = temporaryRoot(t);
+  const token = 'a1'.repeat(32);
+  const env = { AURAFRAME_API_TOKEN: token, PATH: '/usr/bin' };
+  const tokenFile = path.join(root, 'session-token');
+  fs.writeFileSync(tokenFile, `${'b2'.repeat(32)}\n`);
+  assert.equal(takeInheritedSessionToken(env, { development: true, tokenFile }), token, 'the environment comes first');
+  assert.deepEqual(env, { PATH: '/usr/bin' }, 'later child processes do not inherit it');
+  assert.equal(takeInheritedSessionToken({ AURAFRAME_API_TOKEN: token }, { development: false, tokenFile }), token);
+});
+
+test('in development only, main reads the token file that start.sh --backend-only writes', (t) => {
+  const root = temporaryRoot(t);
+  const token = 'b2'.repeat(32);
+  const tokenFile = path.join(root, 'session-token');
+  fs.writeFileSync(tokenFile, `${token}\n`);
+  assert.equal(takeInheritedSessionToken({}, { development: true, tokenFile }), token);
+  assert.equal(takeInheritedSessionToken({}, { development: false, tokenFile }), null, 'a packaged app ignores the file');
+  assert.equal(takeInheritedSessionToken({}, { development: true, tokenFile: path.join(root, 'missing') }), null);
+});
+
+test('a malformed inherited token is ignored, from the environment and from the file', (t) => {
+  const root = temporaryRoot(t);
+  const tokenFile = path.join(root, 'session-token');
+  const malformed = ['', 'short', 'A1'.repeat(32), 'g'.repeat(64), `${'a'.repeat(64)}0`, `Bearer ${'a'.repeat(64)}`];
+  for (const value of malformed) {
+    const env = { AURAFRAME_API_TOKEN: value };
+    assert.equal(takeInheritedSessionToken(env, { development: false, tokenFile }), null, JSON.stringify(value));
+    assert.equal(env.AURAFRAME_API_TOKEN, undefined, 'even a malformed value is removed');
+    fs.writeFileSync(tokenFile, value);
+    assert.equal(takeInheritedSessionToken({}, { development: true, tokenFile }), null, JSON.stringify(value));
+  }
+});
+
+test('without an inherited token main generates its own and keeps the gate closed until a start', async (t) => {
+  const root = temporaryRoot(t);
+  const generated = 'c3'.repeat(32);
+  const { stack, calls } = newStack({ createToken: () => generated, inheritedToken: null });
+  assert.equal(stack.isUp(), false);
+  assert.equal(stack.authorizationHeader(), `Bearer ${generated}`);
+  await stack.start(root);
+  assert.equal(calls[0].options.env.AURAFRAME_API_TOKEN, generated);
+  assert.equal(stack.isUp(), true);
+});
+
+test('an inherited token opens the gate from construction and is the token a later start sends', async (t) => {
+  const root = temporaryRoot(t);
+  const inherited = 'd4'.repeat(32);
+  let generated = 0;
+  const { stack, calls, events } = newStack({
+    inheritedToken: inherited,
+    createToken: () => {
+      generated += 1;
+      return 'e5'.repeat(32);
+    },
+  });
+  assert.equal(generated, 0, 'no token of its own');
+  assert.equal(stack.isUp(), true, 'open before any start');
+  assert.equal(stack.authorizationHeader(), `Bearer ${inherited}`);
+  assert.deepEqual(calls, [], 'nothing is spawned to open it');
+  assert.deepEqual(events, []);
+
+  await stack.start(root);
+  assert.equal(calls[0].options.env.AURAFRAME_API_TOKEN, inherited, 'compose keeps api for the same token');
+  assert.equal(stack.isUp(), true);
+});
+
+test('a refused token closes the gate once, with a reason, and the next start opens it again', async (t) => {
+  const root = temporaryRoot(t);
+  const token = 'f6'.repeat(32);
+  const { stack, events } = newStack({ inheritedToken: token });
+  stack.tokenRefused();
+  stack.tokenRefused();
+  assert.equal(stack.isUp(), false);
+  assert.deepEqual(events, [{ type: 'failed', reason: 'token-refused' }], 'reported once per opening');
+  assert.ok(!JSON.stringify(events).includes(token));
+
+  await stack.start(root);
+  assert.equal(stack.isUp(), true);
+  const closed = newStack();
+  closed.stack.tokenRefused();
+  assert.deepEqual(closed.events, [], 'a closed gate has nothing to report');
+});
+
+test('compose runs in the project folder that start.sh names, when it holds compose.yaml', (t) => {
+  const root = temporaryRoot(t);
+  const fallback = path.join(root, 'packaged');
+  const project = path.join(root, 'project');
+  fs.mkdirSync(project);
+  assert.equal(composeDirectory({ AURAFRAME_PROJECT_DIR: project }, fallback), fallback, 'no compose.yaml there');
+  fs.writeFileSync(path.join(project, 'compose.yaml'), 'name: synthetic\n');
+  assert.equal(composeDirectory({ AURAFRAME_PROJECT_DIR: project }, fallback), project);
+  for (const bad of [undefined, '', 'relative/project', `${project}\0`]) {
+    assert.equal(composeDirectory({ AURAFRAME_PROJECT_DIR: bad }, fallback), fallback, String(bad));
+  }
 });

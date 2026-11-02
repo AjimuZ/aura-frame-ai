@@ -2,10 +2,10 @@
 
 Status: **partly implemented** ([P02](roadmap.md)). `compose.yaml` and `start.sh` exist, and the desktop app's
 analysis handlers call the stack over HTTP ([Bridge mapping](architecture.md#bridge-mapping)). Of the `start.sh`
-contract below, the services, the checks, the token and the exit codes are implemented. The window,
-`--fetch-models`, `--codex-login` and `--provider codex` are planned, and the script says so (see
-[Not available yet](#not-available-yet)). To run the current code, see
-[Running the current code](#running-the-current-code).
+contract below, the services, the checks, the token, the exit codes and the window are implemented. The window is
+tested with stubs only and has not been opened by `start.sh` on a real host yet. `--fetch-models`, `--codex-login`
+and `--provider codex` are planned, and the script says so (see [Not available yet](#not-available-yet)). To run
+the current code, see [Running the current code](#running-the-current-code).
 
 ## Compose stack
 
@@ -97,6 +97,25 @@ Behaviour as implemented:
 - The token is 64 hex characters from `/dev/urandom`. Compose reads it from the environment, `curl` reads it
   from a configuration on stdin, and it is never printed. `--backend-only` also writes it to
   `data/session-token`, readable by the user only and ignored by Git.
+- Window: without `--backend-only`, the script finds the window before it starts any service. It takes the shell
+  built into `release/` (`release/win-unpacked/AuraFrame AI.exe` on Windows, `release/linux-unpacked/aura-frame-ai`
+  on Linux, the second not observed), and otherwise the host fallback: `node_modules/electron/dist/electron .` when
+  `npm ci` and `npm run build` have been run. With neither, it builds the shell once, as `--rebuild` does, and exits
+  `1` if there is still no window. The services are not started in that case.
+- After `/health` answers, the window runs in the foreground until it closes. It inherits `AURAFRAME_API_TOKEN`,
+  `AURAFRAME_PORT` and `AURAFRAME_PROJECT_DIR` (the folder that holds `compose.yaml`) through the environment, never
+  through an argument, and no token file is written. Electron main removes the token from its environment at launch.
+  Because the token is the one the services already accept, the window shows the results of earlier runs at once,
+  and a run started from it sends the same token. A window started separately has no token to inherit: it generates
+  its own, sends nothing until its first run, and that run makes compose recreate `api` with the new token.
+- When the window closes, the script runs `docker compose --profile local down` once and keeps the volumes. Ctrl+C
+  (SIGINT), SIGTERM and SIGHUP end the window first, then do the same. The exit code is `0` after a normal close,
+  `1` when the window exited with another code or `down` failed (the script then says to run `--stop`), and `130`,
+  `143` or `129` after a signal. On Windows the window is a native program, so the `kill` from Git Bash is expected
+  to end it without its own quit handling; the script's `down` then stops the services. If the window had a
+  `docker compose up` of its own in flight at that moment, it may finish after that `down`: run `./start.sh --stop`.
+- Tested with stubs only (`tests/start-sh.test.cjs`). Not observed: the real window opened by the script, Ctrl+C in a
+  real terminal, and the Linux shell path.
 - `--status`, `--logs [service]` and `--stop` only run the matching `docker compose` command.
   `--stop` keeps the volumes.
 
@@ -109,11 +128,6 @@ These flags are valid, but their feature comes later. Each prints a "not availab
 | --- | --- |
 | `--fetch-models` | P03.2 |
 | `--codex-login`, `--provider codex` | P05.2 |
-
-The window is not launched either: `--rebuild` builds it into `release/` ([desktop shell](#desktop-shell-build)), but
-launching it is not implemented. After a start, the script prints that, leaves the services running, and `--stop` ends
-them. A window started
-separately brings its own token, so its first run makes compose recreate `api` with that token.
 
 ## First start
 
@@ -149,8 +163,8 @@ none. The native modules in build tools (`lmdb`, `@parcel/watcher`) run only ins
   all read-only, and `release/` to write to. It never sees the repository root, so the personal folders, `data/` and
   the session token stay out. It runs as the host's user with all capabilities dropped. It needs the internet for npm
   and the Electron download.
-- A failed build exits `1` before the services start. A start without `--rebuild` builds no shell, because the
-  script does not launch the window yet.
+- A failed build exits `1` before the services start. A start without `--rebuild` builds the shell only when neither
+  it nor the host fallback is there (see [start.sh](#startsh)).
 
 Observed on the reference PC (Windows 11, Docker Desktop with the WSL2 backend and 7 GB of memory for Docker) on
 2026-11-02:
@@ -181,6 +195,13 @@ npm ci && npm run build && npx electron .
 npm start                     # Angular dev server and Electron, reading that token
 npm run start:angular         # Angular alone, in a browser, with the mock API
 ```
+
+`npm start` sets `AURA_DEV=1`, and only then does Electron main read `data/session-token`. A token in the environment
+comes first. Either must be exactly 64 lowercase hex characters, or it is ignored and main generates its own. With a
+token, main sends requests from launch, so the results of earlier runs show. If the services have been stopped or
+restarted since, the gateway answers 401 or 403: main then sends nothing more, and the window says "The analysis
+services are unavailable, because they refused this session. Start an analysis to restart them." A file left from an
+earlier `--backend-only` start is harmless in the same way, because each start makes a new token.
 
 ## Memory on Windows
 
@@ -216,7 +237,7 @@ Electron itself runs outside this limit, on the remaining system memory.
 
 | Symptom | Cause | Action |
 | --- | --- | --- |
-| Window says the services are unavailable | Started outside `start.sh`, or a service failed | Run `./start.sh --status`, then `--logs` |
+| Window says the services are unavailable | The services were stopped or restarted with another token, or a service failed | Start an analysis from the window, or run `./start.sh --status`, then `--logs` |
 | Desktop shell build fails | Container route not working on this host | Use the [host fallback](#desktop-shell-build) |
 | GPU not found in a container | Driver or runtime | Run `docker run --rm --gpus all <image> nvidia-smi`, and update the driver |
 | `vision` out of GPU memory | Other programs use VRAM | Close GPU-heavy apps, or set a smaller model build |
@@ -239,10 +260,11 @@ npm start
 Starting an analysis from the window runs `docker compose up -d --wait` with the chosen folder and the exports
 folder, adding `-f compose.gpu.yaml` when `nvidia-smi -L` succeeds, then calls the
 API on `127.0.0.1` (`AURAFRAME_PORT`, default `8420`). Docker must be running, otherwise the app reports that the
-services could not be started. Until a run starts the services, the app sends the API nothing and shows no
-photos, including those of earlier runs; saving a review, exporting and clearing data report that the service is
-not reachable. This path is tested with a fake server and a fake Docker only, and has not been run against the
-real stack. Run the engine tests with the container command in
+services could not be started. Started this way, the window has no token to inherit: until a run starts the
+services, it sends the API nothing and shows no photos, including those of earlier runs; saving a review, exporting
+and clearing data report that the service is not reachable. Opened by `./start.sh`, or by `npm start` after
+`./start.sh --backend-only`, it shows earlier results at once (see [Development](#development)). This path is tested
+with a fake server and a fake Docker only, and has not been run against the real stack. Run the engine tests with the container command in
 [Testing](testing.md#engine-tests-in-a-throwaway-container).
 
 Closing the window, File > Exit and every other normal quit stop the services and keep the data. A start in

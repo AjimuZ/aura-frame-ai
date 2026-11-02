@@ -174,8 +174,17 @@ against a fake HTTP server only:
   become fixed messages, and an answer or event that contains the token is dropped.
 - No request leaves main, and so no token, until `stack.start` has resolved true in this session, and none from
   the next start or stop on. Meanwhile reads return their fallbacks (`[]`, `null`, last known status) and writes
-  are refused with the fixed "not reachable" message, so earlier results stay hidden until the next run. The gate
-  is in `ApiClient`, the only code that attaches the token.
+  are refused with the fixed "not reachable" message. The gate is in `ApiClient`, the only code that attaches the
+  token.
+- Inherited token (P02.WINDOW): `takeInheritedSessionToken` reads `AURAFRAME_API_TOKEN` at launch and removes it from
+  main's environment; with `AURA_DEV=1` only, it reads `data/session-token` instead. A value that is not 64 lowercase
+  hex characters is ignored. With a token, `ComposeStack` uses it instead of generating one and its gate is open from
+  launch, so earlier results show without a new run, and a later `up` sends the same token. Without one, main behaves
+  as described above. `AURAFRAME_PROJECT_DIR`, from `start.sh`, tells a packaged window where `compose.yaml` is.
+- A 401 or 403 from the gateway closes the gate again (`ComposeStack.tokenRefused`), whatever the request (JSON,
+  stream or thumbnail). The stack reports a `failed` event with the reason `token-refused`, and main sends the window an
+  `error` event with a fixed message saying that the services are unavailable: for a followed run, the run ends with
+  it; otherwise it goes to the active library without changing its stored status. Other statuses leave the gate open.
 - Closing the window, File > Exit and `app.quit()` stop the services if this session started them
   (`quit-handling.ts`). `down` runs only after an `up` in flight has ended, and a new start is refused until then.
   The wait on quit is bounded to 10 minutes; see [Operations](operations.md#running-the-current-code) for what
@@ -203,15 +212,14 @@ fake server and a temporary folder only):
 - While the services are not up in this session (`stack.isUp()`), `exportPhoto` and `deleteLibrary` send nothing. The
   export says the services are not running. The deletion is refused with a fixed message that tells the person to start
   an analysis first, so a library's data is never left in the volume without an owner. A consequence: right after
-  launch, a library cannot be deleted until a run has started the services.
+  launch, a library cannot be deleted until a run has started the services, unless the window inherited a token.
 - A start refused because a run is still active (a cancel finishing included) or the services are stopping now also
   sends an `error` event for that library, so the window leaves "Starting..." without a refresh. The refusal does not
   change the stored status of the run that caused it, and the call still rejects with the same message.
 
 Not done yet: `checkOllama` and `getOpenAiStatus` return their fixed "unable to probe" answers
 instead of `GET /api/providers` (P03.5). `estimateOpenAiCost`, `startOpenAiQuality` and `exportOpenAiResults` keep
-their channels but do nothing (P05.5). The window receives no token from `start.sh`, so main's own token replaces it
-at the first run (P02.WINDOW).
+their channels but do nothing (P05.5).
 
 ## Library data layout
 

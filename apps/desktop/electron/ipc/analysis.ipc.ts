@@ -2,7 +2,7 @@
 // main-only API client. The renderer sees the same channels and shapes, and never the session token.
 
 import { BrowserWindow, ipcMain } from 'electron';
-import { ApiClient, safeApiMessage } from '../api-client';
+import { ApiClient, SERVICES_UNAVAILABLE_MESSAGE, safeApiMessage } from '../api-client';
 import type { RunOptions } from '../api-client';
 import { validatePhotoFolder } from '../compose-stack';
 import type { ComposeStack } from '../compose-stack';
@@ -46,6 +46,7 @@ let stackToStop: AnalysisBackend['stack'] | null = null;
 // Set while the services are being stopped, so that no new start can bring them back behind that stop.
 let disposal: Promise<void> | null = null;
 let getWindows: WindowsProvider = () => [];
+let getActiveLibraryId: () => string | null = () => null;
 
 const statuses = new Map<string, AnalysisStatus>();
 
@@ -307,12 +308,29 @@ export function isAnalysisRunning(): boolean {
   return activeRun !== null;
 }
 
+// Tells the windows that the services refused the session token, as an error event with a fixed message. A
+// followed run can no longer be reached, so it ends with that error. A run still starting is left alone: its launch
+// reports its own failures, and its `up` reopens the gate. Otherwise the event goes to the active library without touching its stored status,
+// because the refusal says nothing about how its last run ended.
+export function reportServicesUnavailable(): void {
+  const run = activeRun;
+  if (run?.phase === 'running') {
+    run.abort.abort();
+    failRun(run, SERVICES_UNAVAILABLE_MESSAGE);
+    return;
+  }
+  if (run) return;
+  const libraryId = getActiveLibraryId();
+  if (libraryId) broadcast({ type: 'error', libraryId, message: SERVICES_UNAVAILABLE_MESSAGE });
+}
+
 export function registerAnalysisIpc(
   windowsProvider: WindowsProvider,
   libraries: LibraryRegistryStore,
   backend: AnalysisBackend,
 ): void {
   getWindows = windowsProvider;
+  getActiveLibraryId = () => libraries.getState().activeLibraryId;
   const { api } = backend;
 
   // Resolves as soon as the run is requested. Its outcome reaches the renderer as events, because bringing

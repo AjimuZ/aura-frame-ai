@@ -6,13 +6,18 @@
 import { app, BrowserWindow, dialog, protocol } from 'electron';
 import * as path from 'node:path';
 import { registerFilesystemIpc } from './ipc/filesystem.ipc';
-import { registerAnalysisIpc, disposeAnalysisIpc, isAnalysisRunning } from './ipc/analysis.ipc';
+import {
+  registerAnalysisIpc,
+  disposeAnalysisIpc,
+  isAnalysisRunning,
+  reportServicesUnavailable,
+} from './ipc/analysis.ipc';
 import { registerSettingsIpc } from './ipc/settings.ipc';
 import { dataRoot, repoRoot } from './ipc/paths';
 import { LibraryRegistryStore } from './ipc/library-store';
 import { registerLibrariesIpc } from './ipc/libraries.ipc';
 import { ApiClient, gatewayPort } from './api-client';
-import { ComposeStack } from './compose-stack';
+import { ComposeStack, TOKEN_FILE, composeDirectory, takeInheritedSessionToken } from './compose-stack';
 import { handleMediaRequest } from './media-proxy';
 import { installQuitHandling } from './quit-handling';
 
@@ -23,6 +28,12 @@ const SERVICES_LEFT_MESSAGE =
   'Docker did not finish in time, so the app is closing without confirmation. The analysis services may still ' +
   'be running, or may still come up, with your photo folder mounted read-only. To stop them, run ' +
   '"./start.sh --stop" from the project folder.';
+// Taken when this module loads, so the processes that main spawns afterwards do not inherit the variable; only the
+// docker calls of the stack get the token, on purpose. Helper processes Electron started earlier may still hold it.
+const inheritedToken = takeInheritedSessionToken(process.env, {
+  development: isDev,
+  tokenFile: path.join(repoRoot(), TOKEN_FILE),
+});
 
 // A privileged custom scheme so the renderer can display thumbnails without seeing a
 // path or the token, or weakening webSecurity. Must be declared before app ready.
@@ -77,7 +88,14 @@ void app.whenReady().then(() => {
   try {
     const libraries = new LibraryRegistryStore(dataRoot());
     libraries.initialize();
-    const stack = new ComposeStack({ composeDir: repoRoot(), exportsDir: libraries.exportsRoot() });
+    const stack = new ComposeStack({
+      composeDir: composeDirectory(process.env, repoRoot()),
+      exportsDir: libraries.exportsRoot(),
+      inheritedToken,
+      onEvent: (event) => {
+        if (event.reason === 'token-refused') reportServicesUnavailable();
+      },
+    });
     const api = new ApiClient({ port: gatewayPort(process.env), session: stack });
     protocol.handle('afmedia', (request) => handleMediaRequest({ api, libraries }, request));
     registerSettingsIpc();

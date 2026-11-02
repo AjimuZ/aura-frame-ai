@@ -45,6 +45,9 @@
 - When a module cannot import the error type because of an import cycle, let it raise the standard OSError and map it to a structured error in the route layer.
 - Pin container images by reading `docker inspect --format '{{index .RepoDigests 0}}' <tag>` after a pull. Never guess a digest. Record the date and the source tag next to the pin.
 - When a long real run is cut by a tool time limit, rerun a lighter variant that still exercises the path under test (for example `--cpu`), so the exit code is observed. Record both runs honestly.
+- Secrets handed to a child process travel only through the environment. The receiving process validates the exact format (here 64 lowercase hex characters) and deletes the variable from its own environment at startup.
+- A shell script that must clean up on exit runs its long-lived child with `&` plus `wait`, and sets INT/TERM/HUP traps and an EXIT trap that all call one idempotent cleanup guarded by a flag.
+- Treat only 401 and 403 as 'credential refused' and close the request gate on them. Other error statuses must not change session state.
 
 ---
 
@@ -517,4 +520,36 @@ The P02.4.2 checkbox and scripts/ralph/prd.json were left alone.
   - `./start.sh --stop` and commands chained with `;` are not in the session allowlist. After `./start.sh --rebuild`, the `auraframe` stack stays up on 127.0.0.1:8420 until someone stops it.
   - In `tests/start-sh.test.cjs`, `runStart` now takes `edit: (script) => script` to rewrite the copied start.sh. Use it instead of extra environment hooks when a test needs different constants.
   - The product name in the build output contains a word the commit validator refuses. Never quote the installer file name in a commit message.
+---
+
+## 2026-11-02T11:31:15Z - P02.WINDOW
+- `./start.sh` now opens the window and shares its session token with it. The full `bash scripts/check.sh` passed (8 of 8): lint, both builds, `start.sh` syntax, 156 Node tests (155 passed, 1 skipped, the existing symlink case), the 190 engine container tests and both compose checks. After the last comment-only edits I reran `bash scripts/check.sh --node`, and it passed 5 of 5 with the same counts.
+
+**start.sh**
+- Before any service starts, the script finds the window. It uses the shell built into `release/` (`win-unpacked/AuraFrame AI.exe` on Windows, `linux-unpacked/aura-frame-ai` on Linux). If that is missing, it uses the host fallback `node_modules/electron/dist/electron .`, which needs `npm ci` and `npm run build` to have run. With neither, it builds the shell once. If there is still no window it exits 1, and the services are not started.
+- Once `/health` answers, the window runs in the foreground as a child the script waits for. It gets `AURAFRAME_API_TOKEN`, `AURAFRAME_PORT` and `AURAFRAME_PROJECT_DIR` through the environment only. No token file is written in this mode.
+- When the window closes, or on INT, TERM or HUP, the script runs `compose --profile local down` exactly once and keeps the volumes. It exits 0 after a normal close, 1 if the window failed or `down` failed, and 130, 143 or 129 after a signal.
+- The old "window not launched" message is gone.
+
+**Electron main**
+- `takeInheritedSessionToken` takes the token from the environment and removes it there. In development (`AURA_DEV=1`) only, it reads `data/session-token` instead. A value that is not exactly 64 lowercase hex characters is ignored.
+- With a token, `ComposeStack` uses it and its request gate is open from launch, so earlier results show. A later `up` sends the same token. Without one, main generates its own token and sends nothing before a start, as before.
+- A 401 or 403 on a JSON request, the event stream or a thumbnail calls `tokenRefused()`, which closes the gate. Main then sends the window an error event with a fixed message saying the services are unavailable. A run being followed ends with that message. Other statuses leave the gate open.
+- `composeDirectory` uses `AURAFRAME_PROJECT_DIR` when that folder holds `compose.yaml`. I added this beyond the criteria: the packaged shell would otherwise look for `compose.yaml` inside its own `resources/` folder, so a run started from the window that `start.sh` opens could not start the services.
+
+**Tests and docs**
+- New and changed tests are in `start-sh`, `compose-stack` and `analysis-http`. One existing test used 401 for a plain refusal; it now uses 400, because 401 now closes the gate.
+- I updated `docs/operations.md`, `docs/architecture.md`, `docs/testing.md`, the roadmap progress note, `CHANGELOG.md` and the `CLAUDE.md` command line. The changelog no longer lists earlier results as open.
+
+**Not observed:** the real window opened by the script, a `fast` run from it, Ctrl+C in a real terminal (the signal tests use stubs), and the Linux shell path, which is electron-builder's default name and was never built.
+- Files changed: start.sh, apps/desktop/electron/compose-stack.ts, apps/desktop/electron/api-client.ts, apps/desktop/electron/ipc/analysis.ipc.ts, apps/desktop/electron/main.ts, tests/start-sh.test.cjs, tests/compose-stack.test.cjs, tests/analysis-http.test.cjs, docs/operations.md, docs/architecture.md, docs/testing.md, docs/roadmap.md, CHANGELOG.md, CLAUDE.md
+- **Learnings for future iterations:**
+  - The packaged shell's repoRoot() points inside release/<platform>-unpacked/resources, where there is no compose.yaml. start.sh now exports AURAFRAME_PROJECT_DIR, and main's composeDirectory() uses it when that folder holds compose.yaml. A window started from Explorer still falls back to repoRoot(), so a run started from it fails with 'could not be started'.
+  - start.sh runs the window as a background child and `wait`s on it. A trapped signal interrupts `wait` at once, and on_signal kills the window, waits, runs down once and exits 130/143/129. A child started with `&` in a non-interactive script ignores SIGINT, so Ctrl+C is handled by the script's trap alone.
+  - To test signals in tests/start-sh.test.cjs, the window stub sends `kill -<SIG> $PPID` to start.sh itself. Node's child.kill on Windows cannot deliver a real SIGINT, and `set -m` in a wrapper is unreliable without a TTY. The stub's sleep loop is bounded to 10 s and writes window.survived if it was not killed.
+  - runStart in tests/start-sh.test.cjs now writes a window stub at release/linux-unpacked/aura-frame-ai by default and points WINDOW_WINDOWS at it, because Git Bash cannot run a script named .exe. Pass `window: false` and `files: {...}` to test the fallback or a missing window.
+  - ApiClient now treats 401 and 403 as 'token refused': it calls session.tokenRefused?.() and throws code 'services_unavailable'. Tests that need a plain refusal must use another status, such as 400 or 409. The analysis-http refusal test was moved from 401 to 400 for this reason.
+  - ComposeStack reports token refusal as onEvent({type:'failed', reason:'token-refused'}). main.ts wires it to reportServicesUnavailable() in analysis.ipc.ts, and the analysis-http setup() wires it the same way.
+  - The Linux shell path release/linux-unpacked/aura-frame-ai is electron-builder's default executable name for this package. It has never been built or observed.
+  - The real window opened by start.sh, a fast run from it and Ctrl+C in a real terminal were not observed. The roadmap exit for P02 still needs a manual run on the reference PC.
 ---

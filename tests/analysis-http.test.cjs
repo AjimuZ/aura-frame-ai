@@ -26,6 +26,7 @@ const {
   registerAnalysisIpc,
   disposeAnalysisIpc,
   isAnalysisRunning,
+  reportServicesUnavailable,
 } = require('../dist-electron/ipc/analysis.ipc.js');
 const { ApiClient, ApiClientError, gatewayPort } = require('../dist-electron/api-client.js');
 const { ComposeStack } = require('../dist-electron/compose-stack.js');
@@ -100,6 +101,7 @@ async function startFakeApi(t) {
 }
 
 // Registers the handlers against a fake API, a real ComposeStack with a fake spawn, and a temporary library.
+// `inheritedToken` hands the stack a token as start.sh does. The stack's events are wired as main wires them.
 async function setup(t, options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auraframe-analysis-'));
   const folder = path.join(root, 'synthetic-photos');
@@ -113,6 +115,10 @@ async function setup(t, options = {}) {
     composeDir: root,
     exportsDir: path.join(root, 'exports'),
     createToken: () => TOKEN,
+    inheritedToken: options.inheritedToken,
+    onEvent: (event) => {
+      if (event.reason === 'token-refused') reportServicesUnavailable();
+    },
     baseEnv: {},
     spawn: (command, args, spawnOptions) => {
       if (command === 'nvidia-smi') {
@@ -389,7 +395,8 @@ test('stream frames reach the windows in the bridge shape, under the run library
 
 test('a refusal or a refused connection gives fixed messages and never the token', async (t) => {
   const { api, invoke, replies, events, config } = await setup(t);
-  const plain = (res) => api.send(res, 401, { code: 'invalid_token', message: 'A valid session token is required.' });
+  // 400, not 401 or 403: those mean the token is refused, which closes the gate (tested below).
+  const plain = (res) => api.send(res, 400, { code: 'invalid_request', message: 'The request is not valid.' });
   api.routes.set('POST /runs', plain);
 
   // The refused run still brought the services up, so the requests after it do reach the server.
@@ -401,7 +408,7 @@ test('a refusal or a refused connection gives fixed messages and never the token
     message: 'The analysis service refused the request.',
   });
 
-  const echoing = (res) => api.send(res, 401, { code: 'invalid_token', message: `bad ${TOKEN}`, detail: TOKEN });
+  const echoing = (res) => api.send(res, 400, { code: 'invalid_request', message: `bad ${TOKEN}`, detail: TOKEN });
   const echoed = ['POST /exports', 'DELETE /data', 'PUT /review', 'GET /photos', 'GET /review', 'GET /runs/current'];
   for (const key of echoed) {
     api.routes.set(key, echoing);
@@ -427,6 +434,81 @@ test('a refusal or a refused connection gives fixed messages and never the token
   assert.equal(events.at(-1).event.message, 'The analysis service is not reachable.');
   assertNoToken({ replies, events });
   assert.ok(!JSON.stringify({ replies, events }).includes(String(api.port)), 'the address leaked');
+});
+
+test('with an inherited token the gate is open from launch, so earlier results show without a new run', async (t) => {
+  const { api, invoke, replies, events, spawnCalls } = await setup(t, { inheritedToken: TOKEN });
+  api.status = { ...api.status, step: 'done', running: false, message: 'Finished earlier' };
+
+  assert.deepEqual(await invoke('photos:get', LIBRARY_ID), [
+    { id: PHOTO_ID, fileName: 'synthetic.jpg', libraryId: LIBRARY_ID, hasThumbnail: false },
+  ]);
+  assert.deepEqual(await invoke('review:get', LIBRARY_ID), SESSION);
+  const status = await invoke('analysis:status', LIBRARY_ID);
+  assert.equal(status.step, 'done');
+  assert.equal(status.message, 'Finished earlier');
+
+  assert.deepEqual(spawnCalls, [], 'no docker command was needed');
+  assert.ok(api.requests.length >= 3);
+  for (const request of api.requests) {
+    assert.equal(request.headers.authorization, `Bearer ${TOKEN}`, request.url);
+  }
+  assert.deepEqual(events, []);
+  assertNoToken({ replies, events });
+});
+
+for (const status of [401, 403]) {
+  test(`a ${status} from the gateway closes the gate again, and the window says the services are unavailable`, async (t) => {
+    const { api, invoke, replies, events } = await setup(t, { inheritedToken: TOKEN });
+    api.routes.set('GET /photos', (res) => api.send(res, status, { code: 'invalid_token', message: `no ${TOKEN}` }));
+
+    assert.deepEqual(await invoke('photos:get', LIBRARY_ID), [], 'the refused list counts as empty');
+    assert.deepEqual(events.map(({ event }) => event), [
+      {
+        type: 'error',
+        libraryId: LIBRARY_ID,
+        message: 'The analysis services are unavailable, because they refused this session. Start an analysis to restart them.',
+      },
+    ]);
+
+    const served = api.requests.length;
+    await assertClosedAnswers(invoke);
+    await assert.rejects(invoke('data:clear', LIBRARY_ID), /not reachable/);
+    assert.equal(api.requests.length, served, 'nothing more is sent once the gate is closed');
+    assert.equal(events.length, 1, 'reported once');
+    assertNoToken({ replies, events });
+  });
+}
+
+test('a refusal during a followed run ends that run with the unavailable message', async (t) => {
+  const { api, invoke, events, config } = await setup(t, { inheritedToken: TOKEN });
+  let refuse;
+  api.streams.push((res) => {
+    res.write(frame({ type: 'progress', step: 'indexing', current: 1, total: 2, message: 'Working' }));
+    refuse = () => res.end();
+  });
+  await invoke('analysis:start', LIBRARY_ID, config);
+  await waitFor(() => refuse && events.length > 0, 'the first event');
+  api.routes.set('GET /runs/current', (res) => api.send(res, 401, { code: 'invalid_token', message: 'No' }));
+  api.routes.set('GET /events', (res) => api.send(res, 401, { code: 'invalid_token', message: 'No' }));
+  refuse();
+  await waitFor(() => !isAnalysisRunning(), 'the run to end');
+  assert.deepEqual(events.at(-1).event, {
+    type: 'error',
+    libraryId: LIBRARY_ID,
+    message: 'The analysis services are unavailable, because they refused this session. Start an analysis to restart them.',
+  });
+  assert.equal(eventTypes(events).filter((type) => type === 'error').length, 1);
+});
+
+test('a refused status in other answers leaves the gate open', async (t) => {
+  const { api, invoke, events } = await setup(t, { inheritedToken: TOKEN });
+  for (const status of [400, 404, 409, 500, 502]) {
+    api.routes.set('PUT /review', (res) => api.send(res, status, { code: 'other', message: 'No' }));
+    await assert.rejects(invoke('review:save', LIBRARY_ID, SESSION), /refused the request/, String(status));
+  }
+  assert.deepEqual(await invoke('review:get', LIBRARY_ID), SESSION, 'requests still go out');
+  assert.deepEqual(events, []);
 });
 
 test('a stream frame or a body that holds the token never reaches the renderer', async (t) => {

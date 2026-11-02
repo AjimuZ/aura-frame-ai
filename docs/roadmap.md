@@ -171,6 +171,16 @@ the GPU overlay wrote the same files, but the session's 10-minute command limit 
 code. R15 records the outcome, and no host fallback is needed on this PC. `node --test tests/start-sh.test.cjs` passed.
 Not observed: running the built app, and the Linux route.
 
+Progress 2026-11-02 (P02.WINDOW): `./start.sh` without `--backend-only` finds the window before starting the services
+(the shell in `release/`, else the host fallback, else one shell build, else exit 1), runs it in the foreground with
+the token in its environment only, and runs `down` once when it closes or on SIGINT, SIGTERM or SIGHUP, keeping the
+volumes. Electron main adopts `AURAFRAME_API_TOKEN`, or `data/session-token` with `AURA_DEV=1`, when it is 64 lowercase
+hex characters, so its gate is open from launch; a 401 or 403 closes the gate and the window reports that the services
+are unavailable. Details: [Operations](operations.md#startsh), [Bridge mapping](architecture.md#bridge-mapping).
+Observed: `bash scripts/check.sh` passed (8 of 8: lint, both builds, `start.sh` syntax, 156 Node tests with 155 passed
+and 1 skipped, the symlink case, the engine container tests 190 of 190, and both compose checks). Not observed: the
+real window opened by the script, a `fast` run from it, Ctrl+C in a real terminal, and the Linux shell path.
+
 ## 4. P03 — Local AI runtime
 
 **Depends on:** P02. **Areas:** providers, models.

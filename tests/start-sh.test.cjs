@@ -25,8 +25,23 @@ case " $* " in
   *" run "*electron-builder*) exit "\${STUB_BUILD_EXIT:-0}" ;;
   *" run "*) printf '%s' "\${STUB_LISTING-}"; exit 0 ;;
   *" up "*) exit "\${STUB_UP_EXIT:-0}" ;;
+  *" down "*) exit "\${STUB_DOWN_EXIT:-0}" ;;
 esac
 exit 0
+`,
+  // The desktop window. It records its argv, the token and project folder it inherited, and the docker calls made
+  // before it ran. STUB_WINDOW_SIGNAL makes it signal start.sh, its parent, then stay open (bounded) until killed.
+  window: `#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$STUB_DIR/window.argv"
+printf '%s' "\${AURAFRAME_API_TOKEN-}" > "$STUB_DIR/window.token"
+printf '%s' "\${AURAFRAME_PROJECT_DIR-}" > "$STUB_DIR/window.project"
+cp "$STUB_DIR/docker.argv" "$STUB_DIR/window.docker" 2>/dev/null
+if [ -n "\${STUB_WINDOW_SIGNAL-}" ]; then
+  kill "-$STUB_WINDOW_SIGNAL" "$PPID"
+  for _ in $(seq 1 100); do sleep 0.1; done
+  printf 'not killed\\n' > "$STUB_DIR/window.survived"
+fi
+exit "\${STUB_WINDOW_EXIT:-0}"
 `,
   nvidia_smi: `#!/usr/bin/env bash
 printf '%s\\n' "$*" >> "$STUB_DIR/nvidia-smi.argv"
@@ -51,21 +66,45 @@ function pathWithoutDocker() {
     .join(path.delimiter);
 }
 
+// Where the window stub goes by default: the Linux shell path that start.sh looks for.
+const WINDOW_STUB = 'release/linux-unpacked/aura-frame-ai';
+
+// Writes the window stub at `relative` inside `dir`.
+function writeWindow(dir, relative) {
+  fs.mkdirSync(path.dirname(path.join(dir, relative)), { recursive: true });
+  fs.writeFileSync(path.join(dir, relative), STUBS.window, { mode: 0o755 });
+}
+
 // Runs a copy of start.sh in a fresh directory with stub tools first on PATH.
 // `without` lists stub names to leave out; `env` sets STUB_* variables; `edit` rewrites the copied script text.
-// Returns the result and file readers.
-function runStart(args, { env = {}, without = [], edit = (script) => script } = {}) {
+// `window: false` leaves the built window out; `files` creates more files (relative path to content) first.
+// By default the window stub sits at the Linux shell path, and the Windows constant is pointed at it too, because
+// Git Bash cannot run a script named `.exe`. Returns the result and file readers.
+function runStart(args, { env = {}, without = [], edit = (script) => script, window = true, files = {} } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'auraframe-start-'));
   const stubs = path.join(dir, 'bin');
   fs.mkdirSync(stubs);
   for (const [name, body] of Object.entries(STUBS)) {
     const tool = name === 'nvidia_smi' ? 'nvidia-smi' : name;
-    if (without.includes(tool)) {
+    if (without.includes(tool) || name === 'window') {
       continue;
     }
     fs.writeFileSync(path.join(stubs, tool), body, { mode: 0o755 });
   }
-  fs.writeFileSync(path.join(dir, 'start.sh'), edit(fs.readFileSync(START_SH, 'utf8')));
+  let script = edit(fs.readFileSync(START_SH, 'utf8'));
+  if (window) {
+    writeWindow(dir, WINDOW_STUB);
+    script = script.replace(/^WINDOW_WINDOWS=".*"$/m, `WINDOW_WINDOWS="${WINDOW_STUB}"`);
+  }
+  for (const [relative, content] of Object.entries(files)) {
+    if (content === STUBS.window) {
+      writeWindow(dir, relative);
+    } else {
+      fs.mkdirSync(path.dirname(path.join(dir, relative)), { recursive: true });
+      fs.writeFileSync(path.join(dir, relative), content);
+    }
+  }
+  fs.writeFileSync(path.join(dir, 'start.sh'), script);
   const childEnv = {
     ...process.env,
     PATH: `${stubs}${path.delimiter}${pathWithoutDocker()}`,
@@ -75,7 +114,13 @@ function runStart(args, { env = {}, without = [], edit = (script) => script } = 
   };
   delete childEnv.MSYS_NO_PATHCONV;
   delete childEnv.AURAFRAME_API_TOKEN;
-  const result = spawnSync('bash', ['./start.sh', ...args], { cwd: dir, env: childEnv, encoding: 'utf8', shell: false });
+  const result = spawnSync('bash', ['./start.sh', ...args], {
+    cwd: dir,
+    env: childEnv,
+    encoding: 'utf8',
+    shell: false,
+    timeout: 60_000,
+  });
   const read = (name) => {
     try {
       return fs.readFileSync(path.join(dir, name), 'utf8');
@@ -89,6 +134,11 @@ function runStart(args, { env = {}, without = [], edit = (script) => script } = 
 // Returns the docker command lines that start the services (`compose ... up`).
 function upLines(run) {
   return run.read('docker.argv').split('\n').filter((line) => / up /.test(` ${line} `));
+}
+
+// Returns the docker command lines that stop the services (`compose ... down`).
+function downLines(run) {
+  return run.read('docker.argv').split('\n').filter((line) => / down$/.test(line));
 }
 
 // Returns the docker command lines that run the desktop shell build.
@@ -154,12 +204,106 @@ test('exits 1 when Docker, the daemon, Compose or the GPU is missing', () => {
   assert.equal(cpu.status, 0, cpu.stderr);
 });
 
-test('says on stderr that the window is not launched, and why, without denying that the app uses the services', () => {
+test('runs the window after the services are healthy, then stops them once and keeps the volumes', () => {
   const run = runStart([]);
   assert.equal(run.status, 0, run.stderr);
-  assert.match(run.stderr, /window is not launched by this script yet: '--rebuild' builds it into release\/, but launching it is not implemented/);
-  assert.match(run.stderr, /stop them with '\.\/start\.sh --stop'/);
-  assert.doesNotMatch(`${run.stdout}${run.stderr}`, /does not use the services|P02\.4/);
+  assert.equal(run.read('window.argv'), '\n', 'the built shell runs once, with no argument');
+
+  const beforeWindow = run.read('window.docker').split('\n');
+  assert.ok(beforeWindow.some((line) => / up /.test(` ${line} `)), 'the services were started before the window');
+  assert.ok(!beforeWindow.some((line) => / down$/.test(line)), 'nothing was stopped before the window closed');
+  assert.ok(run.read('curl.argv').length > 0, 'the health check ran before the window');
+
+  const downs = downLines(run);
+  assert.equal(downs.length, 1, 'down runs exactly once');
+  assert.match(downs[0], /--profile local down$/);
+  assert.doesNotMatch(run.read('docker.argv'), /--volumes|\s-v\s.*down/);
+  assert.match(run.stdout, /opening the desktop window\. Closing it stops the services; the data stays\./);
+  assert.doesNotMatch(`${run.stdout}${run.stderr}`, /not launched|launching it is not implemented/);
+});
+
+test('passes the session token to the window only through the environment', () => {
+  const run = runStart([]);
+  assert.equal(run.status, 0, run.stderr);
+  const token = run.read('window.token');
+  assert.match(token, /^[0-9a-f]{64}$/);
+  assert.equal(token, run.read('docker.token'), 'the window gets the token the services were started with');
+  for (const log of ['window.argv', 'docker.argv', 'curl.argv']) {
+    assert.ok(!run.read(log).includes(token), `${log} must not contain the token`);
+  }
+  assert.ok(!run.stdout.includes(token) && !run.stderr.includes(token), 'the token is never printed');
+  assert.equal(run.read('data/session-token'), '', 'without --backend-only the token is not written to a file');
+  assert.equal(fs.realpathSync(run.read('window.project')), fs.realpathSync(run.dir), 'the window learns the project folder');
+});
+
+test('a window that fails still stops the services, and the exit code says so', () => {
+  const failed = runStart([], { env: { STUB_WINDOW_EXIT: '3' } });
+  assert.equal(failed.status, 1);
+  assert.match(failed.stderr, /desktop window exited with code 3/);
+  assert.equal(downLines(failed).length, 1);
+
+  const stuck = runStart([], { env: { STUB_DOWN_EXIT: '1' } });
+  assert.equal(stuck.status, 1);
+  assert.match(stuck.stderr, /could not be stopped\. Run '\.\/start\.sh --stop'/);
+  assert.equal(downLines(stuck).length, 1, 'a failed down is not retried in a loop');
+});
+
+test('Ctrl+C or a termination closes the window, stops the services once and keeps the data', () => {
+  for (const [signal, code] of [['INT', 130], ['TERM', 143]]) {
+    const run = runStart([], { env: { STUB_WINDOW_SIGNAL: signal } });
+    assert.equal(run.status, code, `${signal}: ${run.stderr}`);
+    assert.equal(run.read('window.survived'), '', `${signal}: the window was ended`);
+    const downs = downLines(run);
+    assert.equal(downs.length, 1, `${signal}: down runs exactly once`);
+    assert.match(downs[0], /--profile local down$/);
+    assert.doesNotMatch(run.read('docker.argv'), /--volumes/);
+  }
+});
+
+test('--backend-only opens no window and leaves the services running', () => {
+  const run = runStart(['--backend-only']);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.read('window.argv'), '');
+  assert.deepEqual(downLines(run), []);
+});
+
+test('without a built shell, the host fallback runs the built app with the installed Electron', () => {
+  const run = runStart([], {
+    window: false,
+    files: {
+      'node_modules/electron/dist/electron': STUBS.window,
+      'dist-electron/main.js': '',
+      'dist/aura-frame/browser/index.html': '',
+    },
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.read('window.argv'), '.\n');
+  assert.match(run.read('window.token'), /^[0-9a-f]{64}$/);
+  assert.deepEqual(shellBuildLines(run), []);
+  assert.equal(downLines(run).length, 1);
+});
+
+test('with no window at all, the shell is built once, and a start still without one exits 1 before the services', () => {
+  const run = runStart([], { window: false, env: { AURAFRAME_BUILDER_IMAGE: PINNED_BUILDER } });
+  assert.equal(run.status, 1);
+  assert.equal(shellBuildLines(run).length, 1, 'the missing shell is built');
+  assert.match(run.stderr, /No desktop window is available/);
+  assert.deepEqual(upLines(run), []);
+  assert.deepEqual(downLines(run), []);
+
+  const fallbackHalfBuilt = runStart([], {
+    window: false,
+    edit: withoutPins,
+    files: { 'node_modules/electron/dist/electron': STUBS.window },
+  });
+  assert.equal(fallbackHalfBuilt.status, 1, 'Electron without the built app is not a window');
+  assert.deepEqual(upLines(fallbackHalfBuilt), []);
+});
+
+test('the window paths are the shell that electron-builder writes for the host platform', () => {
+  const script = fs.readFileSync(START_SH, 'utf8');
+  assert.match(script, /^WINDOW_WINDOWS="release\/win-unpacked\/AuraFrame AI\.exe"$/m);
+  assert.match(script, /^WINDOW_LINUX="release\/linux-unpacked\/aura-frame-ai"$/m);
 });
 
 test('exits 3 when a service or the gateway fails its health check', () => {

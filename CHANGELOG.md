@@ -26,8 +26,7 @@
   and the model files, warns when Docker has less than 10 GB, generates a new session token per start and
   passes it only through the environment, and never downloads a model. Exit codes are 0, 1 (prerequisite),
   2 (invalid arguments) and 3 (health check). It is tested with stubbed tools only, not against a real
-  Docker daemon. It does not open the desktop window yet, and `--fetch-models`, `--codex-login` and
-  `--provider codex` say that they are not available yet.
+  Docker daemon. `--fetch-models`, `--codex-login` and `--provider codex` say that they are not available yet.
 - Electron main has a module that starts and stops the container stack for a chosen photo folder. It checks
   that the folder is an existing directory, runs Docker without a shell, and passes the folder and a fresh
   per-session token only through the environment, so neither appears in a command line, event or reply.
@@ -39,8 +38,7 @@
   is sent to no one until this session has started the services. Closing the window or quitting the app stops
   the services it started and keeps the data, after waiting for a start in progress. If Docker has not finished
   within 10 minutes, a dialog says what may still be running and the app exits. This has been tested with a fake
-  server and a fake Docker only, not against the real services. Still open: showing earlier results before a run
-  starts the services.
+  server and a fake Docker only, not against the real services.
 - Thumbnails now come from the containerised engine. The window asks for a thumbnail by photo ID, and Electron main
   fetches it from the API with the session token, so the window holds no photo path and no token. Until this
   session has started the services, nothing is sent and the thumbnail counts as missing. Originals cannot be
@@ -65,7 +63,15 @@
   `electronuserland/builder` images pinned by digest (`:wine` on Windows, `:latest` on Linux) and mounts only the build
   inputs, read-only. `AURAFRAME_BUILDER_IMAGE` can give another pinned image. On the reference Windows PC,
   `./start.sh --rebuild --cpu` exited 0 and wrote the unsigned NSIS installer and `win-unpacked/`. Not yet observed:
-  running the built app, and a build on a Linux host. The script still does not launch the window.
+  running the built app, and a build on a Linux host.
+- `./start.sh` now opens the desktop window once the services are healthy, and waits for it. It uses the app built
+  into `release/`, or else the Electron installed by `npm ci` with the output of `npm run build`, and builds the app
+  once when neither is there. The window inherits the session token through the environment only, so it shows the
+  results of earlier runs at once instead of waiting for a new run. Closing the window, Ctrl+C or a termination
+  stops the services exactly once and keeps the data. `npm start` after `./start.sh --backend-only` does the same with
+  the token file. If the services later refuse the token (HTTP 401 or 403), the window stops sending requests and
+  says that the services are unavailable. Tested with stubbed tools, a fake Docker and a fake server only; the real
+  window opened by the script and Ctrl+C in a real terminal have not been observed.
 
 ### Changed
 
