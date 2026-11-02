@@ -904,20 +904,59 @@
       }
     },
     {
-      "id": "P04.4",
-      "title": "Order-independent grouping, content tags and people signals with no identity.",
-      "description": "Order-independent grouping, content tags and people signals with no identity.",
+      "id": "P04.4.1",
+      "title": "P04.4a Order-independent grouping",
+      "description": "Replace the first-fit clustering in engine/src/embeddings.py assign_clusters with a deterministic, order-independent method. Photos join a group when their embeddings are close and, when capture times exist, they were taken close together. Revisit the 0.12 distance for SigLIP 2. Closes B10. Update docs/pipeline.md section 5, the roadmap and the changelog.",
       "acceptanceCriteria": [
-        "A test proves that grouping gives the same groups for permuted input",
-        "Content tags come from the fixed list in docs/pipeline.md",
+        "A test proves that grouping gives the same groups for permuted input"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.3"
+      ],
+      "splitFrom": "P04.4",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.4 Order-independent grouping, content tags and people signals with no identity."
+      }
+    },
+    {
+      "id": "P04.4.2",
+      "title": "P04.4b Content tags from the fixed list",
+      "description": "Add zero-shot content tagging with SigLIP 2 text embeddings of the fixed labels in docs/pipeline.md. This needs a text-encoding method on the SigLIP 2 adapter, tag storage in the database, and tests with fake adapters. The list contains no sensitive classes and no identity.",
+      "acceptanceCriteria": [
+        "Content tags come from the fixed list in docs/pipeline.md"
+      ],
+      "priority": 32,
+      "passes": false,
+      "notes": "",
+      "dependsOn": [
+        "P04.3"
+      ],
+      "splitFrom": "P04.4",
+      "source": {
+        "path": "docs/roadmap.md",
+        "section": "5. P04 — Curation pipeline",
+        "line": "P04.4 Order-independent grouping, content tags and people signals with no identity."
+      }
+    },
+    {
+      "id": "P04.4.3",
+      "title": "P04.4c People signals with MediaPipe Face Landmarker, no identity",
+      "description": "Rewrite engine/src/face_quality.py on the MediaPipe Face Landmarker tasks API, replacing the legacy solutions API. Take face count, eyeBlinkLeft and eyeBlinkRight blendshapes and the face box, and derive local face sharpness. Produce a small people_penalty. Add a pinned, checked Face Landmarker model entry to the model_fetch manifest, with no automatic download, and clear guidance when the model is missing. Closes D7. No face vector is computed or stored.",
+      "acceptanceCriteria": [
         "People signals use MediaPipe Face Landmarker, a photo with no face has a penalty of zero, and no face vector is computed or stored"
       ],
       "priority": 32,
       "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Closes B10, D7. No identity recognition, no sensitive inference.",
+      "notes": "",
       "dependsOn": [
         "P04.3"
       ],
+      "splitFrom": "P04.4",
       "source": {
         "path": "docs/roadmap.md",
         "section": "5. P04 — Curation pipeline",
@@ -939,7 +978,9 @@
       "passes": false,
       "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Absolute votes are never the ranking signal. Closes B6. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
       "dependsOn": [
-        "P04.4"
+        "P04.4.1",
+        "P04.4.2",
+        "P04.4.3"
       ],
       "source": {
         "path": "docs/roadmap.md",
