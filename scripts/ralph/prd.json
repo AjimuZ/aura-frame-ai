@@ -1170,7 +1170,7 @@
       ],
       "priority": 40,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: P05.2.3.2: unknown dependency P05.2.3a; P05.2.3.3: unknown dependency P05.2.3b",
       "dependsOn": [
         "P05.1",
         "P05.2.2"
