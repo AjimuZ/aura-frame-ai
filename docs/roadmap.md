@@ -56,7 +56,7 @@ the retired-terms test and the personal-data test. Not observed: the desktop app
 - [x] P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of
       the child process, `afmedia` proxied, chosen folder mounted read-only.
 - [ ] P02.5 Build the desktop shell in a container, or record why the host fallback is needed.
-- [ ] P02.6 Remove `start.py` and the Python paths from Electron.
+- [x] P02.6 Remove `start.py` and the Python paths from Electron.
 
 Exit: `./start.sh` opens the Electron window; a synthetic folder chosen in the native dialog completes
 a `fast` run end to end; closing the window stops the services; the network, read-only, token and

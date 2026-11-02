@@ -326,7 +326,7 @@ Electron main's side of this path has been tested with a fake server and a fake 
 | `apps/desktop/electron/ipc/paths.ts` | Done in P02.4.2: Python paths removed | P02 |
 | `apps/desktop/electron/main.ts`, `filesystem.ipc.ts`, `settings.ipc.ts`, `preload.ts` | Stay, with small changes | P02 |
 | `apps/desktop/angular/` | Stays. New design in P06 | P06 |
-| `start.py` | `start.sh` | P02 |
+| `start.py` | `start.sh` | Done in P02.6: `start.py` is absent |
 | `engine/src/vlm/ollama_client.py`, `gemma_judge.py` | `engine/src/providers/local_llama.py` | P03 |
 | `engine/src/quality_score.py`, `aesthetic.py` | Q-ReAlign scorer | P04 |
 | `engine/src/embeddings.py` | SigLIP 2 embeddings with grouping | P04 |

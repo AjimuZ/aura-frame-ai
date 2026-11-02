@@ -117,5 +117,7 @@
 
 ### Removed
 
+- The host Python launcher `start.py` and the Python paths in Electron (`pythonExecutable`, `engineMain`):
+  a search of `apps/desktop/electron` finds neither, and the documents now say `start.sh` replaces it.
 - All previous documents: the old product specification, architecture, pipeline, design system, cloud
   mode guide, agent workflow, setup guide and portfolio text.

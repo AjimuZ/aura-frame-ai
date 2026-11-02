@@ -609,8 +609,8 @@
         "No start.py exists, and the documents that describe it as present (assessment D4, README.md, docs/technology.md, docs/security-privacy.md, migration map) are corrected"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. start.py was already absent on 2026-11-01, although the assessment cites it, so only the Python paths and the documents remain.",
+      "passes": true,
+      "notes": "The code part of P02.6 was already met. A search of apps/desktop/electron finds no pythonExecutable, engineMain or Python spawn, and start.py is absent. I corrected the migration map row in docs/architecture.md and added a Removed entry to CHANGELOG.md. I did not run lint or the builds. The other documents (assessment D4, technology.md) already described start.py as absent, so I left them alone. README.md and docs/security-privacy.md had no start.py match, and I did not check them further.",
       "dependsOn": [
         "P02.4.1",
         "P02.4.2",

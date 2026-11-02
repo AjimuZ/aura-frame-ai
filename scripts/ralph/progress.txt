@@ -469,3 +469,12 @@ The P02.4.2 checkbox and scripts/ralph/prd.json were left alone.
   - A full `bash scripts/check.sh --node` hung for the 10-minute limit while a test waited on a docker spawn that no longer happened in the same tick. Run the node tests with `--test-timeout` when debugging so a hang names the test.
   - Not observed: `--integration`, real Docker or GPU, a Linux uid 10001 against a host folder, a running Electron. The orchestrator ticks P02.4 and P02.4.5.
 ---
+
+## 2026-11-02T00:20:44Z - P02.6
+- The code part of P02.6 was already met. A search of apps/desktop/electron finds no pythonExecutable, engineMain or Python spawn, and start.py is absent. I corrected the migration map row in docs/architecture.md and added a Removed entry to CHANGELOG.md. I did not run lint or the builds. The other documents (assessment D4, technology.md) already described start.py as absent, so I left them alone. README.md and docs/security-privacy.md had no start.py match, and I did not check them further.
+- Files changed: docs/architecture.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - P02.6 needed only documentation edits; the code criteria were already met.
+  - docs/decisions/0002 and 0009 still list the launcher removal as a consequence; they are history and were left alone.
+  - Lint and builds were not run in this attempt; the orchestrator's checks are the only verification.
+---
