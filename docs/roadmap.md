@@ -96,7 +96,7 @@ them for `start.sh`: exit codes 2, 1 and 3, the token absent from every argument
 `MSYS_NO_PATHCONV=1` and the memory warning). Not observed: `start.sh` against a real Docker daemon, so the
 `compose run` listing of the models volume and `up --wait` are verified only through stubs. Not built yet:
 the window (P02.4, P02.5), `--fetch-models` (P03.2), `--codex-login` and `--provider codex` (P05.2); those
-flags print "not available yet" and exit 1. The file needs its executable bit in Git
+flags printed "not available yet" and exited 1 (`--fetch-models` works since P03.2). The file needs its executable bit in Git
 (`git update-index --chmod=+x start.sh`), which this session could not set.
 
 Progress 2026-11-01: P02.4.1 added `apps/desktop/electron/compose-stack.ts` and `tests/compose-stack.test.cjs`.
@@ -200,7 +200,7 @@ the services, a GPU, and Chromium enforcing the renderer settings (the host has 
 **Depends on:** P02. **Areas:** providers, models.
 
 - [x] P03.1 Define the `VisionProvider` contract and implement the llama-server provider.
-- [ ] P03.2 Add `fetch-models` with pinned revisions and SHA-256 checks.
+- [x] P03.2 Add `fetch-models` with pinned revisions and SHA-256 checks.
 - [ ] P03.3 Run the [bake-off](ai-providers.md#bake-off) on the reference PC, and record the results.
 - [ ] P03.4 Confirm or replace the default in [ADR 0004](decisions/0004-default-local-model.md).
 - [x] P03.5 Remove the Ollama client, its settings, UI texts and tests.
@@ -218,6 +218,19 @@ its engine command and its legacy config block are removed, and one provider che
 [assessment item B2](assessment.md). Observed: `npm run lint` and `npm run build` passed; `node --test` gave 165 passed
 of 166 (1 skipped); `bash scripts/check.sh --engine` passed 225 of 225 engine tests. Not observed: a real llama-server,
 any model, and the window.
+
+Progress 2026-11-02 (P03.2): `./start.sh --fetch-models [model|all]` runs the one-shot `fetch-models` service
+(`docker/fetch-models/Dockerfile`, `engine/src/model_fetch/`), on `egress` only, behind the profile `fetch`, with the
+writable `models` volume as its only mount. The manifest pins the default model and the three bake-off candidates to
+the commits, sizes and SHA-256 values the owner supplied; a file is renamed into place only after all three and its
+GGUF or safetensors header match, and pickle-based formats are refused
+([Operations](operations.md#model-files), [ADR 0011](decisions/0011-pinned-model-download.md)). Observed:
+`npm run lint` passed; `npm run build:electron && node --test "tests/**/*.test.cjs"` gave 180 passed of 181 (1 skipped,
+the symlink case); `bash scripts/check.sh --engine` passed 258 of 258 (33 new, local fake files);
+`bash scripts/check.sh --compose` passed; `bash scripts/check.sh --integration` passed with every assertion, including
+`fetch-models` reaching a public endpoint but not `api` or `gateway`, seeing no photos, and writing a models volume
+that `vision` created first. Not observed: a real download from Hugging Face, so no pin has been checked against the
+real files yet.
 
 Exit: the default model completes the benchmark on the reference PC with at least 0.5 GiB of GPU
 memory free at peak; no Ollama reference remains in the code; provider contract tests pass.

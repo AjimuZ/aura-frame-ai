@@ -78,7 +78,7 @@ tournament can go on. Choosing that path in the pipeline and showing the reason 
 | Model | [`Qwen/Qwen3.8-27B`](https://huggingface.co/Qwen/Qwen3.8-27B), Apache-2.0 |
 | Weights | [`ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF`](https://huggingface.co/ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF), file `Qwen3.8-27B-GSQ-RCO-IQ2_XS.gguf`, 8.4 GB |
 | Vision projector | `mmproj-Qwen3.8-27B-BF16.gguf`, 0.9 GB |
-| Download | About 9.3 GB in total, on explicit request only |
+| Download | About 9.3 GB in total, on explicit request only: `./start.sh --fetch-models`, pinned by commit and SHA-256 ([Operations](operations.md#model-files)) |
 
 **Status: recommended, not yet run on this PC.** The bake-off in P03 confirms it or replaces it.
 
@@ -140,6 +140,9 @@ Benchmark, with both candidate orders:
 | Qwen3.8-27B `IQ2_S` | 10.2 GB | Better scores, smaller margin |
 | [Qwen3.5-9B](https://huggingface.co/unsloth/Qwen3.5-9B-GGUF) `Q5_K_M` | 7.5 GB | Fallback, likely faster |
 | [Gemma 4 12B](https://huggingface.co/unsloth/gemma-4-12b-it-GGUF) `Q4_K_M` | 7.1 GB plus projector | Previous default family |
+
+Every candidate is pinned in the fetch manifest, so `./start.sh --fetch-models all` (or one model id) prepares
+the bake-off files; see [Operations](operations.md#model-files) for the ids and file names.
 
 Recorded for each: accuracy, stability across orders, seconds per comparison, peak GPU memory
 and peak system memory. The winner is the accurate model that fits with at least 0.5 GiB free.

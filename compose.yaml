@@ -4,7 +4,9 @@
 #   network alone, so they have no route to the internet.
 # - GPU access is added by compose.gpu.yaml, so this file also runs on a host without a GPU.
 # - `vision` needs the profile `local`: `docker compose --profile local up`. Its model files come from
-#   the `models` volume, and nothing here downloads them.
+#   the `models` volume.
+# - `fetch-models` is the only service with an internet route, on `egress`. It sits behind the profile `fetch`,
+#   so no `up` starts it, and only `./start.sh --fetch-models` runs it. It sees the models volume and nothing else.
 # - Rules enforced by `bash scripts/check.sh --compose` (scripts/compose-policy.cjs).
 
 name: auraframe
@@ -139,12 +141,35 @@ services:
       retries: 3
       start_period: 300s
 
+  # One-shot download of the pinned model files (engine/src/model_fetch/manifest.json). A file is kept only
+  # when its SHA-256 matches its pin. Run with `docker compose --profile fetch run --rm fetch-models`.
+  fetch-models:
+    <<: *hardening
+    build:
+      context: .
+      dockerfile: docker/fetch-models/Dockerfile
+    profiles: [fetch]
+    user: "10001:10001"
+    pids_limit: 64
+    tmpfs:
+      - /tmp:size=64m
+    environment:
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    volumes:
+      - type: volume
+        source: models
+        target: /models
+    networks:
+      - egress
+
 networks:
   # Carries the published port of `gateway`, and nothing else joins it.
   frontend: {}
   # No route to the internet. Everything that handles photos lives here.
   backend:
     internal: true
+  # Has a route to the internet. Only `fetch-models` joins it, and it never sees photos.
+  egress: {}
 
 # Named by the project: `auraframe_data` and `auraframe_models`. Another project name gets its own.
 volumes:

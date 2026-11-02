@@ -2,7 +2,9 @@
 # Runtime proof of the container isolation: starts the stack on a synthetic folder and tests it from inside.
 #
 # Proves that api and vision cannot reach the internet, that /photos cannot be written, and that only
-# gateway publishes a port, on 127.0.0.1. Exits 0 only when every assertion holds.
+# gateway publishes a port, on 127.0.0.1. Also proves that the one-shot fetch-models service reaches the
+# internet but no other service, sees no photos, and can write the models volume even when vision created it.
+# Exits 0 only when every assertion holds.
 #
 # It runs under its own project name, with its own volumes, and removes them on exit. It reads no personal
 # folder and downloads no model. The api image is built from the `core` stage, since the torch stack has no
@@ -47,7 +49,7 @@ docker_path() {
 
 # cleanup: removes the containers, networks and volumes of this project, and the temporary folders.
 cleanup() {
-  compose down -v --remove-orphans --timeout 5 >/dev/null 2>&1
+  compose --profile fetch down -v --remove-orphans --timeout 5 >/dev/null 2>&1
   rm -rf "${photos_dir:-}" "${exports_dir:-}"
 }
 
@@ -122,6 +124,12 @@ assert_read_only_mount() {
   fi
 }
 
+# fetch_run SCRIPT: runs a shell script in a throwaway fetch-models container, with its real user, mounts and
+# network, instead of the download. Prints the script's output; the exit status is the script's.
+fetch_run() {
+  compose --profile fetch run --rm --no-deps --entrypoint bash fetch-models -c "$1"
+}
+
 # published_ports SERVICE: prints the host bindings of the service as `ip:port` words; empty when none.
 published_ports() {
   local container
@@ -163,7 +171,17 @@ AURAFRAME_PHOTOS_DIR="$(docker_path "$photos_dir")"
 AURAFRAME_EXPORTS_DIR="$(docker_path "$exports_dir")"
 export AURAFRAME_PHOTOS_DIR AURAFRAME_EXPORTS_DIR
 
+# The listing in start.sh mounts the models volume through vision before anything else, so the volume is
+# created here the same way. Its owner is then whatever vision gives it, which fetch-models must cope with.
+echo "Creating the models volume through vision, as the start.sh listing does"
+compose run --rm --no-deps --entrypoint ls vision -1 /models >/dev/null 2>&1 ||
+  echo "  note: the vision listing failed; the volume is created by the next step instead"
+
 echo "Starting the stack (project $PROJECT)"
+if ! compose --profile fetch build --quiet fetch-models; then
+  echo "FAILED: the fetch-models image did not build" >&2
+  exit 1
+fi
 if ! compose up -d --build --wait --wait-timeout 240 --quiet-pull; then
   compose ps -a
   compose logs --tail 40
@@ -255,6 +273,59 @@ echo "Gateway"
 assert_http_status 200 "the session token" -H "Authorization: Bearer $token"
 assert_http_status 401 "a request without the token"
 assert_http_status 403 "a foreign Host" -H "Authorization: Bearer $token" -H "Host: rebinding.example"
+
+echo "Model download service"
+if [ -z "$(compose --profile fetch ps -a -q fetch-models 2>/dev/null | tr -d '\r')" ]; then
+  pass "fetch-models is not started by up"
+else
+  fail "fetch-models was started by up"
+fi
+uid="$(fetch_run 'id -u' 2>/dev/null | tr -d '\r')"
+if [ -n "$uid" ] && [ "$uid" != "0" ]; then
+  pass "fetch-models runs as uid $uid"
+else
+  fail "fetch-models runs as uid '${uid}'"
+fi
+if fetch_run 'touch /models/.integration-probe && rm /models/.integration-probe' >/dev/null 2>&1; then
+  pass "fetch-models writes to the models volume as its own user"
+else
+  fail "fetch-models cannot write to the models volume"
+fi
+if fetch_run 'test ! -e /photos && test ! -e /data && test ! -e /exports && test ! -e /var/run/docker.sock'; then
+  pass "fetch-models sees no photos, data, exports or Docker socket"
+else
+  fail "fetch-models sees a mount it must not have"
+fi
+output="$(fetch_run 'touch /etc/probe' 2>&1)"
+if [[ "$output" == *"Read-only file system"* ]]; then
+  pass "fetch-models has a read-only root filesystem"
+else
+  fail "fetch-models wrote to /etc or failed for another reason: $output"
+fi
+for target in "api:8000" "gateway:8080"; do
+  if fetch_run "timeout 8 bash -c 'exec 3<>/dev/tcp/${target%:*}/${target##*:}'" >/dev/null 2>&1; then
+    fail "fetch-models reached $target on the backend"
+  else
+    pass "fetch-models cannot reach $target"
+  fi
+done
+reached=""
+for target in "${INTERNET_TARGETS[@]}"; do
+  if fetch_run "timeout 8 bash -c 'exec 3<>/dev/tcp/${target%:*}/${target##*:}'" >/dev/null 2>&1; then
+    reached="$target"
+    break
+  fi
+done
+if [ -n "$reached" ]; then
+  pass "fetch-models reaches $reached through egress, so the probes above are not broken"
+else
+  fail "fetch-models reaches no public endpoint, so its egress and the probes above are unproven"
+fi
+if compose --profile fetch run --rm --no-deps fetch-models --list >/dev/null 2>&1; then
+  pass "the fetcher starts as the service user on the read-only filesystem (--list, no download)"
+else
+  fail "the fetcher does not start in its image"
+fi
 
 echo "Vision image"
 if compose exec -T vision /app/llama-server --version >/dev/null 2>&1; then

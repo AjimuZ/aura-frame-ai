@@ -24,9 +24,9 @@
 - `start.sh` starts, inspects and stops the container stack: `--cpu`, `--rebuild`, `--backend-only`,
   `--provider local|none`, `--status`, `--logs [service]` and `--stop`. It checks Docker, Compose, the GPU
   and the model files, warns when Docker has less than 10 GB, generates a new session token per start and
-  passes it only through the environment, and never downloads a model. Exit codes are 0, 1 (prerequisite),
-  2 (invalid arguments) and 3 (health check). It is tested with stubbed tools only, not against a real
-  Docker daemon. `--fetch-models`, `--codex-login` and `--provider codex` say that they are not available yet.
+  passes it only through the environment, and downloads a model only with `--fetch-models` (see below). Exit codes
+  are 0, 1 (prerequisite), 2 (invalid arguments) and 3 (health check). It is tested with stubbed tools only, not
+  against a real Docker daemon. `--codex-login` and `--provider codex` say that they are not available yet.
 - Electron main has a module that starts and stops the container stack for a chosen photo folder. It checks
   that the folder is an existing directory, runs Docker without a shell, and passes the folder and a fresh
   per-session token only through the environment, so neither appears in a command line, event or reply.
@@ -85,6 +85,13 @@
   never stops a run: the call comes back as failed and the pair can be decided by the local prescore. The tests use a
   fake server and synthetic images (224 engine tests pass in the container run). It is not wired into the analysis yet
   and no model has been run.
+- `./start.sh --fetch-models [model|all]` downloads the local model files, and nothing else downloads them. It runs
+  the one-shot `fetch-models` service, the only service with an internet route: it sees the models volume and no
+  photos, data or exports, and no plain `up` starts it. A manifest pins every file of the default model and of the
+  three bake-off candidates to a repository revision, a size and a SHA-256. A file is kept only when all three match
+  and it is GGUF or safetensors; pickle-based formats are refused. A failed download leaves no file under the
+  target name. Tested with local fake files (33 new engine tests) and in the isolation check; no model file has
+  been downloaded yet.
 
 ### Changed
 

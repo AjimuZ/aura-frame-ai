@@ -61,20 +61,23 @@ only client of the API.
 | `api` | Python 3.12 with PyTorch and CUDA | photos (read-only), data, exports, models (read-only) | `backend` | yes | always |
 | `vision` | `ghcr.io/ggml-org/llama.cpp:server-cuda`, pinned by digest | models (read-only) | `backend` | yes | profile `local` (default) |
 | `codex` | Node with `@openai/codex`, pinned version | exchange (tmpfs), Codex home | `backend`, `egress` | no | profile `codex` (opt-in) |
-| `fetch-models` | small Python image | models (read-write) | `egress` | no | one-shot, on `--fetch-models` |
+| `fetch-models` | `python:3.12-slim`, pinned by digest, standard library only | models (read-write) | `egress` | no | profile `fetch`, one-shot, only on `--fetch-models` |
 
 `backend` is declared `internal: true`, so it has no route to the internet. `gateway` is the only
 service that publishes a port, bound to `127.0.0.1`. It exists because a port cannot be published
-from an internal network.
+from an internal network. `egress` has an internet route, and only `fetch-models` joins it today.
 
 ## Container stack
 
-Written in `compose.yaml` and `docker/` (P02.1), with `gateway`, `api` and `vision`. `codex` arrives
-with P05.1 and `fetch-models` with P03.2. Decision: [ADR 0010](decisions/0010-compose-stack-layout.md).
+Written in `compose.yaml` and `docker/` (P02.1), with `gateway`, `api` and `vision`, and `fetch-models` since
+P03.2 ([Operations](operations.md#model-files)). `codex` arrives with P05.1. Decisions:
+[ADR 0010](decisions/0010-compose-stack-layout.md), [ADR 0011](decisions/0011-pinned-model-download.md).
 
 | Rule | Where it is set |
 | --- | --- |
-| Images pinned by digest | `vision` in `compose.yaml`; the base images in `docker/api/Dockerfile` and `docker/gateway/Dockerfile` |
+| Images pinned by digest | `vision` in `compose.yaml`; the base images in `docker/api/Dockerfile`, `docker/gateway/Dockerfile` and `docker/fetch-models/Dockerfile` |
+| Internet route | Only `fetch-models`, on `egress`, behind the profile `fetch`, with the `models` volume as its only mount. `scripts/compose-policy.cjs` refuses any other service on a routed network other than `gateway` on `frontend` |
+| Model files | Downloaded only by `./start.sh --fetch-models`, each pinned to a commit, a size and a SHA-256 in `engine/src/model_fetch/manifest.json` |
 | Non-root, `no-new-privileges`, all capabilities dropped, read-only root filesystem, `/tmp` on tmpfs | Every service, from `x-hardening` in `compose.yaml` |
 | GPU access | `compose.gpu.yaml`, an overlay, so the base file starts on a host without a GPU |
 | Photos | `AURAFRAME_PHOTOS_DIR`, read-only at `/photos`. Unset means the empty ignored folder `./data/no-photos` |

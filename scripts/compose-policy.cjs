@@ -1,14 +1,19 @@
 // Static hardening policy for the container stack: reads `docker compose config --format json` and names every violation.
 //
-// Usage: docker compose --profile local config --format json | node scripts/compose-policy.cjs
+// Usage: docker compose --profile local --profile fetch config --format json | node scripts/compose-policy.cjs
 // Exits 0 when the configuration complies, 1 with one line per violation otherwise, 2 for unreadable input.
 const fs = require('node:fs');
 const path = require('node:path');
 
-const REQUIRED_SERVICES = ['gateway', 'api', 'vision'];
+const REQUIRED_SERVICES = ['gateway', 'api', 'vision', 'fetch-models'];
 // Services that handle photos or their copies: they may join internal networks only.
 const ISOLATED_SERVICES = ['api', 'vision'];
 const PUBLISHING_SERVICE = 'gateway';
+const FRONTEND_NETWORK = 'frontend';
+// The only network with an internet route besides `frontend`, and the services allowed on it.
+const EGRESS_NETWORK = 'egress';
+const EGRESS_SERVICES = ['fetch-models'];
+const FETCH_SERVICE = 'fetch-models';
 const LOOPBACK = '127.0.0.1';
 const DIGEST_PATTERN = /@sha256:[0-9a-f]{64}$/;
 const NON_ROOT_USER_PATTERN = /^[1-9][0-9]*(:[1-9][0-9]*)?$/;
@@ -105,6 +110,47 @@ function networkViolations(config) {
       }
     }
   }
+  // Every other service: a routed network is allowed only as gateway on frontend, or an egress service on egress.
+  for (const [name, service] of Object.entries(config.services || {})) {
+    if (ISOLATED_SERVICES.includes(name)) {
+      continue;
+    }
+    for (const network of Object.keys(service.networks || {})) {
+      const allowed =
+        networks[network]?.internal === true ||
+        (network === FRONTEND_NETWORK && name === PUBLISHING_SERVICE) ||
+        (network === EGRESS_NETWORK && EGRESS_SERVICES.includes(name));
+      if (!allowed) {
+        violations.push(`${name}: joins network ${network}, which has an internet route`);
+      }
+    }
+  }
+  return violations;
+}
+
+// Returns the violations of the rules for the model download: egress only, never started by a plain `up`,
+// and the models volume as its one, writable, mount.
+function fetchViolations(config) {
+  const service = config.services?.[FETCH_SERVICE];
+  if (!service) {
+    return [];
+  }
+  const violations = [];
+  const joined = Object.keys(service.networks || {});
+  if (joined.length !== 1 || joined[0] !== EGRESS_NETWORK) {
+    violations.push(`${FETCH_SERVICE}: must join the ${EGRESS_NETWORK} network only`);
+  }
+  if (!Array.isArray(service.profiles) || service.profiles.length === 0) {
+    violations.push(`${FETCH_SERVICE}: must sit behind a profile, so that no plain up starts it`);
+  }
+  const mounts = service.volumes || [];
+  const models = mountAt(service, '/models');
+  if (models?.type !== 'volume' || models.source !== 'models' || models.read_only) {
+    violations.push(`${FETCH_SERVICE}: /models must be the named volume models, writable`);
+  }
+  if (mounts.some((volume) => volume !== models)) {
+    violations.push(`${FETCH_SERVICE}: may mount the models volume only`);
+  }
   return violations;
 }
 
@@ -113,7 +159,8 @@ function mountAt(service, target) {
   return (service?.volumes || []).find((volume) => volume.target === target);
 }
 
-// Returns the violations of the storage rules: read-only photos, data and models in named volumes.
+// Returns the violations of the storage rules: read-only photos, data and models in named volumes. The writable
+// models mount of the download service is checked in fetchViolations.
 function storageViolations(config) {
   const violations = [];
   const api = config.services?.api;
@@ -144,7 +191,7 @@ function findViolations(config, readFile = (file) => fs.readFileSync(file, 'utf8
   for (const [name, service] of Object.entries(services)) {
     violations.push(...imageViolations(name, service, readFile), ...privilegeViolations(name, service));
   }
-  return [...violations, ...networkViolations(config), ...storageViolations(config)];
+  return [...violations, ...networkViolations(config), ...storageViolations(config), ...fetchViolations(config)];
 }
 
 // Reads the configuration from stdin and reports. Sets the process exit code described in the file header.

@@ -1,0 +1,103 @@
+{
+  "schema": 1,
+  "source": "Pins read on 2026-11-02 from the public Hugging Face API: 'revision' is the repository commit (model info 'sha'), 'sha256' the file's LFS object id (tree API 'lfs.oid'). 'target' is the file name in the models volume.",
+  "default": "qwen3.8-27b-iq2_xs",
+  "models": [
+    {
+      "id": "qwen3.8-27b-iq2_xs",
+      "label": "Qwen3.8-27B IQ2_XS, the default",
+      "files": [
+        {
+          "role": "weights",
+          "repo": "ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF",
+          "revision": "d562806dbafae37109975e970aae91b43e73b440",
+          "file": "Qwen3.8-27B-GSQ-RCO-IQ2_XS.gguf",
+          "target": "Qwen3.8-27B-GSQ-RCO-IQ2_XS.gguf",
+          "sha256": "f0ae5006da0ce6225935339e4e989369f94de95d2263cf969519f8420c9ae02c",
+          "size_bytes": 8422841472
+        },
+        {
+          "role": "mmproj",
+          "repo": "ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF",
+          "revision": "d562806dbafae37109975e970aae91b43e73b440",
+          "file": "mmproj-Qwen3.8-27B-BF16.gguf",
+          "target": "mmproj-Qwen3.8-27B-BF16.gguf",
+          "sha256": "13cb7bebccbd04afc8f4090cb949ecf8937cdf7377c5799b1a0c594e7c0d3e16",
+          "size_bytes": 931146528
+        }
+      ]
+    },
+    {
+      "id": "qwen3.8-27b-iq2_s",
+      "label": "Qwen3.8-27B IQ2_S, bake-off candidate",
+      "files": [
+        {
+          "role": "weights",
+          "repo": "ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF",
+          "revision": "d562806dbafae37109975e970aae91b43e73b440",
+          "file": "Qwen3.8-27B-GSQ-RCO-IQ2_S.gguf",
+          "target": "Qwen3.8-27B-GSQ-RCO-IQ2_S.gguf",
+          "sha256": "16c9802111aa9ef3acde465188d6d601f8db128ee3d828ad983a5caca4135ecb",
+          "size_bytes": 9259510912
+        },
+        {
+          "role": "mmproj",
+          "repo": "ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF",
+          "revision": "d562806dbafae37109975e970aae91b43e73b440",
+          "file": "mmproj-Qwen3.8-27B-BF16.gguf",
+          "target": "mmproj-Qwen3.8-27B-BF16.gguf",
+          "sha256": "13cb7bebccbd04afc8f4090cb949ecf8937cdf7377c5799b1a0c594e7c0d3e16",
+          "size_bytes": 931146528
+        }
+      ]
+    },
+    {
+      "id": "qwen3.5-9b-q5_k_m",
+      "label": "Qwen3.5-9B Q5_K_M, bake-off candidate",
+      "files": [
+        {
+          "role": "weights",
+          "repo": "unsloth/Qwen3.5-9B-GGUF",
+          "revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+          "file": "Qwen3.5-9B-Q5_K_M.gguf",
+          "target": "Qwen3.5-9B-Q5_K_M.gguf",
+          "sha256": "dc2a39aef291f91a9116ad214058da0d86eb648743a124bd8c333787c4b9c91c",
+          "size_bytes": 6577841376
+        },
+        {
+          "role": "mmproj",
+          "repo": "unsloth/Qwen3.5-9B-GGUF",
+          "revision": "3885219b6810b007914f3a7950a8d1b469d598a5",
+          "file": "mmproj-BF16.gguf",
+          "target": "mmproj-Qwen3.5-9B-BF16.gguf",
+          "sha256": "853698ce7aa6c7ba732478bad280240969ddf7b0fcbf93900046f63903a83383",
+          "size_bytes": 921705024
+        }
+      ]
+    },
+    {
+      "id": "gemma-4-12b-q4_k_m",
+      "label": "Gemma 4 12B Q4_K_M, bake-off candidate",
+      "files": [
+        {
+          "role": "weights",
+          "repo": "unsloth/gemma-4-12b-it-GGUF",
+          "revision": "fc034cfff751157913579611efad8462ac1be606",
+          "file": "gemma-4-12b-it-Q4_K_M.gguf",
+          "target": "gemma-4-12b-it-Q4_K_M.gguf",
+          "sha256": "0a270ec9fe6b34f4a0d33992b6135117b484ebc4766ab76b51d4ae8c457e4c42",
+          "size_bytes": 7121861440
+        },
+        {
+          "role": "mmproj",
+          "repo": "unsloth/gemma-4-12b-it-GGUF",
+          "revision": "fc034cfff751157913579611efad8462ac1be606",
+          "file": "mmproj-BF16.gguf",
+          "target": "mmproj-gemma-4-12b-it-BF16.gguf",
+          "sha256": "2e269f906eb15169ee9ce880ea649bd6d42d4964c21f8ede10d0d0efc738bcbb",
+          "size_bytes": 175115840
+        }
+      ]
+    }
+  ]
+}

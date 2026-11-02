@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts, inspects and stops the AuraFrame container stack; the contract is docs/operations.md#startsh.
 #
-# Usage: ./start.sh [--fetch-models] [--provider local|codex|none] [--codex-login] [--cpu]
+# Usage: ./start.sh [--fetch-models [model|all]] [--provider local|codex|none] [--codex-login] [--cpu]
 #                   [--rebuild] [--backend-only] [--status] [--logs [service]] [--stop] [--help]
 #
 # Exit codes: 0 success, 1 failed prerequisite, 2 invalid arguments, 3 a service failed its health check.
@@ -14,7 +14,8 @@
 #   --backend-only, an ignored local file). It is never part of a command line. The window inherits it.
 # - Without --backend-only, the services started here are stopped exactly once when the window ends, however it
 #   ends while this script runs, and the named volumes are kept.
-# - Nothing here downloads a model. Missing model files are explained, never fetched.
+# - Only --fetch-models downloads model files, through the one-shot `fetch-models` service, and it then exits.
+#   Every other path explains missing model files and never fetches them.
 
 set -u
 
@@ -47,6 +48,7 @@ use_gpu=1
 rebuild=0
 backend_only=0
 logs_service=""
+fetch_target=""
 window_cmd=()
 window_pid=""
 services_stopped=0
@@ -56,7 +58,7 @@ usage() {
   cat <<'EOF'
 Usage: ./start.sh [options]
   (no option)                start the services and open the window
-  --fetch-models             download model files, then exit (not available yet)
+  --fetch-models [model|all] download the pinned model files, then exit (default: the default model)
   --provider local|codex|none  choose the provider (codex is not available yet)
   --codex-login              sign in to Codex with a ChatGPT account (not available yet)
   --cpu                      run without a GPU
@@ -95,7 +97,18 @@ set_mode() {
 parse_arguments() {
   while [ $# -gt 0 ]; do
     case "$1" in
-      --fetch-models) set_mode fetch-models ;;
+      --fetch-models)
+        set_mode fetch-models
+        # The optional model id is the next word, unless it is another flag. The fetcher checks it against
+        # its manifest; here it only has to be a plain id.
+        if [ $# -gt 1 ] && [ "${2#-}" = "$2" ]; then
+          if ! [[ "$2" =~ ^[a-z0-9][a-z0-9._-]{0,63}$ ]]; then
+            invalid_argument "invalid model name '$2' (use a model id from the manifest, or all)"
+          fi
+          fetch_target="$2"
+          shift
+        fi
+        ;;
       --codex-login) set_mode codex-login ;;
       --status) set_mode status ;;
       --stop) set_mode stop ;;
@@ -196,7 +209,24 @@ models_present() {
 # explain_missing_models: tells what is missing and what the next step is.
 explain_missing_models() {
   echo "start.sh: the model files are not in the models volume." >&2
-  echo "start.sh: they are downloaded only on request, with './start.sh --fetch-models' (not available yet, planned in P03.2)." >&2
+  echo "start.sh: they are downloaded only on request, with './start.sh --fetch-models' (about 9.3 GB for the default model)." >&2
+}
+
+# fetch_models: runs the one-shot fetch-models service, the only path that downloads model files, then exits.
+# It passes the optional model id or 'all', and no token, GPU or photo folder. The service keeps a file only when
+# its SHA-256 matches the pin in engine/src/model_fetch/manifest.json. Exit 0 when every selected file is
+# verified, 1 otherwise.
+fetch_models() {
+  local args=()
+  if [ -n "$fetch_target" ]; then
+    args=("$fetch_target")
+  fi
+  echo "start.sh: fetching the pinned model files into the models volume; each one is checked against its SHA-256."
+  if ! docker compose -f compose.yaml --profile fetch run --rm --build fetch-models ${args[@]+"${args[@]}"}; then
+    fail_prerequisite "Fetching the model files failed, and no unverified file was kept. See docs/operations.md#model-files."
+  fi
+  echo "start.sh: the model files are verified. Start with './start.sh'."
+  exit 0
 }
 
 # choose_provider: settles the provider and sets use_vision to 1 only when the local model can run.
@@ -452,7 +482,6 @@ stop_stack() {
 parse_arguments "$@"
 
 case "$mode" in
-  fetch-models) not_available_yet "--fetch-models" "P03.2" ;;
   codex-login) not_available_yet "--codex-login" "P05.2" ;;
 esac
 if [ "$provider" = "codex" ]; then
@@ -462,6 +491,9 @@ fi
 check_docker
 
 case "$mode" in
+  fetch-models)
+    fetch_models
+    ;;
   status)
     show_status
     exit $?

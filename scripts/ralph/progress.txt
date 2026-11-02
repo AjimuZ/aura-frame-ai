@@ -54,6 +54,9 @@
 - Providers return failures as typed results (ok=False plus a short error code) and never raise; a guard wrapper trips to a degraded state and a fallback function supplies a local verdict.
 - Clamp every configurable timeout, retry and limit to a documented hard bound when settings are built, and test the clamping.
 - Test HTTP clients against a local fake server on 127.0.0.1 and verify image bytes by re-reading them, never by trusting the code path.
+- Accept a downloaded artifact only by writing it to a hidden partial file, verifying size, hash and header, then renaming it atomically; delete the partial file in a finally block.
+- A service that needs an internet route goes behind its own Compose profile and is started only via `compose run --rm` from one explicit start.sh flag; the compose policy names it as the sole egress service.
+- Use an extension allow-list (`.gguf`, `.safetensors`) rather than a block-list for model files, and confirm the format from the first bytes as well.
 
 ---
 
@@ -605,4 +608,31 @@ I updated docs/ai-providers.md, docs/testing.md, the roadmap progress note and C
 - Verified as already implemented; no code change was needed.
 - Files changed: see commit
 - **Learnings for future iterations:**
+---
+
+## 2026-11-02T13:17:23Z - P03.2
+- P03.2 is implemented and all checks pass. Earlier attempts had already left the implementation in place. In this session I reviewed it against each acceptance criterion and ran every check again. My only edit was one stale CHANGELOG line that still said `--fetch-models` was "not available yet".
+
+**How it meets the criteria:**
+- **The service:** `fetch-models` is defined in compose.yaml and built from `docker/fetch-models/Dockerfile`. It is a one-shot service on the new `egress` network only, behind the profile `fetch`, so no `up` starts it. Its only mount is the writable `models` volume. It runs as uid 10001 with a read-only root filesystem, all capabilities dropped and no-new-privileges. It uses only the Python standard library on the digest-pinned base image.
+- **The manifest:** `engine/src/model_fetch/manifest.json` pins all four models (the default and the three bake-off candidates), seven distinct files in total. Each file has its repository, commit revision, file name, size and SHA-256, copied exactly from the task notes. A test checks it against a separate copy of those values. The two upstream files both named `mmproj-BF16.gguf` get separate names in the volume.
+- **The checks:** a download goes to a hidden `.partial` file. It is renamed into place only after the size, the SHA-256 and the file header all match; otherwise it is deleted. Only https is used, and redirects must stay on https. Only `.gguf` and `.safetensors` are accepted. Pickle-based formats are refused by name, and a pickle renamed to `.gguf` is refused by its content.
+- **The only path:** `./start.sh --fetch-models [model|all]` runs `docker compose --profile fetch run --rm --build fetch-models`. A test proves that no other start.sh path touches the service. `scripts/compose-policy.cjs` refuses any other service on a routed network apart from `gateway` on `frontend`.
+
+**Checks run in this session:**
+- `bash scripts/check.sh --engine`: 258 of 258 passed, including 33 new fetcher tests on local fake files.
+- `bash scripts/check.sh --compose`: config and policy passed.
+- `bash scripts/check.sh --node`: lint, Angular build, Electron build and start.sh syntax passed; node tests gave 180 passed, 0 failed, 1 skipped (the existing symlink case).
+- `bash scripts/check.sh --integration`: every assertion held. This includes the fetch-models ones: `up` does not start it, it runs as uid 10001, it can write the models volume after `vision` created it, it sees no photos, data, exports or Docker socket, its root filesystem is read-only, it cannot reach `api:8000` or `gateway:8080`, it does reach `1.1.1.1:443`, and `--list` starts without downloading.
+
+**Not verified:** no real download from Hugging Face was run, so none of the pins has been checked against the real files. No model was loaded by `vision`.
+- Files changed: compose.yaml, docker/fetch-models/Dockerfile, engine/src/model_fetch/__init__.py, engine/src/model_fetch/__main__.py, engine/src/model_fetch/fetch.py, engine/src/model_fetch/manifest.json, engine/tests/test_model_fetch.py, start.sh, scripts/check.sh, scripts/compose-policy.cjs, .dockerignore, tests/compose-policy.test.cjs, tests/start-sh.test.cjs, tests/integration/compose-stack.sh, CHANGELOG.md, README.md, docs/roadmap.md, docs/operations.md, docs/architecture.md, docs/security-privacy.md, docs/ai-providers.md, docs/testing.md, docs/decisions/0011-pinned-model-download.md
+- **Learnings for future iterations:**
+  - The fetcher is engine/src/model_fetch (standard library only). Its image copies only that folder, and the engine tests import it as `src.model_fetch.fetch`.
+  - Model ids for `--fetch-models`: qwen3.8-27b-iq2_xs (the default), qwen3.8-27b-iq2_s, qwen3.5-9b-q5_k_m and gemma-4-12b-q4_k_m. The two mmproj files named `mmproj-BF16.gguf` upstream are saved as mmproj-Qwen3.5-9B-BF16.gguf and mmproj-gemma-4-12b-it-BF16.gguf. P03.3 must point llama-server at those names.
+  - `all` fetches 7 distinct files, about 33.4 GB. The Qwen3.8 mmproj file is shared by two models and downloaded once.
+  - The compose policy check now resolves with `--profile local --profile fetch`. The policy requires `fetch-models` on `egress` only, behind a profile, with the writable `models` volume as its only mount.
+  - The fetch-models image creates /models owned by uid 10001, so an empty volume takes that owner. A volume that already holds files owned by root is reported as not writable; docs/operations.md#model-files gives the remedy.
+  - `bash scripts/check.sh --integration` now builds the fetch-models image and checks its isolation. It downloads nothing.
+  - Not observed yet: a real download from Hugging Face. The first `./start.sh --fetch-models` on the reference PC is the first real check of the pins.
 ---

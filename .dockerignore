@@ -1,4 +1,4 @@
-# Build context of the api image: everything is excluded, then only what the image needs comes back.
+# Build context of the api and fetch-models images: everything is excluded, then only what they need comes back.
 # Personal folders and generated data therefore never reach the Docker daemon.
 *
 !engine/

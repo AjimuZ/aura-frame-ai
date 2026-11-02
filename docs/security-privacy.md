@@ -27,8 +27,8 @@ Status: **target design**. The final section lists what the current code does to
 | AI output to UI and reports | Script injection | Treated as untrusted text, always escaped, and never rendered as HTML |
 | `api` to `codex` | Exposure of originals to a service with internet | Only anonymous, resized, EXIF-free copies cross this boundary, into a tmpfs. No path, name or database is mounted |
 | `codex` to OpenAI | Image content leaves the computer | Off by default, opt-in per library, call limit, all Codex tools and telemetry off |
-| `fetch-models` to internet | Tampered model files | Pinned repository revisions and SHA-256 checks. This service never sees photos |
-| Model file loading | Code execution from model files | GGUF and safetensors only. Pickle-based formats are refused |
+| `fetch-models` to internet | Tampered model files | Pinned repository revisions, sizes and SHA-256 checks, https only, and a file is renamed into place only after it passes. This service never sees photos and cannot reach the other services (implemented in P03.2) |
+| Model file loading | Code execution from model files | GGUF and safetensors only, by name and by first bytes. Pickle-based formats are refused before any download (implemented in P03.2 for the downloads) |
 
 ## Desktop shell hardening
 
@@ -109,6 +109,12 @@ Verified on 2026-11-01 by reading the source.
 - The OpenAI flow is off by default and sends resized copies with EXIF stripped and orientation
   applied (`engine/src/cloud/openai_image_preparer.py`).
 - Weights for the aesthetic predictor load with `weights_only=True`.
+- Since P03.2 (2026-11-02), model files for `vision` are downloaded only by `./start.sh --fetch-models`, in the
+  `fetch-models` service: `egress` network only, profile `fetch`, the `models` volume as its only mount, non-root and
+  read-only. Each file is pinned to a commit, a size and a SHA-256, and only GGUF or safetensors is accepted
+  (`engine/src/model_fetch/`). `bash scripts/check.sh --integration` observed that it cannot reach `api` or
+  `gateway`, sees no photos, data, exports or Docker socket, and can write the models volume. No real model file
+  has been downloaded yet.
 - A personal first name was hard-coded as the default library name, which broke the project rule
   against personal data in code. Fixed in P01.2.2; see [assessment](assessment.md#environment-and-repository).
   The `package.json` author field no longer holds a personal name, and `tests/personal-data.test.cjs`

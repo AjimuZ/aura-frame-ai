@@ -42,13 +42,13 @@ Details and evidence: [Pipeline](docs/pipeline.md).
 ## Planned start
 
 ```bash
-./start.sh --fetch-models    # explicit download, about 9.3 GB
+./start.sh --fetch-models    # explicit download, about 9.3 GB, each file checked against its SHA-256
 ./start.sh                   # starts the services and opens the desktop window
 ```
 
 The window is an Electron app on your computer. Everything else runs in containers, and the services
 that handle photos have no route to the internet. See [Operations](docs/operations.md).
-**`start.sh` does not exist yet.**
+**`start.sh` exists, but a full start with the window and a model has not been observed on a real host yet.**
 
 ## AI providers
 

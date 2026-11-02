@@ -2,10 +2,11 @@
 
 Status: **partly implemented** ([P02](roadmap.md)). `compose.yaml` and `start.sh` exist, and the desktop app's
 analysis handlers call the stack over HTTP ([Bridge mapping](architecture.md#bridge-mapping)). Of the `start.sh`
-contract below, the services, the checks, the token, the exit codes and the window are implemented. The window is
-tested with stubs only and has not been opened by `start.sh` on a real host yet. `--fetch-models`, `--codex-login`
-and `--provider codex` are planned, and the script says so (see [Not available yet](#not-available-yet)). To run
-the current code, see [Running the current code](#running-the-current-code).
+contract below, the services, the checks, the token, the exit codes, the window and `--fetch-models`
+([Model files](#model-files)) are implemented. The window is tested with stubs only and has not been opened by
+`start.sh` on a real host yet, and no model file has been downloaded yet. `--codex-login` and `--provider codex` are
+planned, and the script says so (see [Not available yet](#not-available-yet)). To run the current code, see
+[Running the current code](#running-the-current-code).
 
 ## Compose stack
 
@@ -24,8 +25,9 @@ AURAFRAME_API_TOKEN=<at least 16 characters> AURAFRAME_PHOTOS_DIR=<folder> \
 | `AURAFRAME_VISION_MODEL`, `AURAFRAME_VISION_MMPROJ` | The files in [AI providers](ai-providers.md#server-settings) | Model files in the `models` volume |
 
 - Leave out `--profile local` to run without `vision`. Leave out `compose.gpu.yaml` on a host without a GPU.
-- `vision` does not become healthy until its model files are in the `models` volume, which nothing fills
-  yet (P03.2). Until then, run without the profile.
+- `vision` does not become healthy until its model files are in the `models` volume. Only
+  `./start.sh --fetch-models` fills it ([Model files](#model-files)). Until then, run without the profile.
+- `fetch-models` sits behind the profile `fetch`, so no `up` starts it, with or without `--profile local`.
 - On Linux, create the exports folder first, writable by uid 10001 (for example `chown 10001:10001` on it).
   Docker otherwise creates it as root. The API runs as uid 10001 and writes copies and reports there: when it
   cannot, an export or an analysis start answers HTTP 409 `export_folder_unwritable` and the window shows
@@ -53,7 +55,7 @@ compatible GPU, the application runs on CPU with `ai.provider: none`.
 
 ```bash
 ./start.sh                                # start the services and open the window
-./start.sh --fetch-models                 # download model files, then exit
+./start.sh --fetch-models [model|all]     # download the pinned model files, then exit
 ./start.sh --provider local|codex|none    # choose the AI provider
 ./start.sh --codex-login                  # sign in to Codex with a ChatGPT account
 ./start.sh --cpu                          # run without a GPU
@@ -118,6 +120,11 @@ Behaviour as implemented:
   real terminal, and the Linux shell path.
 - `--status`, `--logs [service]` and `--stop` only run the matching `docker compose` command.
   `--stop` keeps the volumes.
+- `--fetch-models [model|all]` checks Docker only, then runs
+  `docker compose -f compose.yaml --profile fetch run --rm --build fetch-models [model|all]` and exits: `0` when every
+  selected file is verified, `1` otherwise. It needs no GPU, makes no session token, starts no other service and opens
+  no window. A model name that is not a plain lowercase id exits `2`. No other path of the script, and nothing in
+  the desktop app, names the `fetch` profile.
 
 ### Not available yet
 
@@ -126,7 +133,6 @@ These flags are valid, but their feature comes later. Each prints a "not availab
 
 | Flag | Planned in |
 | --- | --- |
-| `--fetch-models` | P03.2 |
 | `--codex-login`, `--provider codex` | P05.2 |
 
 ## First start
@@ -137,6 +143,56 @@ These flags are valid, but their feature comes later. Each prints a "not availab
 ```
 
 The folder dialog is native. Electron mounts the chosen folder read-only in the `api` service.
+
+## Model files
+
+Status: **implemented in P03.2, tested with local fake files and in the isolation check. No real model file has
+been downloaded yet.**
+
+`./start.sh --fetch-models` is the only way model files are downloaded. It runs `fetch-models`, a one-shot service:
+
+| Property | Value |
+| --- | --- |
+| Image | `docker/fetch-models/Dockerfile`: the pinned `python:3.12-slim` base, the fetcher and its manifest only, standard library only |
+| Network | `egress` only, the one network with an internet route besides `frontend`. It cannot reach `api`, `vision` or `gateway` |
+| Mounts | The `models` volume, writable. No photos, data, exports or Docker socket |
+| Hardening | uid 10001, read-only root filesystem, all capabilities dropped, `no-new-privileges`, `/tmp` on tmpfs |
+| Start | Profile `fetch`, so no `up` starts it. `bash scripts/check.sh --compose` fails if the profile, the network or the mounts change |
+
+The manifest is `engine/src/model_fetch/manifest.json`. It pins every file to a repository commit, a size and a
+SHA-256, read on 2026-11-02 from the public Hugging Face API:
+
+| Model id | Files in the `models` volume | Download |
+| --- | --- | --- |
+| `qwen3.8-27b-iq2_xs` (default) | `Qwen3.8-27B-GSQ-RCO-IQ2_XS.gguf`, `mmproj-Qwen3.8-27B-BF16.gguf` | 9.35 GB |
+| `qwen3.8-27b-iq2_s` | `Qwen3.8-27B-GSQ-RCO-IQ2_S.gguf`, `mmproj-Qwen3.8-27B-BF16.gguf` (shared) | 10.19 GB |
+| `qwen3.5-9b-q5_k_m` | `Qwen3.5-9B-Q5_K_M.gguf`, `mmproj-Qwen3.5-9B-BF16.gguf` | 7.50 GB |
+| `gemma-4-12b-q4_k_m` | `gemma-4-12b-it-Q4_K_M.gguf`, `mmproj-gemma-4-12b-it-BF16.gguf` | 7.30 GB |
+
+Two upstream projectors are both named `mmproj-BF16.gguf`, so the manifest saves them under the names above.
+`./start.sh --fetch-models all` fetches every model, 33.41 GB, and a shared file only once. To serve a
+candidate, set `AURAFRAME_VISION_MODEL` and `AURAFRAME_VISION_MMPROJ` to `/models/<file>`.
+
+How a file is accepted:
+
+1. The manifest is validated first: a 40-hex commit, a 64-hex SHA-256, a positive size, a plain file name, and the
+   `.gguf` or `.safetensors` format for every file. Pickle-based formats (`.bin`, `.pt`, `.pth`, `.pkl`, `.ckpt` and
+   similar) can run code when they are loaded and are refused before any download.
+2. A file already in the volume with the pinned size and SHA-256 is kept. One that does not match is removed and
+   downloaded again.
+3. The download comes from `https://huggingface.co/<repo>/resolve/<commit>/<file>`, never from a branch name, and
+   follows https redirects only. It goes to a hidden `.<name>.partial` file, which the listing in `start.sh` does not
+   see.
+4. The size, the SHA-256 and the first bytes (the GGUF magic, or a safetensors header) are checked. Only then does an
+   atomic rename give the file its name. On any failure the partial file is deleted, so a model name only ever holds
+   a verified file. Partial files left by an interrupted run are deleted on the next one. A download does not resume.
+5. Before downloading, the fetcher checks that the volume can be written and has room for the missing files.
+
+The image's `/models` belongs to uid 10001, and Docker gives an empty volume the owner of the image folder when a
+container mounts it. The isolation check observed that `fetch-models` can write to a `models` volume that `vision`
+created first, as the listing in `start.sh` does. If a volume that already holds files belongs to another user, the
+fetcher stops with "the models volume is not writable by this user". It then needs its owner changed to uid 10001,
+for example with a throwaway root container of the same base image; this has not been needed or observed.
 
 ## Desktop shell build
 
@@ -245,6 +301,8 @@ Electron itself runs outside this limit, on the remaining system memory.
 | Slow analysis of a large folder | Windows bind mount | Working copies help after the first pass. Moving the photos into the WSL filesystem helps further |
 | Port in use | Another service on 8420 | Set `AURAFRAME_PORT` |
 | Model missing | Weights not downloaded | Run `./start.sh --fetch-models` |
+| `--fetch-models` says SHA-256 mismatch or size refused | A changed or damaged download | Nothing was kept. Run it again; if it repeats, the upstream file no longer matches its pin and the manifest needs review |
+| `--fetch-models` says the volume is not writable | The `models` volume belongs to another user | See [Model files](#model-files) |
 | Codex rejected | Not signed in, or plan limit | Run `./start.sh --codex-login` and check the account limits |
 | Provider down during a run | Crash or timeout | The run continues on the prescore. Rerun to complete the missing verdicts |
 

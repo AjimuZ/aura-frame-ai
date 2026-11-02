@@ -19,7 +19,7 @@ function hardened(user) {
 function compliantConfig() {
   const models = { type: 'volume', source: 'models', target: '/models', read_only: true };
   return {
-    networks: { frontend: {}, backend: { internal: true } },
+    networks: { frontend: {}, backend: { internal: true }, egress: {} },
     services: {
       gateway: {
         ...hardened('101:101'),
@@ -42,6 +42,13 @@ function compliantConfig() {
         image: `server${PINNED}`,
         networks: { backend: null },
         volumes: [models],
+      },
+      'fetch-models': {
+        ...hardened('10001:10001'),
+        build: { context: 'ctx', dockerfile: 'fetch.Dockerfile' },
+        profiles: ['fetch'],
+        networks: { egress: null },
+        volumes: [{ type: 'volume', source: 'models', target: '/models' }],
       },
     },
   };
@@ -106,6 +113,57 @@ const WEAKENINGS = [
     (c) => c.services.vision.volumes.push({ type: 'bind', source: 'chosen', target: '/photos', read_only: true }),
     'vision: must not mount the photos',
   ],
+  ['a missing download service', (c) => delete c.services['fetch-models'], 'fetch-models: service is missing'],
+  [
+    'the download service on the backend',
+    (c) => (c.services['fetch-models'].networks.backend = null),
+    'fetch-models: must join the egress network only',
+  ],
+  [
+    'the download service without a profile',
+    (c) => delete c.services['fetch-models'].profiles,
+    'fetch-models: must sit behind a profile, so that no plain up starts it',
+  ],
+  [
+    'photos reaching the download service',
+    (c) => c.services['fetch-models'].volumes.push({ type: 'bind', source: 'chosen', target: '/photos', read_only: true }),
+    'fetch-models: may mount the models volume only',
+  ],
+  [
+    'the data volume in the download service',
+    (c) => c.services['fetch-models'].volumes.push({ type: 'volume', source: 'data', target: '/data' }),
+    'fetch-models: may mount the models volume only',
+  ],
+  [
+    'read-only models in the download service',
+    (c) => (c.services['fetch-models'].volumes[0].read_only = true),
+    'fetch-models: /models must be the named volume models, writable',
+  ],
+  [
+    'the download service as root',
+    (c) => (c.services['fetch-models'].user = '0'),
+    'fetch-models: must run as a numeric non-root user',
+  ],
+  [
+    'an isolated service on the egress network',
+    (c) => (c.services.api.networks.egress = null),
+    'api: joins network egress, which is not internal',
+  ],
+  [
+    'another service on the egress network',
+    (c) => (c.services.gateway.networks.egress = null),
+    'gateway: joins network egress, which has an internet route',
+  ],
+  [
+    'the download service on the frontend',
+    (c) => (c.services['fetch-models'].networks = { frontend: null }),
+    'fetch-models: joins network frontend, which has an internet route',
+  ],
+  [
+    'a service on the default network',
+    (c) => (c.services['fetch-models'].networks = { default: null }),
+    'fetch-models: joins network default, which has an internet route',
+  ],
 ];
 
 for (const [label, weaken, expected] of WEAKENINGS) {
@@ -125,7 +183,7 @@ test('a later stage may build on an earlier stage, but an unknown name must be p
 });
 
 test('every Dockerfile in the repository pins its base images', () => {
-  for (const service of ['api', 'gateway']) {
+  for (const service of ['api', 'gateway', 'fetch-models']) {
     const text = fs.readFileSync(path.join(REPO_ROOT, 'docker', service, 'Dockerfile'), 'utf8');
     assert.match(text, /^FROM /m);
     assert.deepEqual(unpinnedBaseImages(text), [], service);

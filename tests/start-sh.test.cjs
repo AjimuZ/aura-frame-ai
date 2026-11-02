@@ -23,6 +23,7 @@ case " $* " in
   *" info --format "*) printf '%s\\n' "\${STUB_MEM:-${16 * GIB}}"; exit 0 ;;
   " compose version ") [ -z "\${STUB_NO_COMPOSE-}" ]; exit $? ;;
   *" run "*electron-builder*) exit "\${STUB_BUILD_EXIT:-0}" ;;
+  *" run "*fetch-models*) exit "\${STUB_FETCH_EXIT:-0}" ;;
   *" run "*) printf '%s' "\${STUB_LISTING-}"; exit 0 ;;
   *" up "*) exit "\${STUB_UP_EXIT:-0}" ;;
   *" down "*) exit "\${STUB_DOWN_EXIT:-0}" ;;
@@ -154,6 +155,8 @@ test('exits 2 on an invalid argument, before any prerequisite', () => {
     ['--provider', 'bogus'],
     ['--stop', '--status'],
     ['--fetch-models', '--stop'],
+    ['--fetch-models', 'Not/A-Model'],
+    ['--fetch-models', 'all', 'extra'],
   ];
   for (const args of cases) {
     const run = runStart(args, { without: ['docker'] });
@@ -175,6 +178,9 @@ test('accepts every flag of the contract', () => {
     ['--logs', 'api'],
     ['--stop'],
     ['--help'],
+    ['--fetch-models'],
+    ['--fetch-models', 'all'],
+    ['--fetch-models', 'qwen3.5-9b-q5_k_m'],
   ];
   for (const args of cases) {
     const run = runStart(args);
@@ -373,8 +379,64 @@ test('explains --fetch-models when model files are missing and downloads nothing
   assert.deepEqual(upLines(explicit), []);
 });
 
+// Returns the docker command lines that mention the model download service or its profile.
+function fetchLines(run) {
+  return run.read('docker.argv').split('\n').filter((line) => /fetch/.test(line));
+}
+
+test('--fetch-models runs only the one-shot download service, then exits', () => {
+  const run = runStart(['--fetch-models']);
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(fetchLines(run), ['compose -f compose.yaml --profile fetch run --rm --build fetch-models']);
+  assert.deepEqual(upLines(run), [], 'no service is started');
+  assert.deepEqual(downLines(run), []);
+  assert.doesNotMatch(run.read('docker.argv'), /compose\.gpu\.yaml|--profile local/);
+  assert.equal(run.read('nvidia-smi.argv'), '', 'no GPU is needed');
+  assert.equal(run.read('curl.argv'), '', 'start.sh itself downloads nothing');
+  assert.equal(run.read('docker.token'), '', 'no session token is made');
+  assert.equal(run.read('window.argv'), '', 'no window');
+  assert.match(run.stdout, /checked against its SHA-256/);
+
+  const named = runStart(['--fetch-models', 'all']);
+  assert.equal(named.status, 0, named.stderr);
+  assert.deepEqual(fetchLines(named), ['compose -f compose.yaml --profile fetch run --rm --build fetch-models all']);
+});
+
+test('a failed download exits 1 and starts nothing', () => {
+  const run = runStart(['--fetch-models'], { env: { STUB_FETCH_EXIT: '1' } });
+  assert.equal(run.status, 1);
+  assert.match(run.stderr, /Fetching the model files failed, and no unverified file was kept/);
+  assert.deepEqual(upLines(run), []);
+});
+
+test('no path other than --fetch-models touches the download service', () => {
+  const cases = [[], ['--backend-only'], ['--rebuild'], ['--cpu'], ['--status'], ['--logs'], ['--stop']];
+  for (const args of cases) {
+    const run = runStart(args, { env: { AURAFRAME_BUILDER_IMAGE: PINNED_BUILDER, STUB_LISTING: '' } });
+    assert.equal(run.status, 0, `${args.join(' ')}: ${run.stderr}`);
+    assert.deepEqual(fetchLines(run), [], args.join(' '));
+  }
+  const script = fs.readFileSync(START_SH, 'utf8');
+  const commands = script.split('\n').filter((line) => /--profile fetch/.test(line) && !/^\s*#/.test(line));
+  assert.equal(commands.length, 1, 'one command line names the fetch profile');
+  assert.match(commands[0], /run --rm --build fetch-models/);
+});
+
+test('the default model of the manifest is the one vision and start.sh expect', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'engine/src/model_fetch/manifest.json'), 'utf8'));
+  const model = manifest.models.find((entry) => entry.id === manifest.default);
+  const targets = model.files.map((file) => `/models/${file.target}`);
+  const compose = fs.readFileSync(path.join(REPO_ROOT, 'compose.yaml'), 'utf8');
+  const script = fs.readFileSync(START_SH, 'utf8');
+  for (const target of targets) {
+    assert.ok(compose.includes(`:-${target}}`), `compose.yaml defaults to ${target}`);
+    assert.ok(script.includes(`:-${target}}`), `start.sh defaults to ${target}`);
+  }
+  assert.deepEqual(MODEL_LISTING.trim().split('\n'), model.files.map((file) => file.target));
+});
+
 test('says "not available yet" for planned flags and runs nothing', () => {
-  const cases = [['--fetch-models'], ['--codex-login'], ['--provider', 'codex']];
+  const cases = [['--codex-login'], ['--provider', 'codex']];
   for (const args of cases) {
     const run = runStart(args);
     assert.equal(run.status, 1, args.join(' '));
