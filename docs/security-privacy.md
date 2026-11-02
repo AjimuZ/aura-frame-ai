@@ -115,6 +115,13 @@ Verified on 2026-11-01 by reading the source.
   (`engine/src/model_fetch/`). `bash scripts/check.sh --integration` observed that it cannot reach `api` or
   `gateway`, sees no photos, data, exports or Docker socket, and can write the models volume. No real model file
   has been downloaded yet.
+- Since P05.1 (2026-11-02), the `codex` sidecar exists in `compose.yaml` and `docker/codex/`: profile `codex`, so no
+  plain `up` starts it; exactly `backend` and `egress`; a tmpfs at `/exchange` and the `codex-home` volume as its only
+  mounts, so no photos, data, exports, models or Docker socket; uid 10001 on a read-only root; web search, history,
+  analytics, feedback, telemetry and the shell tool off in its config, which the entrypoint rewrites on every start.
+  `bash scripts/check.sh --compose` enforces these rules from the resolved configuration. Nothing calls it yet (P05.2),
+  and its image has not been built, so none of this has been observed in a running container
+  ([ADR 0016](decisions/0016-codex-sidecar-image.md)).
 - A personal first name was hard-coded as the default library name, which broke the project rule
   against personal data in code. Fixed in P01.2.2; see [assessment](assessment.md#environment-and-repository).
   The `package.json` author field no longer holds a personal name, and `tests/personal-data.test.cjs`

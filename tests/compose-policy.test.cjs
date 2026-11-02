@@ -50,6 +50,16 @@ function compliantConfig() {
         networks: { egress: null },
         volumes: [{ type: 'volume', source: 'models', target: '/models' }],
       },
+      codex: {
+        ...hardened('10001:10001'),
+        build: { context: 'ctx' },
+        profiles: ['codex'],
+        networks: { backend: null, egress: null },
+        volumes: [
+          { type: 'tmpfs', target: '/exchange', tmpfs: { size: 67108864 } },
+          { type: 'volume', source: 'codex-home', target: '/codex-home' },
+        ],
+      },
     },
   };
 }
@@ -164,6 +174,83 @@ const WEAKENINGS = [
     (c) => (c.services['fetch-models'].networks = { default: null }),
     'fetch-models: joins network default, which has an internet route',
   ],
+  ['a missing Codex sidecar', (c) => delete c.services.codex, 'codex: service is missing'],
+  [
+    'the Codex sidecar without a profile',
+    (c) => delete c.services.codex.profiles,
+    'codex: must sit behind a profile, so that no plain up starts it',
+  ],
+  [
+    'the Codex sidecar on egress alone',
+    (c) => delete c.services.codex.networks.backend,
+    'codex: must join the backend and egress networks only',
+  ],
+  [
+    'the Codex sidecar on the backend alone',
+    (c) => delete c.services.codex.networks.egress,
+    'codex: must join the backend and egress networks only',
+  ],
+  [
+    'the Codex sidecar on the frontend',
+    (c) => (c.services.codex.networks.frontend = null),
+    'codex: joins network frontend, which has an internet route',
+  ],
+  [
+    'photos reaching the Codex sidecar',
+    (c) => c.services.codex.volumes.push({ type: 'bind', source: 'chosen', target: '/photos', read_only: true }),
+    'codex: may mount the exchange tmpfs and the codex-home volume only',
+  ],
+  [
+    'the data volume in the Codex sidecar',
+    (c) => c.services.codex.volumes.push({ type: 'volume', source: 'data', target: '/data', read_only: true }),
+    'codex: may mount the exchange tmpfs and the codex-home volume only',
+  ],
+  [
+    'the models volume in the Codex sidecar',
+    (c) => c.services.codex.volumes.push({ type: 'volume', source: 'models', target: '/models', read_only: true }),
+    'codex: may mount the exchange tmpfs and the codex-home volume only',
+  ],
+  [
+    'the exports folder in the Codex sidecar',
+    (c) => c.services.codex.volumes.push({ type: 'bind', source: 'exports', target: '/exports' }),
+    'codex: may mount the exchange tmpfs and the codex-home volume only',
+  ],
+  [
+    'the Docker socket in the Codex sidecar',
+    (c) => c.services.codex.volumes.push({ type: 'bind', source: '/var/run/docker.sock', target: '/run/d' }),
+    'codex: mounts the Docker socket',
+  ],
+  [
+    'the mounts of another service in the Codex sidecar',
+    (c) => (c.services.codex.volumes_from = ['api']),
+    'codex: may mount the exchange tmpfs and the codex-home volume only',
+  ],
+  [
+    'an exchange on the host disk',
+    (c) => (c.services.codex.volumes[0] = { type: 'bind', source: 'chosen', target: '/exchange' }),
+    'codex: /exchange must be a tmpfs',
+  ],
+  [
+    'credentials in a bind mount',
+    (c) => (c.services.codex.volumes[1] = { type: 'bind', source: 'home', target: '/codex-home' }),
+    'codex: /codex-home must be the named volume codex-home, writable',
+  ],
+  [
+    'read-only credentials',
+    (c) => (c.services.codex.volumes[1].read_only = true),
+    'codex: /codex-home must be the named volume codex-home, writable',
+  ],
+  [
+    'the credentials volume in another service',
+    (c) => c.services.api.volumes.push({ type: 'volume', source: 'codex-home', target: '/codex-home' }),
+    'api: mounts the codex-home volume; only codex may',
+  ],
+  ['the Codex sidecar as root', (c) => (c.services.codex.user = '0:0'), 'codex: must run as a numeric non-root user'],
+  [
+    'a port on the Codex sidecar',
+    (c) => (c.services.codex.ports = [{ host_ip: '127.0.0.1', published: '9000', target: 9000 }]),
+    'codex: publishes a port; only gateway may',
+  ],
 ];
 
 for (const [label, weaken, expected] of WEAKENINGS) {
@@ -183,7 +270,7 @@ test('a later stage may build on an earlier stage, but an unknown name must be p
 });
 
 test('every Dockerfile in the repository pins its base images', () => {
-  for (const service of ['api', 'gateway', 'fetch-models']) {
+  for (const service of ['api', 'gateway', 'fetch-models', 'codex']) {
     const text = fs.readFileSync(path.join(REPO_ROOT, 'docker', service, 'Dockerfile'), 'utf8');
     assert.match(text, /^FROM /m);
     assert.deepEqual(unpinnedBaseImages(text), [], service);

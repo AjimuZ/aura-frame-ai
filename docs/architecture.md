@@ -60,23 +60,26 @@ only client of the API.
 | `gateway` | nginx (unprivileged), reverse proxy only | none | `frontend`, `backend` | no | always |
 | `api` | Python 3.12 with PyTorch and CUDA | photos (read-only), data, exports, models (read-only) | `backend` | yes | always |
 | `vision` | `ghcr.io/ggml-org/llama.cpp:server-cuda`, pinned by digest | models (read-only) | `backend` | yes | profile `local` (default) |
-| `codex` | Node with `@openai/codex`, pinned version | exchange (tmpfs), Codex home | `backend`, `egress` | no | profile `codex` (opt-in) |
+| `codex` | `node:22-slim`, pinned by digest, with `@openai/codex@0.166.0` | exchange (tmpfs), Codex home | `backend`, `egress` | no | profile `codex` (opt-in) |
 | `fetch-models` | `python:3.12-slim`, pinned by digest, standard library only | models (read-write) | `egress` | no | profile `fetch`, one-shot, only on `--fetch-models` |
 
 `backend` is declared `internal: true`, so it has no route to the internet. `gateway` is the only
 service that publishes a port, bound to `127.0.0.1`. It exists because a port cannot be published
-from an internal network. `egress` has an internet route, and only `fetch-models` joins it today.
+from an internal network. `egress` has an internet route, and only `fetch-models` and the opt-in `codex` join it.
 
 ## Container stack
 
-Written in `compose.yaml` and `docker/` (P02.1), with `gateway`, `api` and `vision`, and `fetch-models` since
-P03.2 ([Operations](operations.md#model-files)). `codex` arrives with P05.1. Decisions:
-[ADR 0010](decisions/0010-compose-stack-layout.md), [ADR 0011](decisions/0011-pinned-model-download.md).
+Written in `compose.yaml` and `docker/` (P02.1), with `gateway`, `api` and `vision`, `fetch-models` since
+P03.2 ([Operations](operations.md#model-files)), and the `codex` sidecar since P05.1. The sidecar exists as an image
+and a service only: its default command prints the CLI version, and nothing sends it comparisons until the provider
+in P05.2. Decisions: [ADR 0010](decisions/0010-compose-stack-layout.md),
+[ADR 0011](decisions/0011-pinned-model-download.md), [ADR 0016](decisions/0016-codex-sidecar-image.md).
 
 | Rule | Where it is set |
 | --- | --- |
-| Images pinned by digest | `vision` in `compose.yaml`; the base images in `docker/api/Dockerfile`, `docker/gateway/Dockerfile` and `docker/fetch-models/Dockerfile` |
-| Internet route | Only `fetch-models`, on `egress`, behind the profile `fetch`, with the `models` volume as its only mount. `scripts/compose-policy.cjs` refuses any other service on a routed network other than `gateway` on `frontend` |
+| Images pinned by digest | `vision` in `compose.yaml`; the base images in `docker/api/Dockerfile`, `docker/gateway/Dockerfile`, `docker/fetch-models/Dockerfile` and `docker/codex/Dockerfile` |
+| Internet route | `fetch-models`, on `egress` only, behind the profile `fetch`, with the `models` volume as its only mount; and `codex`, on exactly `backend` and `egress`, behind the profile `codex`, with the `exchange` tmpfs and the `codex-home` volume as its only mounts. `scripts/compose-policy.cjs` refuses any other service on a routed network other than `gateway` on `frontend` |
+| Codex config | `docker/codex/config.toml` (web search, history, analytics, feedback, telemetry and the shell tool off), rewritten into the `codex-home` volume by the entrypoint on every start |
 | Model files | Downloaded only by `./start.sh --fetch-models`, each pinned to a commit, a size and a SHA-256 in `engine/src/model_fetch/manifest.json` |
 | Non-root, `no-new-privileges`, all capabilities dropped, read-only root filesystem, `/tmp` on tmpfs | Every service, from `x-hardening` in `compose.yaml` |
 | GPU access | `compose.gpu.yaml`, an overlay, so the base file starts on a host without a GPU |
@@ -91,8 +94,8 @@ recreating `api` for another folder can change its address.
 `api` has two build stages. `full`, the default, adds PyTorch with CUDA. `core` leaves that stack out,
 with the same package set as the engine tests, and the integration check uses it.
 
-Not observed yet: the `full` stage building, a GPU in a container, `vision` serving a model, and the
-engine running in `api`. The API writes copies and reports under the `/exports` mount, in a folder per
+Not observed yet: the `full` stage building, a GPU in a container, `vision` serving a model, the
+engine running in `api`, and the `codex` image building or its CLI running. The API writes copies and reports under the `/exports` mount, in a folder per
 library (see [Library data layout](#library-data-layout)); no run has written there on a real host yet, and
 the GPU overlay choice made by Electron main has not been observed with a real Docker.
 
@@ -105,7 +108,7 @@ the GPU overlay choice made by Electron main has not been observed with a real D
 | exports | bind mount | Copies and reports of every library, at `/exports/<library id>/`. `start.sh` and a bare compose use `./data/output` (Git-ignored); Electron main uses `exports/` in its `userData` folder | Electron opens them in the file manager |
 | models | named volume | GGUF and PyTorch model files | Survives image rebuilds, and can be mounted read-only |
 | exchange | tmpfs | Anonymous copies for the Codex sidecar | Gone when the container stops |
-| codex-home | named volume | Codex credentials and config | Visible only to the sidecar |
+| codex-home | named volume, at `/codex-home` | Codex credentials and config | Visible only to the sidecar; the policy refuses it in any other service |
 | registry | Electron `userData` | Library list, host folders, settings, encrypted key | Host-side data, outside the repository |
 
 ## GPU scheduling

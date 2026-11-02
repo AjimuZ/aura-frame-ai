@@ -4,6 +4,13 @@
 
 ### Added
 
+- The container stack has an optional `codex` sidecar for the opt-in Codex CLI judge, behind the profile `codex`, so
+  no `up` starts it. Its image (`docker/codex/`) pins `node:22-slim` by digest and `@openai/codex@0.166.0`, runs as
+  uid 10001 on a read-only root, and installs a config with web search, history, analytics, feedback, telemetry and
+  the shell tool off, rewritten into the new `codex-home` volume on every start. It joins `backend` and `egress` and
+  mounts only a tmpfs at `/exchange` and `codex-home`; the compose policy refuses photos, data, models, exports or
+  the Docker socket in it, and `codex-home` in any other service (ADR 0016). It only prints its version for now:
+  nothing sends it comparisons until the Codex provider (P05.2), and the image has not been built yet.
 - Critique, diversity-aware selection, reports and exports as engine building blocks. The finalists (the final set,
   default 25) get a structured critique after the rank is fixed, and the critique cannot change the rank or the
   selection. Maximal marginal relevance with `lambda = 0.75` over SigLIP 2 similarity gives nested Top 10, 25, 50 and

@@ -7,6 +7,8 @@
 #   the `models` volume.
 # - `fetch-models` is the only service with an internet route, on `egress`. It sits behind the profile `fetch`,
 #   so no `up` starts it, and only `./start.sh --fetch-models` runs it. It sees the models volume and nothing else.
+# - `codex` is the optional Codex CLI sidecar, on `backend` and `egress`, behind the profile `codex`. It sees an
+#   exchange tmpfs and its own credentials volume, never the photos, the data, the models or the Docker socket.
 # - Rules enforced by `bash scripts/check.sh --compose` (scripts/compose-policy.cjs).
 
 name: auraframe
@@ -163,16 +165,44 @@ services:
     networks:
       - egress
 
+  # Optional judge of the opt-in Codex provider (ADR 0005, ADR 0016). Behind the profile `codex`, so no plain `up`
+  # starts it. It mounts only the `exchange` tmpfs, where anonymous resized copies will be put, and the `codex-home`
+  # volume with the credentials and the config that the entrypoint rewrites on every start. Its default command only
+  # prints the CLI version; the provider that sends it comparisons is P05.2.
+  codex:
+    <<: *hardening
+    build:
+      context: ./docker/codex
+    profiles: [codex]
+    user: "10001:10001"
+    init: true
+    pids_limit: 256
+    tmpfs:
+      - /tmp:size=64m
+    volumes:
+      - type: tmpfs
+        target: /exchange
+        tmpfs:
+          size: 67108864
+      - type: volume
+        source: codex-home
+        target: /codex-home
+    networks:
+      - backend
+      - egress
+
 networks:
   # Carries the published port of `gateway`, and nothing else joins it.
   frontend: {}
   # No route to the internet. Everything that handles photos lives here.
   backend:
     internal: true
-  # Has a route to the internet. Only `fetch-models` joins it, and it never sees photos.
+  # Has a route to the internet. Only `fetch-models` and the opt-in `codex` join it, and neither mounts the photos.
   egress: {}
 
-# Named by the project: `auraframe_data` and `auraframe_models`. Another project name gets its own.
+# Named by the project: `auraframe_data`, `auraframe_models` and `auraframe_codex-home`. Another project name gets
+# its own. Only `codex` mounts `codex-home`.
 volumes:
   data: {}
   models: {}
+  codex-home: {}

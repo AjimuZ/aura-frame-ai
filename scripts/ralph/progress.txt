@@ -81,6 +81,9 @@
 - Persist progress at the unit the stage really works in (per photo, or per GPU batch), and write the stored values in the same transaction as the state flag, so a state marked done always has its values.
 - Store exact raw values (unrounded penalties, raw gate measures, hashes) next to display values, so a resumed run decides exactly as an uninterrupted run would.
 - Test resume by killing at several stage positions with an injected exception, rerunning, and asserting both that no finished photo is processed again and that the final library equals an uninterrupted run.
+- This checkout converts text files to CRLF on checkout. Any shell script copied into a Linux image needs a `text eol=lf` rule in .gitattributes (now `docker/**/*.sh`) plus a test asserting no \r, or /bin/sh in the image cannot run it.
+- A service with an internet route gets its own policy function in scripts/compose-policy.cjs: exact networks, a required profile, an allow-list of mounts by target and type, and a refusal of its private volume in every other service. Each rule gets a named weakening in tests/compose-policy.test.cjs.
+- Config that must survive a pre-existing named volume is rewritten by the entrypoint on every start rather than seeded into an empty volume.
 
 ---
 
@@ -797,4 +800,16 @@ In this session I replaced the "not run" wording with the observed results in `d
   - Pause and cancel are read only between photos and between GPU batches; a running batch is never interrupted. A cancelled run exits with code 2 and keeps all finished photos.
   - The kill tests simulate a kill with an uncaught exception at a chosen photo or batch. A real signal kill was not observed; P04.MEASURE or an integration check could cover it.
   - The Docker daemon was reachable this session, so `bash scripts/check.sh --engine` works from the allowlisted shell and takes about 80 seconds. `scripts/ralph/prd.json` is orchestrator-owned and showed as modified in the working tree.
+---
+
+## 2026-11-02T20:26:20Z - P05.1
+- Kept the sidecar work from attempt 1 (docker/codex/ image with the pinned base digest and CLI 0.166.0, config.toml matching docs/ai-providers.md, an entrypoint that rewrites the config into the codex-home volume on every start, the profile-gated service on backend and egress with only an /exchange tmpfs and codex-home, the policy rules with negative tests, the compose profile check, and the integration assertion). This attempt unticked the P05.1 roadmap checkbox that attempt 1 had ticked. It also added .gitattributes so docker/**/*.sh keeps LF endings on Windows checkouts, which /bin/sh in the image needs, plus a test guarding that rule and an ADR 0016 note. The roadmap and testing counts were updated. Observed: npm run lint gave no findings; npm run build:electron && node --test "tests/**/*.test.cjs" gave 205 passed, 0 failed and 1 skipped (the existing symlink test); bash scripts/check.sh --compose passed 3 of 3. Not observed: the image building, the CLI running in it, and bash scripts/check.sh --integration. The commit message avoids every vendor and tool name, which the checker rejected in attempt 1.
+- Files changed: .gitattributes, docker/codex/Dockerfile, docker/codex/config.toml, docker/codex/entrypoint.sh, compose.yaml, scripts/compose-policy.cjs, scripts/check.sh, tests/compose-policy.test.cjs, tests/codex-sidecar.test.cjs, tests/integration/compose-stack.sh, CHANGELOG.md, docs/roadmap.md, docs/architecture.md, docs/ai-providers.md, docs/operations.md, docs/security-privacy.md, docs/testing.md, docs/decisions/0016-codex-sidecar-image.md
+- **Learnings for future iterations:**
+  - The commit-message checker rejects the words Codex or codex anywhere in the subject or body, even as a service name. Describe the sidecar as 'the opt-in judge sidecar' in commit messages; the docs and code may keep the name.
+  - The sidecar's default command is a placeholder (`codex --version`). P05.2 must replace it with the comparison runner, wire --codex-login, and make start.sh and the app name the `codex` profile only after opt-in.
+  - Since CODEX_HOME=/codex-home is a named volume, the image config at /etc/auraframe/codex/config.toml is copied over $CODEX_HOME/config.toml on every start. Change the config only in docker/codex/config.toml and the docs/ai-providers.md block together; tests/codex-sidecar.test.cjs compares them line for line.
+  - The image has never been built. The first `docker compose --profile codex build codex` checks the npm install, and a run checks the CLI on the read-only root. P05.3 still has to check the upstream bwrap/seccomp sandbox.
+  - The compose policy now lists codex in REQUIRED_SERVICES and EGRESS_SERVICES, so the policy input must include `--profile codex` (scripts/check.sh does).
+  - docs/roadmap.md: the orchestrator ticks the checkbox. Attempt 1 ticked it by mistake and attempt 2 reverted it.
 ---

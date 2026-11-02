@@ -87,13 +87,28 @@ engine_tests() {
       cd /app && python -m pytest engine/tests -q -p no:cacheprovider'
 }
 
-# compose_config: validates the stack as run by default, with the vision profile, with GPU access, and with the
-# model download service.
+# compose_config: validates the stack as run by default, with the vision profile, with GPU access, with the
+# model download service and with the Codex sidecar.
 compose_config() {
   docker compose config --quiet &&
     docker compose --profile local config --quiet &&
     docker compose --profile local -f compose.yaml -f compose.gpu.yaml config --quiet &&
-    docker compose --profile fetch config --quiet
+    docker compose --profile fetch config --quiet &&
+    docker compose --profile codex config --quiet
+}
+
+# compose_profiles: proves that an `up` without `--profile fetch` or `--profile codex`, as start.sh and the app run
+# it, has neither the model download nor the Codex sidecar in its service list.
+compose_profiles() {
+  local services profile_args
+  for profile_args in "" "--profile local"; do
+    # shellcheck disable=SC2086
+    services="$(docker compose $profile_args config --services)" || return 1
+    if printf '%s\n' "$services" | tr -d '\r' | grep -qxE 'fetch-models|codex'; then
+      echo "a profile-only service is in the stack of 'docker compose $profile_args up'" >&2
+      return 1
+    fi
+  done
 }
 
 # compose_policy: checks the resolved configuration, every profile included, against the hardening rules in
@@ -101,7 +116,7 @@ compose_config() {
 compose_policy() {
   (
     set -o pipefail
-    docker compose --profile local --profile fetch config --format json | node scripts/compose-policy.cjs
+    docker compose --profile local --profile fetch --profile codex config --format json | node scripts/compose-policy.cjs
   )
 }
 
@@ -136,6 +151,7 @@ if [ "$run_compose" -eq 1 ]; then
     echo "FAIL: compose checks" >&2
   else
     run_check "compose config" compose_config
+    run_check "compose profiles" compose_profiles
     run_check "compose policy" compose_policy
   fi
 fi

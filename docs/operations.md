@@ -28,6 +28,10 @@ AURAFRAME_API_TOKEN=<at least 16 characters> AURAFRAME_PHOTOS_DIR=<folder> \
 - `vision` does not become healthy until its model files are in the `models` volume. Only
   `./start.sh --fetch-models` fills it ([Model files](#model-files)). Until then, run without the profile.
 - `fetch-models` sits behind the profile `fetch`, so no `up` starts it, with or without `--profile local`.
+- `codex`, the optional Codex CLI sidecar (P05.1), sits behind the profile `codex` in the same way. It has no use yet:
+  its default command prints the CLI version and exits, and nothing in `start.sh` or the app names the profile until
+  P05.2. It mounts only the `exchange` tmpfs and the `codex-home` volume, never the photos, data, exports, models or
+  the Docker socket ([ADR 0016](decisions/0016-codex-sidecar-image.md)). Its image has not been built yet.
 - On Linux, create the exports folder first, writable by uid 10001 (for example `chown 10001:10001` on it).
   Docker otherwise creates it as root. The API runs as uid 10001 and writes copies and reports there: when it
   cannot, an export or an analysis start answers HTTP 409 `export_folder_unwritable` and the window shows
@@ -318,7 +322,7 @@ Electron itself runs outside this limit, on the remaining system memory.
 | Exports, reports | `exports/<library id>/` in the app's `userData` folder (the output and reports buttons open it); `./data/output` for `start.sh` and a bare compose | The app, per library, when the library is deleted; or delete the folder |
 | Database, thumbnails, working copies | Volume `auraframe_data` | The app, per library, or `docker volume rm` |
 | Model files | Volume `auraframe_models` | `docker volume rm` |
-| Codex credentials | Volume `auraframe_codex_home` | `docker volume rm` |
+| Codex credentials | Volume `auraframe_codex-home` | `docker volume rm` |
 
 ## Troubleshooting
 

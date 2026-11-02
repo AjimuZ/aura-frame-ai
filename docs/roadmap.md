@@ -318,12 +318,24 @@ score of the pipeline is recorded and is not below the scorer alone.
 
 **Depends on:** P03. **Areas:** providers, security.
 
-- [ ] P05.1 Build the sidecar image, its config with tools and telemetry off, and its volumes.
+- [x] P05.1 Build the sidecar image, its config with tools and telemetry off, and its volumes.
 - [ ] P05.2 Implement the provider, opt-in, call cap and `--codex-login`.
 - [ ] P05.3 Check the upstream sandbox in Docker, and record the outcome.
 - [ ] P05.4 Measure the usage cost per comparison, and record it.
 - [ ] P05.5 Remove `engine/src/cloud/`, after moving the image preparer into `providers/`
       ([ADR 0007](decisions/0007-retire-openai-quality-mode.md)).
+
+Progress 2026-11-02 (P05.1): `docker/codex/` builds the sidecar from `node:22-slim` pinned by digest with
+`@openai/codex@0.166.0`, as uid 10001. Its `config.toml` is the documented TOML (web search, history, analytics,
+feedback, telemetry and the shell tool off), and the entrypoint rewrites it into the `codex-home` volume on every start.
+The `codex` service in `compose.yaml` sits behind the profile `codex`, on `backend` and `egress`, and mounts only a
+tmpfs at `/exchange` and the `codex-home` volume. Its default command prints the CLI version; the provider is P05.2
+([ADR 0016](decisions/0016-codex-sidecar-image.md)). Observed: `bash scripts/check.sh --compose` passed 3 of 3,
+including the new profile check that a plain and a `--profile local` service list hold no `codex`, and
+`npm run build:electron && node --test "tests/**/*.test.cjs"` passed 205 tests with 1 skipped (the existing symlink
+case), including the new policy cases and `tests/codex-sidecar.test.cjs`; `.gitattributes` keeps the entrypoint at LF
+endings on a Windows checkout. Not observed: the image building, the CLI
+running in it, and `bash scripts/check.sh --integration` with its new "codex is not started by up" assertion.
 
 Exit: the contract and data-shape tests pass; without opt-in the sidecar is not running and no call
 can happen; a real run with the owner's account completes on synthetic images.

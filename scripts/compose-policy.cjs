@@ -1,19 +1,25 @@
 // Static hardening policy for the container stack: reads `docker compose config --format json` and names every violation.
 //
-// Usage: docker compose --profile local --profile fetch config --format json | node scripts/compose-policy.cjs
+// Usage: docker compose --profile local --profile fetch --profile codex config --format json | node scripts/compose-policy.cjs
 // Exits 0 when the configuration complies, 1 with one line per violation otherwise, 2 for unreadable input.
 const fs = require('node:fs');
 const path = require('node:path');
 
-const REQUIRED_SERVICES = ['gateway', 'api', 'vision', 'fetch-models'];
+const REQUIRED_SERVICES = ['gateway', 'api', 'vision', 'fetch-models', 'codex'];
 // Services that handle photos or their copies: they may join internal networks only.
 const ISOLATED_SERVICES = ['api', 'vision'];
 const PUBLISHING_SERVICE = 'gateway';
 const FRONTEND_NETWORK = 'frontend';
 // The only network with an internet route besides `frontend`, and the services allowed on it.
 const EGRESS_NETWORK = 'egress';
-const EGRESS_SERVICES = ['fetch-models'];
+const EGRESS_SERVICES = ['fetch-models', 'codex'];
 const FETCH_SERVICE = 'fetch-models';
+// The opt-in Codex sidecar: the exact networks it joins, its two mounts, and the volume no other service may mount.
+const CODEX_SERVICE = 'codex';
+const CODEX_NETWORKS = ['backend', EGRESS_NETWORK];
+const CODEX_EXCHANGE = '/exchange';
+const CODEX_HOME = '/codex-home';
+const CODEX_HOME_VOLUME = 'codex-home';
 const LOOPBACK = '127.0.0.1';
 const DIGEST_PATTERN = /@sha256:[0-9a-f]{64}$/;
 const NON_ROOT_USER_PATTERN = /^[1-9][0-9]*(:[1-9][0-9]*)?$/;
@@ -154,6 +160,42 @@ function fetchViolations(config) {
   return violations;
 }
 
+// Returns the violations of the rules for the Codex sidecar: exactly `backend` and `egress`, never started by a plain
+// `up`, and an exchange tmpfs and the writable codex-home volume as its only mounts, so no photos, data, models or
+// Docker socket reach it. Also refuses the codex-home volume, which holds credentials, in any other service.
+function codexViolations(config) {
+  const violations = [];
+  for (const [name, service] of Object.entries(config.services || {})) {
+    if (name !== CODEX_SERVICE && (service.volumes || []).some((volume) => volume.source === CODEX_HOME_VOLUME)) {
+      violations.push(`${name}: mounts the ${CODEX_HOME_VOLUME} volume; only ${CODEX_SERVICE} may`);
+    }
+  }
+  const service = config.services?.[CODEX_SERVICE];
+  if (!service) {
+    return violations;
+  }
+  const joined = Object.keys(service.networks || {}).sort();
+  if (joined.join(',') !== [...CODEX_NETWORKS].sort().join(',')) {
+    violations.push(`${CODEX_SERVICE}: must join the ${CODEX_NETWORKS.join(' and ')} networks only`);
+  }
+  if (!Array.isArray(service.profiles) || service.profiles.length === 0) {
+    violations.push(`${CODEX_SERVICE}: must sit behind a profile, so that no plain up starts it`);
+  }
+  const exchange = mountAt(service, CODEX_EXCHANGE);
+  if (exchange?.type !== 'tmpfs') {
+    violations.push(`${CODEX_SERVICE}: ${CODEX_EXCHANGE} must be a tmpfs`);
+  }
+  const home = mountAt(service, CODEX_HOME);
+  if (home?.type !== 'volume' || home.source !== CODEX_HOME_VOLUME || home.read_only) {
+    violations.push(`${CODEX_SERVICE}: ${CODEX_HOME} must be the named volume ${CODEX_HOME_VOLUME}, writable`);
+  }
+  const allowed = [exchange, home].filter(Boolean);
+  if ((service.volumes || []).some((volume) => !allowed.includes(volume)) || (service.volumes_from || []).length > 0) {
+    violations.push(`${CODEX_SERVICE}: may mount the exchange tmpfs and the ${CODEX_HOME_VOLUME} volume only`);
+  }
+  return violations;
+}
+
 // Returns the mount with the given target in a service, or undefined.
 function mountAt(service, target) {
   return (service?.volumes || []).find((volume) => volume.target === target);
@@ -191,7 +233,13 @@ function findViolations(config, readFile = (file) => fs.readFileSync(file, 'utf8
   for (const [name, service] of Object.entries(services)) {
     violations.push(...imageViolations(name, service, readFile), ...privilegeViolations(name, service));
   }
-  return [...violations, ...networkViolations(config), ...storageViolations(config), ...fetchViolations(config)];
+  return [
+    ...violations,
+    ...networkViolations(config),
+    ...storageViolations(config),
+    ...fetchViolations(config),
+    ...codexViolations(config),
+  ];
 }
 
 // Reads the configuration from stdin and reports. Sets the process exit code described in the file header.

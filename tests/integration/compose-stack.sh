@@ -3,7 +3,8 @@
 #
 # Proves that api and vision cannot reach the internet, that /photos cannot be written, and that only
 # gateway publishes a port, on 127.0.0.1. Also proves that the one-shot fetch-models service reaches the
-# internet but no other service, sees no photos, and can write the models volume even when vision created it.
+# internet but no other service, sees no photos, and can write the models volume even when vision created it,
+# and that `up` does not start the opt-in codex sidecar.
 # Exits 0 only when every assertion holds.
 #
 # It runs under its own project name, with its own volumes, and removes them on exit. It reads no personal
@@ -325,6 +326,13 @@ if compose --profile fetch run --rm --no-deps fetch-models --list >/dev/null 2>&
   pass "the fetcher starts as the service user on the read-only filesystem (--list, no download)"
 else
   fail "the fetcher does not start in its image"
+fi
+
+echo "Codex sidecar"
+if [ -z "$(compose --profile codex ps -a -q codex 2>/dev/null | tr -d '\r')" ]; then
+  pass "codex is not started by up"
+else
+  fail "codex was started by up"
 fi
 
 echo "Vision image"

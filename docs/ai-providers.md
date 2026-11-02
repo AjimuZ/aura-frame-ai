@@ -2,7 +2,9 @@
 
 Status: the contract and the local llama-server provider are **implemented** in `engine/src/providers`
 (P03.1), tested against a fake server only. They are **not yet wired into the pipeline**, no model has been
-run, and the Codex CLI provider is **planned** ([P05](roadmap.md)). The pipeline still uses the legacy client
+run, and the Codex CLI provider is **planned** ([P05](roadmap.md)). Its sidecar image, config and volumes exist
+since P05.1 ([ADR 0016](decisions/0016-codex-sidecar-image.md)) but have not been built or run, and nothing calls
+them yet. The pipeline still uses the legacy client
 until [P03](roadmap.md) and [P04](roadmap.md) land. Decisions: [ADR 0003](decisions/0003-llama-cpp-runtime.md),
 [ADR 0004](decisions/0004-default-local-model.md),
 [ADR 0005](decisions/0005-codex-cli-provider.md).
@@ -182,6 +184,9 @@ otel.metrics_exporter = "none"     # the upstream default is "statsig"
 [features]
 shell_tool = false
 ```
+
+The file is `docker/codex/config.toml`, and `tests/codex-sidecar.test.cjs` keeps it identical to this block. The
+entrypoint writes it into the `codex-home` volume on every start, so an older or edited copy there never applies.
 
 Upstream notes that its Linux sandbox (`bwrap` and `seccomp`) can fail inside Docker. P05 checks
 this. If it fails, the container stays the boundary (`--sandbox danger-full-access`), which is
