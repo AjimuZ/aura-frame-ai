@@ -16,6 +16,21 @@ model:
   # Max tokens for the JSON verdict. The schema is small; this only caps runaway output.
   num_predict: 768
 
+# Local vision provider (llama-server in the `vision` service). Read by
+# engine/src/providers; not yet wired into the pipeline. Every limit is clamped to a hard bound
+# (timeout 0.25-600 s, retries 0-5, calls 1-20000, failures in a row 1-20, tokens 64-2048).
+ai:
+  local:
+    endpoint: "http://vision:8080"
+    # Empty accepts whichever model the server has loaded.
+    model: ""
+    timeout_seconds: 120
+    max_retries: 2
+    retry_delay_seconds: 0.5
+    max_calls: 1000
+    max_consecutive_failures: 3
+    max_tokens: 512
+
 input:
   photos_dir: "./data/input_originali"
   include_subfolders: true

@@ -78,6 +78,13 @@
   were already running.
 - `tests/renderer-isolation.test.cjs` checks the window's trust boundary through the compiled main process and preload:
   no Node, only `window.auraFrame`, a page CSP with no network source, no new windows and no navigation away.
+- The engine has a `VisionProvider` contract and a provider for the local llama-server (`engine/src/providers`). It
+  compares two photos or critiques one, sends only anonymous 1,024 px JPEG copies (quality 90, no EXIF, name or path),
+  and accepts only replies that pass a JSON Schema. Timeouts, retries and call counts are configurable (`ai.local` in
+  `engine/config.yaml`) and always clamped. A provider that fails, times out, lacks its model or hits its call limit
+  never stops a run: the call comes back as failed and the pair can be decided by the local prescore. The tests use a
+  fake server and synthetic images (224 engine tests pass in the container run). It is not wired into the analysis yet
+  and no model has been run.
 
 ### Changed
 

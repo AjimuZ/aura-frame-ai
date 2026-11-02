@@ -51,6 +51,9 @@
 - Test Electron trust boundaries without a new dependency or an Electron binary: inject a fake 'electron' into require.cache, require the compiled main.js, and capture the BrowserWindow options and the will-navigate and window-open handlers from a fake BrowserWindow.
 - Compare navigation targets by parsed URL (origin, or protocol plus empty host plus exact path), never with startsWith on the raw string. A prefix check lets look-alike hosts such as localhost:4200.example.com through.
 - Shell checks that need writes or network calls belong in a reviewed script under tests/integration/, run through a scripts/check.sh flag, so a session can run them through the allowed entry point.
+- Providers return failures as typed results (ok=False plus a short error code) and never raise; a guard wrapper trips to a degraded state and a fallback function supplies a local verdict.
+- Clamp every configurable timeout, retry and limit to a documented hard bound when settings are built, and test the clamping.
+- Test HTTP clients against a local fake server on 127.0.0.1 and verify image bytes by re-reading them, never by trusting the code path.
 
 ---
 
@@ -569,4 +572,31 @@ The P02.4.2 checkbox and scripts/ralph/prd.json were left alone.
   - Synthetic images can be drawn without host Python or binary writes: `docker run --rm --network none --entrypoint python -v <dir>:/out <api image> -c <script>`. The api image has numpy and Pillow.
   - The hook review in docs/claude-code.md lists six owner proposals; none were applied. Settings and hook scripts are left for the owner.
   - The P02 exit still needs a manual run on the reference PC: ./start.sh opening the window, the native dialog, a fast run from the window, and closing it stopping the services.
+---
+
+## 2026-11-02T12:18:10Z - P03.1
+- The engine now has a vision provider contract and a provider for the local llama-server in engine/src/providers. The provider calls are not wired into the analysis pipeline yet, and no model or real llama-server was run. The 34 new provider tests use a fake server on 127.0.0.1 and synthetic images. `bash scripts/check.sh --engine` passed 224 of 224 engine tests. The full `bash scripts/check.sh` passed 8 of 8. I did not run the Node lint, build or `node --test` checks, because the engine-only change does not touch Node code.
+
+An earlier attempt had ticked the P03.1 box in docs/roadmap.md. I set it back to unchecked so the orchestrator can tick it.
+
+The contract has `Prompt`, `ProviderHealth`, `Comparison` and `Critique` types plus the `VisionProvider` protocol. Its methods never raise: a failure comes back as a result with `ok=False` and a short error code.
+
+Copies are JPEG at quality 90 with a long side of at most 1,024 px, redrawn from decoded pixels so no EXIF, name or path is carried over. Images smaller than 1,024 px are not enlarged.
+
+Replies are validated against a JSON Schema by a small in-repo validator, because no JSON Schema package is approved as a dependency. Prompts carry a version string that appears in the results.
+
+Timeout, retries, call count, consecutive failures and max tokens are configurable in `engine/config.yaml` and always clamped to hard bounds. A wrapper stops calling a failing provider and marks the run degraded. A separate function returns a low-confidence verdict from the two prescores whenever a call fails.
+
+I changed `engine/requirements.txt` only in a comment, because httpx is now also the provider's HTTP client. It was already listed, so no new dependency was added.
+
+I updated docs/ai-providers.md, docs/testing.md, the roadmap progress note and CHANGELOG.md.
+- Files changed: engine/src/providers/__init__.py, engine/src/providers/contract.py, engine/src/providers/schemas.py, engine/src/providers/prompts.py, engine/src/providers/images.py, engine/src/providers/llama_server.py, engine/src/providers/fallback.py, engine/tests/test_providers.py, engine/config.yaml, engine/requirements.txt, docs/ai-providers.md, docs/testing.md, docs/roadmap.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The new provider code lives in engine/src/providers, apart from the legacy engine/src/vlm Ollama package, which P03.5 removes. P04 should call GuardedProvider and compare_or_prescore from there.
+  - No JSON Schema package is approved, so verdicts are validated by the in-repo validator in schemas.py. Extend it if a new schema needs more keywords.
+  - Provider settings live under the `ai.local` key of engine/config.yaml. They are built by ProviderSettings.from_mapping and clamped to hard bounds.
+  - Commit messages are checked by a validator that rejects the standalone word 'ai' in any case. The previous attempt failed on it, so write 'model' or 'provider' instead and never quote the config key.
+  - The roadmap checkbox must stay unchecked: a previous attempt ticked it and it had to be reverted. Only a dated progress note is added.
+  - Engine tests run with `bash scripts/check.sh --engine`, which uses the container (224 pass). The host has no Python.
+  - Not observed: a real llama-server, any model, and the pipeline using the provider. The provider is tested only against a fake server.
 ---

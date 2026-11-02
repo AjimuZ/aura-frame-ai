@@ -1,7 +1,9 @@
 # AI providers
 
-Status: **planned** ([P03](roadmap.md) and [P05](roadmap.md)). The code still uses the legacy
-client until those packages land. Decisions: [ADR 0003](decisions/0003-llama-cpp-runtime.md),
+Status: the contract and the local llama-server provider are **implemented** in `engine/src/providers`
+(P03.1), tested against a fake server only. They are **not yet wired into the pipeline**, no model has been
+run, and the Codex CLI provider is **planned** ([P05](roadmap.md)). The pipeline still uses the legacy client
+until [P03](roadmap.md) and [P04](roadmap.md) land. Decisions: [ADR 0003](decisions/0003-llama-cpp-runtime.md),
 [ADR 0004](decisions/0004-default-local-model.md),
 [ADR 0005](decisions/0005-codex-cli-provider.md).
 
@@ -19,11 +21,45 @@ class VisionProvider(Protocol):
 
 Contract:
 
-- Copies have a long side of 1,024 px and are JPEG, quality 90.
+- Copies have a long side of at most 1,024 px (smaller images are not enlarged) and are JPEG, quality 90.
+  `prepare_copy` draws them again from decoded pixels after applying the orientation, so no EXIF, ICC
+  profile, comment, file name or path is carried over. A provider refuses anything else (`check_copy`).
 - Output is validated against a JSON Schema. Invalid output is retried a bounded number of times,
   then recorded as failed. It never stops the run.
 - Timeouts, retries and call limits are configurable and always bounded.
 - A failed provider degrades the run to the local prescore and says so in the UI.
+- No method raises. A failure comes back as a result with `ok=False` and a short `error` code
+  (`invalid_input`, `unreachable`, `timeout`, `model_missing`, `http_<status>`, `invalid_output`,
+  `call_limit`, `degraded`). The error never holds model text, image data or a path.
+
+Types (all in `engine/src/providers/contract.py`):
+
+| Type | Fields |
+| --- | --- |
+| `Prompt` | `name`, `version`, `text`. The version is part of the verdict cache key |
+| `ProviderHealth` | `reachable`, `model_available`, `message` (what to do next); `ready` is both |
+| `Comparison` | `ok`, `winner` (`A`, `B`, `tie`), `confidence`, `reasons`, `note`, `provider`, `model`, `prompt_version`, `attempts`, `error` |
+| `Critique` | `ok`, `strengths`, `weaknesses`, `caption`, `provider`, `model`, `prompt_version`, `attempts`, `error` |
+
+The verdict schemas are in `engine/src/providers/schemas.py`, checked by a small in-repo validator (no
+JSON Schema package is approved). The `note` is capped at 160 characters, since a schema cannot count
+words. The prompts are in `prompts.py` (`compare-1`, `critique-1`).
+
+Limits (`ai.local` in `engine/config.yaml`, built by `ProviderSettings.from_mapping`). Every value is clamped:
+
+| Setting | Default | Hard bounds |
+| --- | --- | --- |
+| `timeout_seconds` (per attempt, on each read) | 120 | 0.25 to 600 |
+| `max_retries` | 2 | 0 to 5 |
+| `retry_delay_seconds` (times the attempt number) | 0.5 | 0 to 10 |
+| `max_calls` (per run) | 1,000 | 1 to 20,000 |
+| `max_consecutive_failures` | 3 | 1 to 20 |
+| `max_tokens` | 512 | 64 to 2,048 |
+
+`GuardedProvider` wraps any provider. After `max_consecutive_failures` failures in a row, or at `max_calls`,
+it stops calling the provider and sets `status.degraded` with a reason for the UI. `compare_or_prescore`
+returns a low-confidence verdict from the two prescores (source `prescore`) whenever a call fails, so the
+tournament can go on. Choosing that path in the pipeline and showing the reason in the UI come with P04.
 
 | Provider | Setting | Data leaves the computer | Default |
 | --- | --- | --- | --- |
@@ -73,7 +109,8 @@ llama-server
 ```
 
 Requests use `/v1/chat/completions` with images as base64 data URLs, `temperature: 0`, and
-`response_format` with the verdict JSON Schema. All flags above are present in the local image
+`response_format` with the verdict JSON Schema. `health()` reads `/health` and `/v1/models`. A 404 on a call
+is `model_missing` and is not retried; a 5xx, 408, 425 or 429 is retried within the bound. All flags above are present in the local image
 build 11960 (`--help` checked on 2026-11-01), except that `--gpu-layers all` comes from the
 upstream server documentation.
 

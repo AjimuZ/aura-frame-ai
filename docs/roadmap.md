@@ -199,11 +199,17 @@ the services, a GPU, and Chromium enforcing the renderer settings (the host has 
 
 **Depends on:** P02. **Areas:** providers, models.
 
-- [ ] P03.1 Define the `VisionProvider` contract and implement the llama-server provider.
+- [x] P03.1 Define the `VisionProvider` contract and implement the llama-server provider.
 - [ ] P03.2 Add `fetch-models` with pinned revisions and SHA-256 checks.
 - [ ] P03.3 Run the [bake-off](ai-providers.md#bake-off) on the reference PC, and record the results.
 - [ ] P03.4 Confirm or replace the default in [ADR 0004](decisions/0004-default-local-model.md).
 - [ ] P03.5 Remove the Ollama client, its settings, UI texts and tests.
+
+Progress 2026-11-02 (P03.1): `engine/src/providers` holds the `VisionProvider` contract, the llama-server provider,
+the verdict schemas with an in-repo validator, versioned prompts, copy preparation and a guard that degrades to the
+prescore ([AI providers](ai-providers.md#provider-contract)). Observed: `bash scripts/check.sh --engine` passed, 224 of 224
+engine tests (34 new, on a fake server and synthetic images). Not observed: a real llama-server, any model, and the
+pipeline using the provider (P04).
 
 Exit: the default model completes the benchmark on the reference PC with at least 0.5 GiB of GPU
 memory free at peak; no Ollama reference remains in the code; provider contract tests pass.

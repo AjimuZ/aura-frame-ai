@@ -12,8 +12,10 @@ PyYAML==6.0.2
 requests==2.32.3
 pytest==8.3.4
 
-# HTTP API (engine/api). httpx is only used by the FastAPI test client. None of these
-# packages sends telemetry.
+# HTTP API (engine/api). httpx is the FastAPI test client and also the HTTP client of the
+# local vision provider (engine/src/providers): it talks only to 127.0.0.1 or the internal
+# `vision` service, ignores proxy variables from the environment and follows no redirects.
+# None of these packages sends telemetry.
 fastapi==0.115.6
 pydantic==2.10.4
 uvicorn==0.34.0
