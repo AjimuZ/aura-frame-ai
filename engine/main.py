@@ -58,6 +58,7 @@ from src.generate_report import (  # noqa: E402
 )
 from src.index_photos import index_photos  # noqa: E402
 from src.index_photos import mark_duplicates  # noqa: E402
+from src.content_tags import tag_content  # noqa: E402
 from src.neural_stages import embed_siglip2, score_qrealign  # noqa: E402
 from src.quality_score import score_quality  # noqa: E402
 from src.vlm import judge_candidates  # noqa: E402
@@ -148,6 +149,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     if config.get("embeddings", {}).get("enabled", True):
         embed_siglip2(fresh, config, conn)
+        tag_content(fresh, config, conn)
         clusters = assign_clusters(photos, config, conn)
         events.progress("embeddings", len(photos), len(photos), f"Grouped into {clusters} clusters")
         for photo in photos:

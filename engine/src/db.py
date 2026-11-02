@@ -76,6 +76,12 @@ CREATE TABLE IF NOT EXISTS neural_scores (
     model TEXT, quality REAL, aesthetic REAL
 );
 
+-- One zero-shot content tag per photo, from the fixed list in content_tags.py; score is the cosine similarity.
+CREATE TABLE IF NOT EXISTS content_tags (
+    photo_id TEXT PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+    tag TEXT NOT NULL, score REAL, model TEXT
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     photo_id TEXT, stage TEXT, state TEXT, updated_at TEXT,
     PRIMARY KEY (photo_id, stage)
@@ -243,6 +249,21 @@ def save_neural_scores(
 def load_neural_scores(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
     rows = conn.execute("SELECT photo_id, model, quality, aesthetic FROM neural_scores").fetchall()
     return {r["photo_id"]: {"model": r["model"], "quality": r["quality"], "aesthetic": r["aesthetic"]} for r in rows}
+
+
+# Stores the content tag of a photo, replacing any earlier one. The caller validates the tag against the fixed list.
+def save_content_tag(conn: sqlite3.Connection, photo_id: str, tag: str, score: float, model: str) -> None:
+    conn.execute(
+        "INSERT OR REPLACE INTO content_tags(photo_id, tag, score, model) VALUES (?,?,?,?)",
+        (photo_id, tag, float(score), model),
+    )
+    conn.commit()
+
+
+# Loads every stored content tag as {photo_id: {"tag", "score", "model"}}.
+def load_content_tags(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
+    rows = conn.execute("SELECT photo_id, tag, score, model FROM content_tags").fetchall()
+    return {r["photo_id"]: {"tag": r["tag"], "score": r["score"], "model": r["model"]} for r in rows}
 
 
 # Persists a manual review session (slot assignments, per-slot locks, shortlist).

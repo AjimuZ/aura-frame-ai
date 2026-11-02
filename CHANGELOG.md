@@ -4,6 +4,9 @@
 
 ### Added
 
+- Content tags: each photo with a SigLIP 2 embedding gets one zero-shot tag from the fixed 16-label list in
+  `docs/pipeline.md` (no sensitive classes, no identity), stored in the new `content_tags` table. Without the model
+  or its text tower no tag is stored. Tested with fake encoders only; the real model was not run.
 - Photo grouping no longer depends on the order of the input. Groups are built by complete linkage on SigLIP 2
   embedding distance (`embeddings.cluster_distance`, 0.12) and, when both photos have a capture time, a time window
   (`embeddings.cluster_seconds`, 300). Photos without a usable time group by embedding alone. Both values are

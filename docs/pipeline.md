@@ -101,7 +101,17 @@ matching against fixed labels gives a content tag: `portrait`, `group`, `landsca
 Implemented in P04.3 (`embed_siglip2` in `engine/src/neural_stages.py`): batches of `models.siglip2.batch_size` give
 one float32 vector per photo, divided by its length, stored in the `embeddings` table with the model name. A zero,
 non-finite or wrongly shaped answer stores no vector, so grouping skips that photo; the old colour-histogram
-substitute is no longer used by `analyze`. Content tags are not implemented (P04.4).
+substitute is no longer used by `analyze`.
+
+Implemented in P04.4b (`engine/src/content_tags.py`, `SigLIP2Embedder.embed_text` in `engine/src/gpu_models.py`): the
+16 labels above are the single constant `CONTENT_TAGS`. Each label is encoded once per run as `a photo of <label>` by
+the SigLIP 2 text tower (padding `max_length`, 64 tokens), L2-normalized like the image vectors, and compared with the
+stored image vectors by cosine similarity. Each non-rejected photo with an embedding gets exactly one tag, the closest
+label (top-1, no threshold), stored with its similarity and model name in `content_tags` and replaced on every run. The
+similarity is not a probability and nothing ranks with it. Without the model, a text method, or a usable vector (wrong
+shape, not finite, no length) the photo gets no tag; the stage logs a structured `model_<reason>` error or a warning and
+never invents a label. The stage reloads the SigLIP 2 model after `embed_siglip2`, a short extra load. Verified with
+fake encoders only: the real text tower, the prompt wording and tag quality are unverified until P04.MEASURE.
 
 ### 5. Grouping
 

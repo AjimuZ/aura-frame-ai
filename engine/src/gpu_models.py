@@ -26,6 +26,8 @@ _PROMPTS = {
     AESTHETIC: ("How would you rate the aesthetics of this image?", "The aesthetics of the image are"),
 }
 _DEVICE_CHOICES = ("auto", "cuda", "cpu")
+# Fixed token length of SigLIP 2 text inputs.
+TEXT_MAX_LENGTH = 64
 
 
 class BatchScorer(Protocol):
@@ -46,6 +48,16 @@ class BatchEmbedder(Protocol):
 
     # Returns an array of shape (len(images), dim), one row per image, in order.
     def embed(self, images: Sequence[Image.Image]) -> np.ndarray: ...
+
+
+class TextEmbedder(Protocol):
+    """Optional second capability of an embedder: the text tower of the same model, for content tags."""
+
+    name: str
+    device: str
+
+    # Returns an array of shape (len(texts), dim), one row per text, in the image vectors' space.
+    def embed_text(self, texts: Sequence[str]) -> np.ndarray: ...
 
 
 # Returns the probability-weighted value of the five rating levels, between 0 and 1: the sum of each level's
@@ -127,6 +139,20 @@ class SigLIP2Embedder:
         self._processor = processor
         self.device = device
         self.name = name
+
+    # Returns an array of shape (len(texts), dim) from the text tower, in the same space as `embed`; the caller
+    # normalizes and validates it. SigLIP 2 was trained on text padded to a fixed length, so padding is
+    # "max_length" at TEXT_MAX_LENGTH tokens; dynamic padding would degrade the zero-shot match.
+    def embed_text(self, texts: Sequence[str]) -> np.ndarray:
+        inputs = self._processor(
+            text=list(texts), padding="max_length", max_length=TEXT_MAX_LENGTH, truncation=True, return_tensors="pt"
+        )
+        inputs = _to_device(inputs, self.device, self._model.dtype)
+        with self._torch.inference_mode():
+            features = self._model.get_text_features(**inputs)
+        if not self._torch.is_tensor(features):  # some releases return an output object
+            features = features.pooler_output
+        return features.float().cpu().numpy()
 
     # Returns an array of shape (len(images), dim); the caller normalizes and validates it.
     def embed(self, images: Sequence[Image.Image]) -> np.ndarray:
