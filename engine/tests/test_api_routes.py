@@ -173,7 +173,10 @@ def test_media_in_an_unknown_library_is_404(world: World) -> None:
 
 @pytest.mark.parametrize(
     "photo_id",
-    ["img_0123456789", "IMG_01234", "IMG_0123456789AB", "IMG_012345678G", "abc", "..", "%2e%2e", "..%2F..%2Fa.jpg"],
+    [
+        "img_0123456789", "IMG_01234", "IMG_0123456789AB", "IMG_012345678G", "abc", "..", "%2e%2e",
+        "..%2F..%2Fa.jpg", "0" * 63, "0" * 65, "A" * 64, "g" * 64,
+    ],
 )
 def test_media_malformed_photo_id_is_never_served(world: World, photo_id: str) -> None:
     response = world.client.get(f"/api/libraries/{LIB}/media/{photo_id}")

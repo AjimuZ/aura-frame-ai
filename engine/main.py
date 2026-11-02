@@ -91,20 +91,21 @@ def cmd_analyze(args: argparse.Namespace) -> int:
 
     conn = db.connect(config)
     include_subfolders = not args.no_subfolders
-    photos = index_photos(folder, config, include_subfolders)
 
-    # Resumability: reuse fully-ranked photos whose file bytes are unchanged.
-    stored = {p.id: p for p in db.load_photos(conn)}
+    # Resumability: the photo ID is the content hash, so a fully-ranked photo with the same
+    # bytes is reused as stored (not decoded again), also when the file was moved or renamed.
+    finished = {
+        p.id: p for p in db.load_photos(conn) if db.get_stage(conn, p.id, "rank") == "done"
+    }
+    photos = index_photos(folder, config, include_subfolders, known=finished)
     fresh: list[Photo] = []
     resumed = 0
-    for i, photo in enumerate(photos):
-        prior = stored.get(photo.id)
-        if prior and prior.file_hash == photo.file_hash and db.get_stage(conn, photo.id, "rank") == "done":
-            photos[i] = prior
+    for photo in photos:
+        if photo.carried_over:
             resumed += 1
         else:
             fresh.append(photo)
-            db.upsert_photo(conn, photo)
+        db.upsert_photo(conn, photo)  # also records the new path of a moved file
     if resumed:
         events.log(f"Resuming: {resumed} unchanged photos skipped.", "info")
 
@@ -191,7 +192,8 @@ def cmd_index(args: argparse.Namespace) -> int:
         events.error(f"Input folder does not exist: {folder}")
         return 1
     conn = db.connect(config)
-    photos = index_photos(folder, config, not args.no_subfolders)
+    known = {p.id: p for p in db.load_photos(conn)}
+    photos = index_photos(folder, config, not args.no_subfolders, known=known)
     for photo in photos:
         db.upsert_photo(conn, photo)
         db.set_stage(conn, photo.id, "ingest", "done")

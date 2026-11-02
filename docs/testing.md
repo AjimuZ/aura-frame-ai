@@ -111,7 +111,7 @@ library `exit-check-synthetic` through the gateway, and polls `runs/current` for
 | --- | --- |
 | The path without the window works | `POST .../runs` answers 202, and `runs/current` ends with `"step":"done"` |
 | The engine did not fail | The replayed event stream has a `done` event and no `error` event |
-| Results are served by ID | `GET .../photos` lists one `IMG_` ID per synthetic image |
+| Results are served by ID | `GET .../photos` lists one content-hash ID (64 hex digits) per synthetic image |
 | Originals stay unchanged | Name, size and checksum of every file match before and after the run |
 
 On exit it deletes the library's generated data through the API and runs `./start.sh --stop`, which keeps the

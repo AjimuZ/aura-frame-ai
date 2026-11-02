@@ -34,6 +34,8 @@ output:
   # Number of strongest candidates forwarded to the local VLM (was 150 indiscriminate).
   vlm_candidate_count: 70
   thumbnail_size: 512
+  # Long side of the upright working copy that every scoring stage reads (never upscaled).
+  working_copy_size: 1536
 
 filters:
   min_width: 800

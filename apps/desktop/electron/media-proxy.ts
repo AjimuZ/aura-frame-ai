@@ -6,7 +6,7 @@ import type { LibraryRegistryStore } from './ipc/library-store';
 
 // The same patterns as the API (engine/api/storage.py), so a bad ID never becomes a request.
 const LIBRARY_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
-const PHOTO_ID_PATTERN = /^IMG_[0-9A-F]{10}$/;
+const PHOTO_ID_PATTERN = /^(?:[0-9a-f]{64}|IMG_[0-9A-F]{10})$/;
 // A URL holds exactly these two parameters, so no variant or path can be smuggled in beside them.
 const PARAMETER_COUNT = 2;
 

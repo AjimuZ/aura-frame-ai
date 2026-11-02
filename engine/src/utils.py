@@ -191,20 +191,46 @@ def read_image_bgr(path: str) -> np.ndarray | None:
         return None
 
 
-# Produces a stable short id for a photo based on its absolute path.
-def photo_id_for(path: Path) -> str:
-    digest = hashlib.sha1(str(path.resolve()).encode("utf-8")).hexdigest()
-    return f"IMG_{digest[:10].upper()}"
-
-
-# Computes the SHA-256 of a file's bytes (exact-duplicate detection). Streamed in chunks
-# so large originals never load fully into memory.
+# Computes the SHA-256 of a file's bytes as 64 lower-case hex digits. The file is opened
+# read-only and streamed in chunks, so large originals never load fully into memory.
 def file_sha256(path: str | Path) -> str:
     digest = hashlib.sha256()
     with open(path, "rb") as handle:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+# Returns the photo ID of a file: the SHA-256 of its content. The ID does not depend on the
+# path or the name, so a moved or renamed file keeps its results and byte-identical copies
+# share one ID. Raises OSError when the file cannot be read.
+def photo_id_for(path: str | Path) -> str:
+    return file_sha256(path)
+
+
+# Returns the directory of the upright working copies (under the working directory).
+def working_copies_dir(config: dict[str, Any]) -> Path:
+    return working_dir(config) / "copies"
+
+
+# Returns where the working copy of a photo lives. Nothing is created. The copy is the only
+# image the scoring stages read, so each original is decoded once, at ingest.
+def working_copy_path(config: dict[str, Any], photo_id: str) -> Path:
+    return working_copies_dir(config) / f"{photo_id}.jpg"
+
+
+# Returns where the thumbnail of a photo lives. Nothing is created.
+def thumbnail_path_for(config: dict[str, Any], photo_id: str) -> Path:
+    return thumbs_dir(config) / f"{photo_id}.jpg"
+
+
+# Reads the upright working copy of a photo as a BGR numpy array. Returns None when the copy
+# is missing or unreadable. The copy carries no orientation tag, so no stage rotates it again.
+def read_working_bgr(photo: "Photo", config: dict[str, Any]) -> np.ndarray | None:
+    path = working_copy_path(config, photo.id)
+    if not path.is_file():
+        return None
+    return cv2.imread(str(path))
 
 
 # Writes the full photo list as JSON for the desktop app to read (mirror of the DB).
@@ -276,6 +302,9 @@ class Photo:
     # Raw metrics used only at gate time (transient; intentionally not serialized).
     brightness_mean: float = 0.0
     laplacian_variance: float = 0.0
+    # True when ingest reused a stored record for unchanged content instead of decoding the
+    # file again. Transient: never serialized or persisted.
+    carried_over: bool = False
 
     # --- OpenAI Quality Mode results (only set when the optional cloud flow runs) ---
     openai_broad: dict[str, Any] | None = None

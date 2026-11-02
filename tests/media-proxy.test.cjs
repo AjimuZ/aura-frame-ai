@@ -13,6 +13,8 @@ const REPO_ROOT = path.resolve(__dirname, '..');
 const ANGULAR_APP = path.join(REPO_ROOT, 'apps', 'desktop', 'angular', 'src', 'app');
 const LIBRARY_ID = '11111111-1111-4111-8111-111111111111';
 const PHOTO_ID = 'IMG_0123456789';
+// A photo ID minted from the content: the SHA-256 as 64 lower-case hex digits.
+const CONTENT_ID = '0123456789abcdef'.repeat(4);
 const TOKEN = 'c0ffee'.repeat(10) + 'abcd';
 const IMAGE = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0xff, 0xd9]);
 const MEDIA_URL = `afmedia://media/?libraryId=${LIBRARY_ID}&photoId=${PHOTO_ID}`;
@@ -89,6 +91,13 @@ test('with the services up it asks for the thumbnail by ID, with the token added
   assert.equal(request.headers.host, `127.0.0.1:${api.port}`);
 });
 
+test('a content-hash photo ID is accepted and forwarded unchanged', async (t) => {
+  const { api, get } = await setup(t);
+  const response = await get(`afmedia://media/?libraryId=${LIBRARY_ID}&photoId=${CONTENT_ID}`);
+  assert.equal(response.status, 200);
+  assert.equal(api.requests[0].url, `/api/libraries/${LIBRARY_ID}/media/${CONTENT_ID}?variant=thumbnail`);
+});
+
 test('only fixed headers reach the renderer, never one from the API', async (t) => {
   const { api, get } = await setup(t);
   api.answer = (res) => {
@@ -122,6 +131,9 @@ test('a malformed request is answered with 404 and never reaches the API', async
     ['library with a slash', `afmedia://media/?libraryId=a%2Fb&${photo}`],
     ['lower-case photo', `afmedia://media/?${library}&photoId=img_0123456789`],
     ['short photo', `afmedia://media/?${library}&photoId=IMG_012`],
+    ['content hash in upper case', `afmedia://media/?${library}&photoId=${CONTENT_ID.toUpperCase()}`],
+    ['content hash one digit short', `afmedia://media/?${library}&photoId=${CONTENT_ID.slice(1)}`],
+    ['content hash with a trailing newline', `afmedia://media/?${library}&photoId=${CONTENT_ID}%0A`],
     ['photo with a traversal', `afmedia://media/?${library}&photoId=..%2F..%2Fconfig`],
     ['photo with a query', `afmedia://media/?${library}&photoId=IMG_0123456789%3Fvariant%3Doriginal`],
     ['photo with a trailing newline', `afmedia://media/?${library}&photoId=IMG_0123456789%0A`],

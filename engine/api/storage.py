@@ -20,8 +20,10 @@ DEFAULT_EXPORTS_ROOT = "/exports"
 # Library ids come from the URL. They start with an alphanumeric character and then allow only
 # letters, digits, "_" and "-", so an id can never contain a separator or a dot segment.
 LIBRARY_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
-# Photo ids are minted by the engine (photo_id_for): "IMG_" plus ten upper-case hex digits.
-PHOTO_ID_PATTERN = r"^IMG_[0-9A-F]{10}$"
+# Photo ids are minted by the engine (photo_id_for): the SHA-256 of the content, as 64 lower-case
+# hex digits. The older path-based shape, "IMG_" plus ten upper-case hex digits, is still accepted
+# so a library analyzed before content ids can be listed and served until it is analyzed again.
+PHOTO_ID_PATTERN = r"^(?:[0-9a-f]{64}|IMG_[0-9A-F]{10})$"
 
 # Directories of one library that hold generated data only; the DELETE route removes these.
 GENERATED_DIRS = ("working", "output", "reports")

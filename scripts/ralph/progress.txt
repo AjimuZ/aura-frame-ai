@@ -57,6 +57,10 @@
 - Accept a downloaded artifact only by writing it to a hidden partial file, verifying size, hash and header, then renaming it atomically; delete the partial file in a finally block.
 - A service that needs an internet route goes behind its own Compose profile and is started only via `compose run --rm` from one explicit start.sh flag; the compose policy names it as the sole egress service.
 - Use an extension allow-list (`.gguf`, `.safetensors`) rather than a block-list for model files, and confirm the format from the first bytes as well.
+- Derive an identifier from content (SHA-256), never from a path, so results survive moves and renames; keep pattern validators in the API and in Electron main in step.
+- Decode an original once, bake in orientation at that point, and hand every later stage a derived copy with no orientation tag; a stage that cannot find the copy reports it rather than reopening the original.
+- Write derived files to `<name>.part` and `os.replace` them into place, so a crash never leaves a truncated file that a later run would accept.
+- Test a privacy property from the data side: build a synthetic input that carries the forbidden field (GPS), assert the fixture really has it, then assert it is absent from the record, the database rows, the mirror file and the derived images.
 
 ---
 
@@ -635,4 +639,20 @@ I updated docs/ai-providers.md, docs/testing.md, the roadmap progress note and C
   - The fetch-models image creates /models owned by uid 10001, so an empty volume takes that owner. A volume that already holds files owned by root is reported as not writable; docs/operations.md#model-files gives the remedy.
   - `bash scripts/check.sh --integration` now builds the fetch-models image and checks its isolation. It downloads nothing.
   - Not observed yet: a real download from Hugging Face. The first `./start.sh --fetch-models` on the reference PC is the first real check of the pins.
+---
+
+## 2026-11-02T13:37:51Z - P04.1
+- P04.1 is implemented. Ingest hashes each original with SHA-256 and uses that hash as the photo ID. It decodes the original once, applies the EXIF orientation once, and writes an upright working copy (long side at most 1,536 px, never upscaled) and a 512 px thumbnail. Quality, faces and embeddings now read only the working copy. A moved or renamed file with the same bytes keeps its stored results and is not decoded again. Only capture time, camera make and model are kept from EXIF. Originals are only opened with mode "rb". `bash scripts/check.sh --engine` passed 282 of 282, and `bash scripts/check.sh --node` passed (lint, both builds, 181 of 182 node tests, 1 skipped). I did not run `bash scripts/check.sh --integration` or a full `analyze` run.
+- Files changed: engine/src/ingest.py, engine/src/utils.py, engine/src/index_photos.py, engine/src/quality_score.py, engine/src/face_quality.py, engine/src/embeddings.py, engine/src/db.py, engine/main.py, engine/config.yaml, engine/api/storage.py, apps/desktop/electron/media-proxy.ts, tests/integration/backend-run.sh, tests/media-proxy.test.cjs, engine/tests/test_ingest.py, engine/tests/conftest.py, engine/tests/test_engine.py, engine/tests/test_pipeline.py, engine/tests/test_api_routes.py, CHANGELOG.md, docs/roadmap.md, docs/assessment.md, docs/pipeline.md, docs/architecture.md, docs/testing.md
+- **Learnings for future iterations:**
+  - The photo ID is the full SHA-256 as 64 lower-case hex digits: `photo_id_for(path)` equals `file_sha256(path)`. PHOTO_ID_PATTERN (engine/api/storage.py) and the Electron media proxy accept both the new shape and the older `IMG_` plus 10 upper-case hex shape. The older shape can be dropped once nothing stored uses it.
+  - Derived files live in `working_dir/copies/<id>.jpg` and `thumbs_dir/<id>.jpg`. Use `working_copy_path`, `thumbnail_path_for` and `read_working_bgr` from engine/src/utils.py; `read_working_bgr` returns None when the copy is missing, and there is deliberately no fallback to the original.
+  - `ingest_image(..., known={id: Photo})` and `index_photos(..., known=...)` skip the decode when the stored record and its derived files exist, and set the transient `Photo.carried_over`. engine/main.py `cmd_analyze` passes only photos whose `rank` stage is done, and treats `carried_over` as resumed.
+  - Policy for byte-identical files: they share one ID, so `index_photos` keeps the first in path order and drops the rest. `mark_duplicates` level 1 is therefore no longer reached from `index_photos`; it still works on records that carry the same `file_hash`.
+  - `db.upsert_photo` now deletes other records with the same `file_path` and a different ID, with their scores, faces, embeddings and jobs. This replaces stale records for edited files and for records from the older ID scheme.
+  - Classic quality measures (blur, brightness, contrast) now run on the working copy, which has a long side of at most 1,536 px. The thresholds in config.yaml were tuned on full-size images and may need retuning in P04.2.
+  - The new stages must read the working copy: P04.3 (Q-ReAlign scoring and SigLIP 2 embeddings) should use `working_copy_path`, not `photo.file_path`. The legacy `src/cloud` preparer still opens originals and is removed in P05.5.
+  - Tests that call `score_quality` or `score_faces` must ingest first and use the `data_config` fixture from conftest.py, which redirects generated files under tmp_path. A `Photo` built by hand has no working copy.
+  - To count decodes in tests, wrap `PIL.Image.open` and `cv2.imread` with `monkeypatch` and record the path (see `DecodeRecorder` in engine/tests/test_ingest.py). To build EXIF with GPS, hand-encode the TIFF block (`_rich_exif`); Pillow's nested `get_ifd` writes did not produce a GPS block when I tried it.
+  - Not verified: a full `analyze` run through engine/main.py with the new ingest, and `bash scripts/check.sh --integration`. Its photo-ID assertion in tests/integration/backend-run.sh now greps for a 64-hex `"id"` value. The `compose` check was not rerun because no compose file changed.
 ---

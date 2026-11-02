@@ -96,12 +96,14 @@ def test_latest_review_session(db_config: dict) -> None:
 
 # An extreme aspect ratio is no longer auto-rejected: the minimal gate keeps it and adds an
 # odd-composition soft flag (it is tall enough to clear the hard low-resolution floor).
-def test_minimal_gate_flags_extreme_aspect(tmp_path: Path, config: dict) -> None:
+def test_minimal_gate_flags_extreme_aspect(tmp_path: Path, db_config: dict) -> None:
+    config = db_config
     cols = np.indices((500, 3000))[1]
     base = ((cols // 6) % 2) * 120 + 60
     rgb = np.stack([base, base, base], axis=-1)
     path = _save_jpg(rgb, tmp_path / "pano.jpg")
-    photo = Photo(id="t", file_path=str(path), file_name="pano.jpg", width=3000, height=500)
+    photo = ingest_image(path, config)
+    assert (photo.width, photo.height) == (3000, 500)
     score_quality(photo, config)
     assert photo.status != "rejected"  # measurement never rejects
     apply_local_minimal_gate(photo, config)

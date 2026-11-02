@@ -51,7 +51,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | B2 | ~~The local model receives photos sideways. Orientation is not applied, and the EXIF tag is dropped~~ **Resolved in P03.5:** the legacy client that sent the photos is removed. The provider copy applies the EXIF orientation before the metadata is dropped (`engine/src/providers/images.py`), and the model stage no longer sends photos to a model at all until P04 | Read: `engine/src/providers/images.py:21`–`26`; the legacy client file is gone |
 | B3 | Reranking is not idempotent, so penalties compound on each AI re-review | `engine/src/final_ranker.py:130`, `engine/main.py:218` | Run: 8.0 becomes 7.2, then 6.48 |
 | B4 | AI re-review breaks the final set. `rank_photo` resets `selected`, and the command never selects again | `engine/src/final_ranker.py:99`, `engine/main.py:206`–`224` | Run: status goes from `selected` to `accepted`. The command path is read |
-| B5 | Embeddings ignore EXIF orientation | `engine/src/embeddings.py:62` | Read |
+| B5 | ~~Embeddings ignore EXIF orientation~~ **Resolved in P04.1:** ingest applies the orientation once, and embeddings read the upright working copy (`engine/src/embeddings.py`) | Run: `engine/tests/test_ingest.py` (orientation 6 gives an upright working copy and thumbnail) |
 | B6 | Absolute 1 to 10 votes from the model are the main AI signal, the protocol that published evidence finds least reliable | `engine/src/vlm/schema.py:12` | Read, and [ADR 0006](decisions/0006-comparative-curation-pipeline.md) |
 | B7 | Without AI, the suitability term falls back to the technical score, so it counts twice. Diversity is a constant 60 | `engine/src/final_ranker.py:67`, `:74` | Read |
 | B8 | A clean install has no aesthetic weights, and the fallback derives a score from vector spread and shows it as a real score | `engine/src/aesthetic.py:34`, `:68` | Read |
@@ -62,9 +62,9 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 
 | ID | Defect | Location | Evidence |
 | --- | --- | --- | --- |
-| C1 | Each original is fully decoded three times, by quality, faces and embeddings | `engine/src/quality_score.py:60`, `engine/src/face_quality.py:64`, `engine/src/embeddings.py:62` | Read |
+| C1 | ~~Each original is fully decoded three times, by quality, faces and embeddings~~ **Resolved in P04.1:** ingest decodes each original once and the three stages read the working copy | Run: `engine/tests/test_ingest.py` counts one decode per original |
 | C2 | Models run on CPU, one image at a time, on a PC with a 12 GB GPU | `engine/src/embeddings.py:37`–`41` | Read |
-| C3 | Photo IDs hash the absolute path. Moving a folder loses all results | `engine/src/utils.py:190` | Read |
+| C3 | ~~Photo IDs hash the absolute path. Moving a folder loses all results~~ **Resolved in P04.1:** the ID is the SHA-256 of the content (`photo_id_for` in `engine/src/utils.py`) | Run: `engine/tests/test_ingest.py` (a moved file keeps its ID and results) |
 
 ### Environment and repository
 

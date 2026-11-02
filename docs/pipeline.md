@@ -38,6 +38,14 @@ folder
 - Compute SHA-256 and use it as the photo ID. Moving or renaming a folder keeps all results.
 - Keep only capture time, camera make and model from EXIF. GPS is never stored.
 
+Implemented in P04.1 (`engine/src/ingest.py`): the working copy is a JPEG with no orientation tag and a long side of
+at most 1,536 px (never upscaled); the thumbnail is cut from it, so the original is decoded once. A moved or renamed
+file with the same bytes keeps its stored results and is not decoded again; changed bytes at the same path are a new
+photo and replace the old record. Byte-identical files share one ID, so only the first copy in path order is indexed
+and the others are counted in a log line. Sharpness and the other classic measures are now taken on the working copy,
+so the thresholds in `engine/config.yaml` now apply at that scale and may need retuning with the new gate (P04.2). A library stored before this
+change keeps its `IMG_` records until its folder is analyzed again.
+
 ### 2. Sanity gate
 
 Rejects only: unreadable files, byte-identical duplicates, unsupported formats, and images

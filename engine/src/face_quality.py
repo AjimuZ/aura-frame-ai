@@ -19,7 +19,7 @@ import numpy as np
 
 import mediapipe as mp
 
-from .utils import Photo, read_image_bgr
+from .utils import Photo, read_working_bgr
 
 _mp_face = mp.solutions.face_detection
 _detector: Any = None
@@ -59,9 +59,10 @@ def _get_detector(min_conf: float) -> Any:
 _RIGHT_EYE, _LEFT_EYE, _NOSE, _MOUTH, _RIGHT_EAR, _LEFT_EAR = range(6)
 
 
-# Computes face-quality metrics for a photo using MediaPipe face detection only.
+# Computes face-quality metrics for a photo using MediaPipe face detection only. It reads the
+# upright working copy made at ingest, never the original; without one the photo is unchanged.
 def score_faces(photo: Photo, config: dict[str, Any]) -> Photo:
-    image = read_image_bgr(photo.file_path)
+    image = read_working_bgr(photo, config)
     if image is None:
         return photo
 

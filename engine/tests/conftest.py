@@ -28,6 +28,14 @@ def config() -> dict:
     return load_config()
 
 
+# A config whose generated files (working copies, thumbnails, database) all live under tmp_path.
+@pytest.fixture()
+def data_config(config: dict, tmp_path: Path) -> dict:
+    from src.utils import apply_data_root
+
+    return apply_data_root(config, str(tmp_path / "dataroot"))
+
+
 @pytest.fixture()
 def sharp_image(tmp_path: Path) -> Path:
     # High-frequency checkerboard => high Laplacian variance (sharp).

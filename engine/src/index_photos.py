@@ -1,7 +1,7 @@
 """Photo indexing: discover images and delegate per-file ingestion, then mark duplicates.
 
-Ingestion (hashing, EXIF orientation, thumbnails) lives in src.ingest. Originals are
-opened read-only and never modified.
+Ingestion (hashing, EXIF orientation, working copies, thumbnails) lives in src.ingest.
+Originals are opened read-only and never modified.
 """
 
 from pathlib import Path
@@ -14,28 +14,47 @@ from .ingest import ingest_image
 from .utils import Photo, discover_images, resolve_path
 
 
-# Indexes all supported images in the input folder into Photo records.
+# Indexes all supported images in the input folder into Photo records, one per distinct content.
+#
+# Photo IDs are content hashes, so byte-identical files share one ID and would overwrite each
+# other in the database. The policy is therefore: the first copy in path order is the photo, and
+# later byte-identical copies are skipped (and counted in a log line). `known` maps IDs of
+# already analyzed photos to their stored records; a file whose content is in it is not decoded
+# again and keeps its results even when it was moved or renamed.
 def index_photos(
     input_folder: Path,
     config: dict[str, Any],
     include_subfolders: bool,
     generate_thumbnails: bool = True,
+    known: dict[str, Photo] | None = None,
 ) -> list[Photo]:
     extensions = config["input"]["supported_extensions"]
     files = discover_images(input_folder, extensions, include_subfolders)
 
     photos: list[Photo] = []
+    seen: dict[str, Photo] = dict(known or {})
+    first_of_run: set[str] = set()
+    collapsed = 0
     total = len(files)
     events.progress("indexing", 0, total, f"Found {total} images")
 
     for i, path in enumerate(files, start=1):
-        photo = ingest_image(path, config, generate_thumbnail=generate_thumbnails)
-        if photo.status == "rejected" and photo.reject_reason == "unreadable_image":
-            events.log(f"Skipping unreadable image {path.name}", level="warning")
-        photos.append(photo)
+        photo = ingest_image(path, config, generate_thumbnail=generate_thumbnails, known=seen)
+        if photo.id in first_of_run:
+            collapsed += 1
+        else:
+            first_of_run.add(photo.id)
+            if photo.status == "rejected" and photo.reject_reason == "unreadable_image":
+                events.log(f"Skipping unreadable image {path.name}", level="warning")
+            else:
+                # A later copy of these bytes finds the derived files and is not decoded again.
+                seen[photo.id] = photo
+            photos.append(photo)
         if i % 25 == 0 or i == total:
             events.progress("indexing", i, total, f"Indexed {i}/{total}")
 
+    if collapsed:
+        events.log(f"{collapsed} byte-identical copies share the ID of an earlier photo.", "info")
     return photos
 
 

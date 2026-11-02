@@ -167,7 +167,7 @@ else
 fi
 
 photos="$(api GET "/api/libraries/$LIBRARY_ID/photos")"
-listed="$(body_of "$photos" | grep -oE 'IMG_[0-9A-F]{10}' | sort -u | wc -l | tr -d ' ')"
+listed="$(body_of "$photos" | grep -oE '"id": ?"[0-9a-f]{64}"' | sort -u | wc -l | tr -d ' ')"
 if [ "$(status_of "$photos")" = "200" ] && [ "$listed" = "$IMAGE_COUNT" ]; then
   pass "GET photos lists the $IMAGE_COUNT synthetic photos by ID"
 else

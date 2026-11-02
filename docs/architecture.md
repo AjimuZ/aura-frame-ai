@@ -251,7 +251,7 @@ reach an original and an export cannot land in the photos folder.
 
 Rules the routes follow:
 
-- A library id matches `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` and a photo id matches `^IMG_[0-9A-F]{10}$`.
+- A library id matches `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$` and a photo id matches `^(?:[0-9a-f]{64}|IMG_[0-9A-F]{10})$`: the SHA-256 of the content, or the older path-based shape, which is still accepted so a library analyzed before content IDs can be listed until it is analyzed again.
   Anything else is refused with HTTP 422. No route takes a path.
 - `GET /api/libraries/{id}/media/{photo_id}` looks the photo up in SQLite. The stored path must
   resolve inside the photos root (`?variant=original`) or the library's `thumbs/` directory (default

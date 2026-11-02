@@ -9,7 +9,7 @@ from typing import Any
 import cv2
 import numpy as np
 
-from .utils import Photo, read_image_bgr
+from .utils import Photo, read_working_bgr
 
 
 # Computes the variance of the Laplacian as a sharpness measure (higher = sharper).
@@ -54,10 +54,12 @@ def _looks_like_screenshot(photo: Any, gray: np.ndarray) -> bool:
     return suffix == "png" and unique_ratio < 0.35 and edge_density < 0.06
 
 
-# Computes all quality metrics for a single photo and updates it in place.
+# Computes all quality metrics for a single photo and updates it in place. It reads the upright
+# working copy made at ingest (long side at most 1,536 px), never the original, so sharpness is
+# measured at that scale; a photo without a working copy is marked as unreadable.
 def score_quality(photo: Photo, config: dict[str, Any]) -> Photo:
     filters = config["filters"]
-    image = read_image_bgr(photo.file_path)
+    image = read_working_bgr(photo, config)
     if image is None:
         photo.status = "rejected"
         photo.reject_reason = "unreadable_image"

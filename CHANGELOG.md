@@ -4,6 +4,13 @@
 
 ### Added
 
+- Ingest now decodes each original once and writes an upright working copy (long side at most 1,536 px) and a
+  512 px thumbnail; quality, faces and embeddings read the working copy, and the EXIF orientation is applied once.
+  Photo IDs are the SHA-256 of the content, so a moved or renamed file keeps its results, an unchanged file is not
+  decoded again, and byte-identical copies count as one photo. Only capture time, camera make and model are kept
+  from EXIF; GPS is never stored. Tested on synthetic images in the container run (282 engine tests); a full
+  `analyze` run and the integration check have not been run. A library analyzed before this change is analyzed
+  again from scratch, and its old records are replaced when a file path is seen again.
 - The engine has the skeleton of its HTTP API (`engine/api`). Every request needs the per-session token
   and a local Host header, and no CORS header is ever sent.
 - The engine API gained read routes under `/api`: the photos of a library, images served by photo ID

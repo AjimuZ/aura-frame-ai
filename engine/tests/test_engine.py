@@ -7,9 +7,10 @@ import cv2
 
 from src.final_ranker import rank_photo, select_final_set
 from src.index_photos import index_photos, mark_duplicates
+from src.ingest import ingest_image
 from src.local_gate import apply_local_minimal_gate
 from src.quality_score import blur_variance, score_quality
-from src.utils import Photo, photo_id_for, read_image_bgr
+from src.utils import Photo, file_sha256, photo_id_for, read_image_bgr
 
 
 # A sharp checkerboard should have far higher Laplacian variance than a flat image.
@@ -21,11 +22,11 @@ def test_blur_variance_ordering(sharp_image: Path, blurry_image: Path) -> None:
 
 # score_quality only MEASURES now; the Local Minimal Gate decides. A moderately dark photo
 # is kept and soft-flagged (low_light); only a truly black frame is a hard reject.
-def test_minimal_gate_dark_handling(dark_image: Path, config: dict) -> None:
-    photo = Photo(id="t", file_path=str(dark_image), file_name="dark.jpg", width=1000, height=1000)
-    score_quality(photo, config)
+def test_minimal_gate_dark_handling(dark_image: Path, data_config: dict) -> None:
+    photo = ingest_image(dark_image, data_config)
+    score_quality(photo, data_config)
     assert photo.status != "rejected"  # measurement never rejects a readable image
-    apply_local_minimal_gate(photo, config)
+    apply_local_minimal_gate(photo, data_config)
     if photo.brightness_mean < 10:
         assert photo.gate_status == "hard_reject"
     else:
@@ -34,35 +35,40 @@ def test_minimal_gate_dark_handling(dark_image: Path, config: dict) -> None:
         assert "local_flag_low_light" in photo.soft_flags
 
 
-# Byte-identical images should be detected as exact duplicates (all but one rejected).
-def test_duplicate_detection(sharp_image: Path, tmp_path: Path, config: dict) -> None:
+# Byte-identical files share one content-hash ID, so indexing keeps the first copy only; the
+# exact-duplicate marker still rejects two records that carry the same file hash.
+def test_duplicate_detection(sharp_image: Path, tmp_path: Path, data_config: dict) -> None:
     copy_path = tmp_path / "sharp_copy.jpg"
     copy_path.write_bytes(sharp_image.read_bytes())
-    photos = index_photos(tmp_path, config, include_subfolders=False)
-    duplicates = mark_duplicates(photos)
-    assert duplicates >= 1
-    assert any(p.status == "rejected" and p.reject_reason == "duplicate_exact" for p in photos)
+    photos = index_photos(tmp_path, data_config, include_subfolders=False)
+    assert [p.file_name for p in photos] == ["sharp.jpg"]
+    twin = Photo(id="twin", file_path="x.jpg", file_name="x.jpg", file_hash=photos[0].file_hash)
+    assert mark_duplicates([photos[0], twin]) >= 1
+    assert twin.status == "rejected" and twin.reject_reason == "duplicate_exact"
 
 
-# Photo ids must be stable for the same path and differ across paths.
-def test_photo_id_stable(tmp_path: Path) -> None:
+# Photo ids are the content hash: stable across paths and names, different for different bytes.
+def test_photo_id_is_the_content_hash(tmp_path: Path) -> None:
     a = tmp_path / "a.jpg"
     b = tmp_path / "b.jpg"
+    c = tmp_path / "renamed.png"
     a.write_bytes(b"x")
     b.write_bytes(b"y")
-    assert photo_id_for(a) == photo_id_for(a)
+    c.write_bytes(b"x")
+    assert photo_id_for(a) == file_sha256(a)
+    assert len(photo_id_for(a)) == 64
+    assert photo_id_for(a) == photo_id_for(c)
     assert photo_id_for(a) != photo_id_for(b)
 
 
-# HEIC images must be readable and scoreable (via the Pillow fallback).
-def test_heic_supported(heic_image: Path, config: dict) -> None:
+# HEIC images must be readable (via the Pillow fallback) and scoreable from their working copy.
+def test_heic_supported(heic_image: Path, data_config: dict) -> None:
     image = read_image_bgr(str(heic_image))
     assert image is not None
     assert image.shape[2] == 3
-    photo = Photo(
-        id="t", file_path=str(heic_image), file_name="photo.heic", width=1000, height=1000
-    )
-    score_quality(photo, config)
+    photo = ingest_image(heic_image, data_config)
+    assert photo.status != "rejected"
+    score_quality(photo, data_config)
     assert photo.technical_score >= 0
 
 

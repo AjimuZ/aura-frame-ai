@@ -847,8 +847,8 @@
         "Originals are opened read-only"
       ],
       "priority": 29,
-      "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Depends on the provider contract, not on the bake-off, which needs the owner. Closes B5, C1 and C3. Synthetic images only.",
+      "passes": true,
+      "notes": "P04.1 is implemented. Ingest hashes each original with SHA-256 and uses that hash as the photo ID. It decodes the original once, applies the EXIF orientation once, and writes an upright working copy (long side at most 1,536 px, never upscaled) and a 512 px thumbnail. Quality, faces and embeddings now read only the working copy. A moved or renamed file with the same bytes keeps its stored results and is not decoded again. Only capture time, camera make and model are kept from EXIF. Originals are only opened with mode \"rb\". `bash scripts/check.sh --engine` passed 282 of 282, and `bash scripts/check.sh --node` passed (lint, both builds, 181 of 182 node tests, 1 skipped). I did not run `bash scripts/check.sh --integration` or a full `analyze` run.",
       "dependsOn": [
         "P03.1",
         "P03.5"

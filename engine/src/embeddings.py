@@ -14,7 +14,7 @@ from PIL import Image
 
 from . import db
 from . import progress_events as events
-from .utils import Photo
+from .utils import Photo, working_copy_path
 
 _FALLBACK_MODEL = "fallback-colorhist"
 
@@ -57,9 +57,13 @@ def _fallback_embedding(image: Image.Image) -> np.ndarray:
     return hist / norm
 
 
-# Computes a single L2-normalized embedding for a photo using CLIP or the fallback.
-def compute_embedding(photo: Photo, state: dict[str, Any] | None) -> tuple[np.ndarray, str]:
-    with Image.open(photo.file_path) as image:
+# Computes a single L2-normalized embedding for a photo using CLIP or the fallback. It reads the
+# upright working copy made at ingest (so orientation is already applied), never the original.
+# Raises OSError when the working copy is missing.
+def compute_embedding(
+    photo: Photo, state: dict[str, Any] | None, config: dict[str, Any]
+) -> tuple[np.ndarray, str]:
+    with Image.open(working_copy_path(config, photo.id)) as image:
         image.load()
         if state is None:
             return _fallback_embedding(image), _FALLBACK_MODEL
@@ -79,7 +83,7 @@ def embed_photos(photos: list[Photo], config: dict[str, Any], conn: Any) -> None
         if photo.status == "rejected":
             continue
         try:
-            vector, model = compute_embedding(photo, state)
+            vector, model = compute_embedding(photo, state, config)
             db.save_embedding(conn, photo.id, vector, model)
         except Exception as exc:  # noqa: BLE001 - one bad file must not stop the batch
             events.log(f"Embedding failed for {photo.id}: {exc}", "warning")

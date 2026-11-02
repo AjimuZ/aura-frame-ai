@@ -239,7 +239,7 @@ memory free at peak; no Ollama reference remains in the code; provider contract 
 
 **Depends on:** P03. **Areas:** engine, database, reports.
 
-- [ ] P04.1 New ingest: content-hash IDs, working copies, one decode, orientation applied once.
+- [x] P04.1 New ingest: content-hash IDs, working copies, one decode, orientation applied once.
 - [ ] P04.2 Sanity gate that rejects only objective failures.
 - [ ] P04.3 Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU.
 - [ ] P04.4 Order-independent grouping, content tags and people signals with no identity.
@@ -247,6 +247,17 @@ memory free at peak; no Ollama reference remains in the code; provider contract 
 - [ ] P04.6 Critique, diversity-aware selection, tiers, reports and exports.
 - [ ] P04.7 Persist per-stage progress so resume really works.
 - [ ] P04.8 Remove the old gate, ranker, slots, OpenCLIP and LAION paths.
+
+Progress 2026-11-02 (P04.1): `engine/src/ingest.py` hashes each original (read-only), decodes it once, applies the EXIF
+orientation once, and writes an upright working copy (long side at most 1,536 px, never upscaled) and a 512 px
+thumbnail; quality, faces and embeddings read only the working copy ([Pipeline](pipeline.md#1-ingest)). The photo ID is
+the SHA-256 of the content, so a moved or renamed file keeps its results and an unchanged file is not decoded again;
+byte-identical copies share one ID and only the first in path order is kept. Only capture time, camera make and model
+are kept from EXIF. This closes assessment items B5, C1 and C3. Observed: `bash scripts/check.sh --engine` passed 282 of
+282 engine tests (24 new, on synthetic images, counting decodes by wrapping `Image.open` and `cv2.imread`);
+`bash scripts/check.sh --node` passed (lint, builds, 181 of 182 node tests, 1 skipped). Not observed: a full `analyze`
+run with the new ingest (the resume path in `engine/main.py` is covered only through `index_photos`), and
+`bash scripts/check.sh --integration`, whose photo-ID assertion changed to the new ID shape.
 
 Exit: the regression corpus in [Testing](testing.md#regression-corpus-p04) passes; a run on 2,000
 synthetic images completes on the reference PC with recorded time and peak memory; the benchmark

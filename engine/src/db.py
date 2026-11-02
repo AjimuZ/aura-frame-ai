@@ -103,7 +103,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-# Returns {file_path: {"id", "file_hash", "status"}} for fast skip-if-unchanged checks.
+# Returns {file_path: {"id", "file_hash", "status"}} (the id is the content hash).
 def existing_index(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
     rows = conn.execute("SELECT id, file_path, file_hash, status FROM photos").fetchall()
     return {r["file_path"]: dict(r) for r in rows}
@@ -127,8 +127,25 @@ def get_stage(conn: sqlite3.Connection, photo_id: str, stage: str) -> str:
     return row["state"] if row else "pending"
 
 
-# Persists one fully/partly analyzed photo across the normalized tables.
+# Removes every other record stored for the same file path. A photo ID is the content hash, so
+# when the bytes at a path change (or the record predates content IDs) the old record describes
+# content that is no longer there; the cascade drops its scores, faces and embedding with it.
+def _drop_superseded(conn: sqlite3.Connection, photo: Photo) -> None:
+    stale = [
+        row["id"]
+        for row in conn.execute(
+            "SELECT id FROM photos WHERE file_path = ? AND id != ?", (photo.file_path, photo.id)
+        ).fetchall()
+    ]
+    for photo_id in stale:
+        conn.execute("DELETE FROM photos WHERE id = ?", (photo_id,))
+        conn.execute("DELETE FROM jobs WHERE photo_id = ?", (photo_id,))
+
+
+# Persists one fully/partly analyzed photo across the normalized tables. Records that the same
+# path held before under another ID (changed content, or an older ID scheme) are replaced.
 def upsert_photo(conn: sqlite3.Connection, photo: Photo) -> None:
+    _drop_superseded(conn, photo)
     conn.execute(
         "INSERT OR REPLACE INTO photos("
         "id, file_path, file_name, file_hash, perceptual_hash, width, height,"
