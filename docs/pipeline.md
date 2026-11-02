@@ -155,6 +155,12 @@ tasks API have not run, and the box, blink and pose values are unchecked until P
 Takes the top K group representatives by prescore, with a limit per content tag so one theme
 cannot fill the list.
 
+Implemented in P04.5 (`select_shortlist` in `engine/src/shortlist.py`): a group is represented by its highest prescore
+(ties by id), a photo with no group stands alone, and the representatives are taken best first. At most
+`tournament.max_tag_share` of `tournament.shortlist_size` (25% of 32, so 8) may share a content tag; a photo with no
+tag is not limited. The cap is never relaxed, so the list can be shorter than K. The result does not depend on input
+order and lists each member's alternates. The prescore itself is not computed yet, so the caller supplies it.
+
 ### 8. Tournament
 
 A Swiss-system tournament over the shortlist:
@@ -168,6 +174,21 @@ A Swiss-system tournament over the shortlist:
 - A Bradley-Terry model turns outcomes into a rank with an uncertainty value, using the
   prescore as a weak prior.
 - Without an AI provider this stage is skipped, and the prescore decides.
+
+Implemented in P04.5 (`run_tournament` in `engine/src/tournament.py`, `fit_bradley_terry` in
+`engine/src/bradley_terry.py`, the `verdicts` table; [ADR 0013](decisions/0013-tournament-rank-and-verdict-cache.md)).
+Photos are sorted by running score (win 1, tie 0.5, loss 0), then prescore, and paired without repeats, with a bye for
+an odd count; when no unmet pairing remains (two photos) fewer rounds are played than planned. A pair is a win only
+when both orders pick the same photo, and any disagreement is a tie. The rank is a maximum a posteriori
+Bradley-Terry fit whose Gaussian prior sits on the standardized prescore (`tournament.prior_scale` 0.5,
+`tournament.prior_precision` 0.5), so one decisive outcome overrides the prescore, and each photo gets a rank, a
+strength and a standard error in log-odds units. Only pairwise outcomes rank; no absolute vote is used. A verdict is
+cached under (first photo ID, second photo ID, provider, model, prompt version), so the order matters and a changed
+model or prompt version misses; only successful verdicts are stored. A rerun makes no provider call and loads no
+image. With no provider, a provider that is not ready, fewer than two photos or no usable verdict, the result is
+`skipped` with a reason and ordered by prescore; after `tournament.max_failed_in_a_row` pairs without a verdict, or when
+the guard degrades, the rounds stop and the rank uses what was gathered. Verified with a fake provider only. The stage is
+not called by `engine/main.py` yet, because the prescore is built with the selection in P04.6. The settings are untuned.
 
 The verdict is schema-constrained:
 

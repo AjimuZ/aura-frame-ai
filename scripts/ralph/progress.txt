@@ -73,6 +73,9 @@
 - A missing optional model is resolved once per process and cached as unavailable. It emits one structured event with a code and the exact command that fixes it, and it leaves the values unknown. The code never downloads the model.
 - To pin an artifact that has no numbered release path, use an immutable object id in the URL as the revision. Validate it in the manifest: https only, an allow-listed host, a query that is exactly that id. Check the format by content, not only by name.
 - To simulate a missing optional package in a test, use monkeypatch.setitem(sys.modules, name, None) instead of skipping the test.
+- Give a pipeline stage that depends on a provider an explicit `provider: VisionProvider | None` argument and return a `skipped` result with a reason code instead of raising. Tests then cover the no-provider, not-ready and dead-provider paths with a tiny fake class and no network.
+- Cache expensive model verdicts under a key that includes everything that changes the answer (both content hashes in order, provider, model, prompt version), and cache only successful results, so a rerun completes exactly the missing work.
+- Load images lazily, only on a cache miss. Tests can then prove that a rerun does zero work by counting both provider calls and loader calls.
 
 ---
 
@@ -742,4 +745,19 @@ Privacy and security: no new network or filesystem access. Originals are still o
   - people_penalty is stored in the photo record JSON (peoplePenalty) only. There is no new table or column. Nothing subtracts it yet: the prescore (0.6*aesthetic + 0.4*quality - people_penalty) is built in a later package. The settings are untuned and live under face: in engine/config.yaml (max_faces, max_penalty, blink_start, blink_full, blur_clarity_below).
   - Without the model, no face is detected, so the sanity gate adds the soft flag local_flag_face_not_detected, and occlusion_score is no longer measured and stays 0. The real tasks API, the real model and the blink and pose values are unverified until P04.MEASURE, so check that the mesh indices 33, 263, 1 and 13 give sensible pose proxies.
   - The shell denied a bare `python` call in this session, which is fine because Python only runs in containers. `bash scripts/check.sh --engine` and `npm run lint` were allowed.
+---
+
+## 2026-11-02T15:04:54Z - P04.5
+- Added the shortlist, the Swiss tournament in both orders, the Bradley-Terry rank and the verdict cache as plain engine modules. `bash scripts/check.sh --engine` passed 424 of 424 tests (386 before, 38 new, all with a fake provider). `npm run lint` printed no findings. I did not run the Angular or Electron builds or the node tests; no node file changed. A real model has not judged a pair. The stage is not wired into `engine/main.py`: it needs a prescore, which the roadmap defers to P04.6. The `tournament` settings in `engine/config.yaml` are untuned.
+- Files changed: engine/src/shortlist.py, engine/src/tournament.py, engine/src/bradley_terry.py, engine/src/db.py, engine/config.yaml, engine/tests/test_tournament.py, docs/pipeline.md, docs/assessment.md, docs/roadmap.md, docs/testing.md, docs/decisions/0013-tournament-rank-and-verdict-cache.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - The stage entry point is `run_tournament(shortlist, provider, conn, copy_for, provider_name, model, prompt=COMPARE_PROMPT, settings)` in engine/src/tournament.py. It returns a `TournamentResult`: `ratings` (best first, each with rank, strength, uncertainty, source), `skipped` and `reason`, round counts, the pair results, `provider_calls`, `cache_hits`, `failed_pairs` and `degraded`.
+  - `copy_for(photo_id)` must return the prepared anonymous copy bytes. It is called only when a verdict is not cached, so a rerun loads no image. P04.6 should build it from the working copy with `providers.prepare_copy`.
+  - The caller supplies the prescore on `Candidate.prescore` (any finite number, higher is better). It is not computed anywhere yet. The documented formula is 0.6*aesthetic + 0.4*quality - people_penalty, and P04.6 should build it and wire shortlist -> tournament into engine/main.py. Candidate.group_id comes from `photos.cluster_id` (negative means no group) and Candidate.tag from `db.load_content_tags`.
+  - The verdicts table is keyed by (first_id, second_id, provider, model, prompt_version), with photo IDs as content hashes. It has no foreign key to photos, so it survives a re-ingest. The helpers are `db.save_verdict` and `db.load_verdict`. Failed calls and prescore stand-ins are never cached. `provider_name` is the string the caller chooses; use the llama-server provider's `PROVIDER_NAME`, and use `ProviderSettings.model` for the model.
+  - Bradley-Terry in engine/src/bradley_terry.py is a MAP fit by Newton's method. The prior is a Gaussian on the standardized prescore. The uncertainty is the standard error from the inverse Hessian, in log-odds units. With no outcomes the uncertainty is 1/sqrt(prior_precision). A pair gives ONE outcome (win, tie or loss) whatever the number of orders.
+  - Swiss rounds are `(K-1).bit_length() + 1`. With two photos only one round can be played, because rematches are never allowed. `rounds_played` can be below `rounds_planned`; this is expected, not a failure.
+  - The per-tag cap is strict and is never relaxed to fill the list, so the shortlist can hold fewer than K photos. Photos with no tag are not limited.
+  - The tournament stops early after `max_failed_in_a_row` (3) pairs without a verdict, or when a `GuardedProvider` reports `status.degraded`. A fresh `skipped` result with reason `no_verdicts` then ranks by prescore.
+  - All tournament settings (shortlist_size 32, max_tag_share 0.25, prior_scale 0.5, prior_precision 0.5, max_failed_in_a_row 3) are untuned. P04.MEASURE should review them. The fast, balanced and quality presets in docs/pipeline.md are not wired to them yet.
 ---

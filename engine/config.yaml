@@ -129,6 +129,17 @@ embeddings:
   cluster_distance: 0.12
   cluster_seconds: 300
 
+# Shortlist and pairwise tournament (engine/src/shortlist.py, tournament.py, bradley_terry.py). Rounds are
+# ceil(log2(shortlist_size)) + 1. max_tag_share caps one content tag at that share of the shortlist. The prior ties the
+# Bradley-Terry strengths weakly to the prescore: one standard deviation of prescore is worth prior_scale log-odds, held
+# with prior_precision. The judge stops after max_failed_in_a_row pairs without a verdict. Untuned starting values.
+tournament:
+  shortlist_size: 32
+  max_tag_share: 0.25
+  prior_scale: 0.5
+  prior_precision: 0.5
+  max_failed_in_a_row: 3
+
 aesthetic:
   enabled: true
   # Optional local weights for the LAION aesthetic predictor MLP. If absent, the engine

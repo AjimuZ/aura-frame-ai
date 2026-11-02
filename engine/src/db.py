@@ -82,6 +82,15 @@ CREATE TABLE IF NOT EXISTS content_tags (
     tag TEXT NOT NULL, score REAL, model TEXT
 );
 
+-- Cached judge verdicts, one per ordered pair. first_id/second_id are photo IDs (content hashes) in the order the
+-- judge saw them, so the cache survives a re-ingest. No path, file name or image data is stored.
+CREATE TABLE IF NOT EXISTS verdicts (
+    first_id TEXT NOT NULL, second_id TEXT NOT NULL,
+    provider TEXT NOT NULL, model TEXT NOT NULL, prompt_version TEXT NOT NULL,
+    winner TEXT NOT NULL, confidence TEXT, reasons TEXT, note TEXT,
+    PRIMARY KEY (first_id, second_id, provider, model, prompt_version)
+);
+
 CREATE TABLE IF NOT EXISTS jobs (
     photo_id TEXT, stage TEXT, state TEXT, updated_at TEXT,
     PRIMARY KEY (photo_id, stage)
@@ -264,6 +273,45 @@ def save_content_tag(conn: sqlite3.Connection, photo_id: str, tag: str, score: f
 def load_content_tags(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
     rows = conn.execute("SELECT photo_id, tag, score, model FROM content_tags").fetchall()
     return {r["photo_id"]: {"tag": r["tag"], "score": r["score"], "model": r["model"]} for r in rows}
+
+
+# Stores the verdict of one ordered pair under its full cache key, replacing an earlier one. Raises ValueError
+# for a winner other than "A", "B" or "tie", so a malformed verdict is never cached.
+def save_verdict(
+    conn: sqlite3.Connection,
+    key: tuple[str, str, str, str, str],
+    winner: str,
+    confidence: str | None,
+    reasons: tuple[str, ...],
+    note: str,
+) -> None:
+    if winner not in ("A", "B", "tie"):
+        raise ValueError("a cached verdict must be A, B or tie")
+    conn.execute(
+        "INSERT OR REPLACE INTO verdicts("
+        "first_id, second_id, provider, model, prompt_version, winner, confidence, reasons, note)"
+        " VALUES (?,?,?,?,?,?,?,?,?)",
+        (*key, winner, confidence, json.dumps(list(reasons), ensure_ascii=False), note),
+    )
+    conn.commit()
+
+
+# Loads the cached verdict for a key (first_id, second_id, provider, model, prompt_version) as
+# {"winner", "confidence", "reasons", "note"}, or None when this exact combination was never judged.
+def load_verdict(conn: sqlite3.Connection, key: tuple[str, str, str, str, str]) -> dict[str, Any] | None:
+    row = conn.execute(
+        "SELECT winner, confidence, reasons, note FROM verdicts WHERE first_id = ? AND second_id = ?"
+        " AND provider = ? AND model = ? AND prompt_version = ?",
+        key,
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "winner": row["winner"],
+        "confidence": row["confidence"],
+        "reasons": tuple(json.loads(row["reasons"] or "[]")),
+        "note": row["note"] or "",
+    }
 
 
 # Persists a manual review session (slot assignments, per-slot locks, shortlist).

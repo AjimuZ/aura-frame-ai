@@ -243,7 +243,7 @@ memory free at peak; no Ollama reference remains in the code; provider contract 
 - [x] P04.2 Sanity gate that rejects only objective failures.
 - [x] P04.3 Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU.
 - [x] P04.4 Order-independent grouping, content tags and people signals with no identity.
-- [ ] P04.5 Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache.
+- [x] P04.5 Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache.
 - [ ] P04.6 Critique, diversity-aware selection, tiers, reports and exports.
 - [ ] P04.7 Persist per-stage progress so resume really works.
 - [ ] P04.8 Remove the old gate, ranker, slots, OpenCLIP and LAION paths.
@@ -275,6 +275,17 @@ face box; no face vector is computed or stored ([Pipeline](pipeline.md#6-people-
 assessment item D7. Observed: `bash scripts/check.sh --engine` passed 386 of 386 engine tests (333 before this change;
 the new tests use a fake landmarker and fake files); `npm run lint` printed no findings. Not observed: the Angular and Electron builds and
 the node tests (no node file changed), the real model, the real tasks API, and a real download of the file.
+
+Progress 2026-11-02 (P04.5): `engine/src/shortlist.py`, `engine/src/tournament.py` and `engine/src/bradley_terry.py` add
+the shortlist (top K group representatives, a cap per content tag), the Swiss tournament (`ceil(log2(K)) + 1` rounds,
+every pair in both orders, a disagreement is a tie), the Bradley-Terry rank with a standard error and the prescore as a
+weak prior, and the `verdicts` table that caches verdicts by content hash, provider, model and prompt version
+([Pipeline](pipeline.md#7-shortlist), [ADR 0013](decisions/0013-tournament-rank-and-verdict-cache.md)). With no provider
+the stage is skipped and the prescore decides. This closes assessment item B6 for the new path. Observed:
+`bash scripts/check.sh --engine` passed 424 of 424 engine tests (386 before; 38 new, with a fake provider). Not
+observed: a real model judging a pair, a full `analyze` run (the stage is not wired into `engine/main.py` until the
+prescore exists in P04.6), the settings on a real collection (P04.MEASURE), the Angular and Electron builds and the
+node tests (no node file changed).
 
 Exit: the regression corpus in [Testing](testing.md#regression-corpus-p04) passes; a run on 2,000
 synthetic images completes on the reference PC with recorded time and peak memory; the benchmark

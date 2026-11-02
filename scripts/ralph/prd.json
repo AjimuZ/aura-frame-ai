@@ -975,8 +975,8 @@
         "With no provider the stage is skipped and the prescore decides"
       ],
       "priority": 33,
-      "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Absolute votes are never the ranking signal. Closes B6. The commit validator refuses the words AI, Codex, OpenAI, GPT, LLM, assistant and Claude in a message. Say \"model\", \"cloud flow\" or \"sidecar provider\" instead. ",
+      "passes": true,
+      "notes": "Added the shortlist, the Swiss tournament in both orders, the Bradley-Terry rank and the verdict cache as plain engine modules. `bash scripts/check.sh --engine` passed 424 of 424 tests (386 before, 38 new, all with a fake provider). `npm run lint` printed no findings. I did not run the Angular or Electron builds or the node tests; no node file changed. A real model has not judged a pair. The stage is not wired into `engine/main.py`: it needs a prescore, which the roadmap defers to P04.6. The `tournament` settings in `engine/config.yaml` are untuned.",
       "dependsOn": [
         "P04.4.1",
         "P04.4.2",

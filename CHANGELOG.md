@@ -4,6 +4,13 @@
 
 ### Added
 
+- Shortlist and pairwise tournament building blocks: the top K group representatives by prescore with a cap per
+  content tag, a Swiss tournament of `ceil(log2(K)) + 1` rounds in which every pair is judged in both orders (a
+  disagreement counts as a tie), a Bradley-Terry rank with an uncertainty and the prescore as a weak prior, and a
+  `verdicts` table that caches verdicts by content hash, provider, model and prompt version so a rerun makes no
+  provider call. With no provider the stage is skipped and the prescore decides. New `tournament` settings in
+  `engine/config.yaml` (untuned). Absolute votes are never the ranking signal. Tested with a fake provider (424 engine
+  tests); `analyze` does not call the stage yet, and no real model has judged a pair.
 - People signals now use the MediaPipe Face Landmarker (tasks API) instead of the unsupported legacy face detector.
   Each photo gets a `peoplePenalty` between 0 and `face.max_penalty` (0.10): closed eyes (the eyeBlinkLeft and
   eyeBlinkRight blendshapes) and a blurred main face (local sharpness inside the face box) lower it; a photo with no
