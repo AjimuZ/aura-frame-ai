@@ -1000,8 +1000,8 @@
         "Reranking twice gives the same result"
       ],
       "priority": 34,
-      "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Closes A3, A4, B3, B4, B7, B9.",
+      "passes": true,
+      "notes": "The curation modules and tests from attempt 1 were already in the working tree. This attempt fixed the flagged problem: the link-refusal test used pytest.skip when symbolic links could not be created. It now patches Path.is_symlink to report the export folder as a link, so it runs on every host and nothing is skipped. `bash scripts/check.sh --engine` passed 455 of 455 engine tests with 0 skipped, and `npm run lint` printed no findings. A real model has not written a critique. The stages are not called from `engine/main.py`, the API or the review screen. The Angular and Electron builds and the node tests were not run, because no node file changed.",
       "dependsOn": [
         "P04.5"
       ],

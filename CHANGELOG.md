@@ -4,6 +4,15 @@
 
 ### Added
 
+- Critique, diversity-aware selection, reports and exports as engine building blocks. The finalists (the final set,
+  default 25) get a structured critique after the rank is fixed, and the critique cannot change the rank or the
+  selection. Maximal marginal relevance with `lambda = 0.75` over SigLIP 2 similarity gives nested Top 10, 25, 50 and
+  100 tiers and a configurable final set; the prescore (`0.6 * aesthetic + 0.4 * quality - people penalty`) is now
+  computed. Reports are written as `curation.csv` and `curation.html`, with all model text escaped (no script, no
+  external resource; spreadsheet formula cells are neutralized). Exports are copies named `001_<original name>` and
+  never touch the originals. Ranking and selection give the same result when run twice. New `selection` settings in
+  `engine/config.yaml` (untuned). Tested with a fake provider (455 engine tests); `analyze`, the API and the review
+  screen do not call these stages yet, and no real model has written a critique.
 - Shortlist and pairwise tournament building blocks: the top K group representatives by prescore with a cap per
   content tag, a Swiss tournament of `ceil(log2(K)) + 1` rounds in which every pair is judged in both orders (a
   disagreement counts as a tie), a Bradley-Terry rank with an uncertainty and the prescore as a weak prior, and a

@@ -76,6 +76,8 @@
 - Give a pipeline stage that depends on a provider an explicit `provider: VisionProvider | None` argument and return a `skipped` result with a reason code instead of raising. Tests then cover the no-provider, not-ready and dead-provider paths with a tiny fake class and no network.
 - Cache expensive model verdicts under a key that includes everything that changes the answer (both content hashes in order, provider, model, prompt version), and cache only successful results, so a rerun completes exactly the missing work.
 - Load images lazily, only on a cache miss. Tests can then prove that a rerun does zero work by counting both provider calls and loader calls.
+- Do not use conditional pytest.skip to cope with host limits such as missing symlink support. Simulate the condition with monkeypatch so the test always runs.
+- For deterministic reranking, break every tie by a stable content ID and test that reversed and shuffled input gives the same result.
 
 ---
 
@@ -760,4 +762,16 @@ Privacy and security: no new network or filesystem access. Originals are still o
   - The per-tag cap is strict and is never relaxed to fill the list, so the shortlist can hold fewer than K photos. Photos with no tag are not limited.
   - The tournament stops early after `max_failed_in_a_row` (3) pairs without a verdict, or when a `GuardedProvider` reports `status.degraded`. A fresh `skipped` result with reason `no_verdicts` then ranks by prescore.
   - All tournament settings (shortlist_size 32, max_tag_share 0.25, prior_scale 0.5, prior_precision 0.5, max_failed_in_a_row 3) are untuned. P04.MEASURE should review them. The fast, balanced and quality presets in docs/pipeline.md are not wired to them yet.
+---
+
+## 2026-11-02T15:28:16Z - P04.6
+- The curation modules and tests from attempt 1 were already in the working tree. This attempt fixed the flagged problem: the link-refusal test used pytest.skip when symbolic links could not be created. It now patches Path.is_symlink to report the export folder as a link, so it runs on every host and nothing is skipped. `bash scripts/check.sh --engine` passed 455 of 455 engine tests with 0 skipped, and `npm run lint` printed no findings. A real model has not written a critique. The stages are not called from `engine/main.py`, the API or the review screen. The Angular and Electron builds and the node tests were not run, because no node file changed.
+- Files changed: engine/src/critique.py, engine/src/selection.py, engine/src/curation.py, engine/src/curation_report.py, engine/src/curation_export.py, engine/config.yaml, engine/tests/test_curation.py, CHANGELOG.md, docs/roadmap.md, docs/pipeline.md, docs/assessment.md, docs/testing.md, docs/decisions/0013-tournament-rank-and-verdict-cache.md, docs/decisions/0014-selection-critique-reports-and-exports.md
+- **Learnings for future iterations:**
+  - `run_curation` in engine/src/curation.py chains shortlist, tournament, MMR selection and critique. `load_stored_library(conn)` builds its inputs from the database, with the prescore, group, tag and embedding per photo, and skips rejected photos.
+  - Critique runs after the rank and the selection are fixed, and its result is text only. Tests prove the ranking and selection are identical with no critique, different critiques and empty ones.
+  - Nothing outside the tests calls the new stages yet. Wiring them into engine/main.py, the API and the review screen is P04.7 and P04.8. The legacy export_results.py and generate_report.py are still in place.
+  - The `selection` settings in engine/config.yaml are untuned; P04.MEASURE should review them.
+  - Tests that depend on symbolic links must not skip. Monkeypatch Path.is_symlink instead, since Windows hosts often cannot create links. A conditional pytest.skip is flagged as a disabled test.
+  - bash scripts/check.sh --engine takes about a minute, mostly the container dependency install, and ran fine from the allowlisted shell.
 ---

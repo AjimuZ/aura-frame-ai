@@ -84,7 +84,9 @@ Implemented in P04.3 (`engine/src/neural_stages.py`, `engine/src/gpu_models.py`,
 the model once for quality and once for aesthetics, and stores the two values in the `neural_scores` table. The
 value is the probability-weighted level of five rating words (excellent 1, good 0.75, fair 0.5, poor 0.25, bad 0). A
 value that is missing, not finite or outside 0 to 1 is stored as unknown (NULL), never clipped or replaced. The
-prescore formula above is not computed yet and nothing ranks with these values yet. Only the loaders read model
+prescore formula above is computed since P04.6 (`prescore` in `engine/src/curation.py`; an unknown value is left out
+and the weights of the known ones are renormalized, and with neither known the prescore is unknown), but `engine/main.py`
+does not call it yet. Only the loaders read model
 files: `.safetensors` only, from one directory of the models volume, with no download path.
 Without the model (not in the volume, no `torch`, no GPU when `models.device` is `cuda`) the stage logs an `error`
 event with a `model_<reason>` code and leaves every value unknown. Verified with fake models only: the adapters and the
@@ -143,7 +145,8 @@ the box, as before), and `eyes_visible_score` is how open both eyes are. The pen
 prescore, stored as `people_penalty` in the photo record (`peoplePenalty`), at most `face.max_penalty` (0.10, hard
 cap 0.25): 0.6 for closed eyes (the worst face counts; the mean blink value from `face.blink_start` 0.45 to
 `face.blink_full` 0.80) and 0.4 for a blurred main face (clarity under `face.blur_clarity_below` 40). The values are
-untuned starting points. The prescore formula is not computed yet, so nothing subtracts the penalty yet.
+untuned starting points. Since P04.6 the `prescore` function subtracts the penalty (capped at 0.25); `engine/main.py`
+does not call it yet.
 The model, `face_landmarker.task`, comes from the models volume (`models.face_landmarker.file`) and is never
 downloaded by the engine; fetch it on request with `./start.sh --fetch-models face-landmarker`. Without it the stage
 emits one `model_file_missing` error event with that command, no face is reported, and the penalty is 0. The legacy
@@ -159,7 +162,8 @@ Implemented in P04.5 (`select_shortlist` in `engine/src/shortlist.py`): a group 
 (ties by id), a photo with no group stands alone, and the representatives are taken best first. At most
 `tournament.max_tag_share` of `tournament.shortlist_size` (25% of 32, so 8) may share a content tag; a photo with no
 tag is not limited. The cap is never relaxed, so the list can be shorter than K. The result does not depend on input
-order and lists each member's alternates. The prescore itself is not computed yet, so the caller supplies it.
+order and lists each member's alternates. The caller supplies the prescore (`run_curation` builds it from the stored
+scores, see [Selection](#10-selection)).
 
 ### 8. Tournament
 
@@ -187,8 +191,8 @@ cached under (first photo ID, second photo ID, provider, model, prompt version),
 model or prompt version misses; only successful verdicts are stored. A rerun makes no provider call and loads no
 image. With no provider, a provider that is not ready, fewer than two photos or no usable verdict, the result is
 `skipped` with a reason and ordered by prescore; after `tournament.max_failed_in_a_row` pairs without a verdict, or when
-the guard degrades, the rounds stop and the rank uses what was gathered. Verified with a fake provider only. The stage is
-not called by `engine/main.py` yet, because the prescore is built with the selection in P04.6. The settings are untuned.
+the guard degrades, the rounds stop and the rank uses what was gathered. Verified with a fake provider only. Since P04.6
+`run_curation` calls the stage, but `engine/main.py` does not call `run_curation` yet. The settings are untuned.
 
 The verdict is schema-constrained:
 
@@ -214,17 +218,66 @@ It explains a position and has no effect on the rank.
 }
 ```
 
+Implemented in P04.6 (`critique_finalists` in `engine/src/critique.py`): one `critique` call for each photo of the
+final set, and for no other photo. The stage runs after the rank and the selection are fixed, receives photo IDs and
+the way to load their anonymous copies, and returns text only, so it cannot reorder anything; a test runs the whole
+curation with no critique, with several different critiques and with empty ones, and the ranking and the selection are
+identical each time. The text is trimmed of control characters and bounded (five items of 120 characters, a caption of
+200) and is stored as received: it is escaped where it is written, never before. A failed call, an unreadable copy or an
+empty answer leaves that photo without a note, and three failures in a row end the stage. With no provider, or one that
+is not ready, the stage is skipped. A critique is not cached, so a rerun asks again. Verified with a fake provider only.
+
 ### 10. Selection
 
 Maximal marginal relevance builds the selection, trading rank against similarity to what is
 already chosen (`lambda = 0.75`). Result: tiers of 10, 25, 50 and 100, plus a configurable
 final set, default 25.
 
+Implemented in P04.6 (`select_diverse` in `engine/src/selection.py`, `run_curation` in `engine/src/curation.py`):
+the full ranking is the tournament order of the shortlist, then every other scored photo by prescore, then the
+unscored ones by ID. Only the first `selection.pool_size` (200, never below 100) photos take part. The relevance of a
+photo is its place in that order (1 for the first, 0 for the last of the pool), so the scale of the scores never
+matters. Each step takes the photo that maximizes `0.75 * relevance - 0.25 * (highest cosine similarity to the photos
+already chosen)`, with similarity clamped to 0 to 1 and counted as 0 when a photo has no embedding, a zero vector, or a
+vector of another size than its partner. A tie goes to the better rank. Because the choice is greedy, every tier is a
+prefix of one sequence: Top 10, 25, 50 and 100 are nested, and so is the final set (`selection.final_size`, default 25,
+at most 500). Each size is clamped to the number of photos, so a collection of 30 photos has tiers of 10, 25, 30 and
+30. The result depends only on the ranking and the embeddings, not on the input order, so reranking twice gives the
+same result. The prescore is `prescore(aesthetic, quality, people_penalty)` in `engine/src/curation.py`. The values
+`mmr_lambda`, `final_size` and `pool_size` are in `engine/config.yaml` and are untuned. Verified with synthetic vectors
+and a fake provider only; whether 0.75 gives a selection people prefer is not measured.
+
 ### 11. Review and export
 
 The UI shows ranks, reasons and alternates, and offers A/B comparison. Human decisions always
 override the pipeline and are stored. Exports are copies, prefixed by rank, with the original
 file name kept: `001_<original name>`.
+
+Implemented in P04.6 for the engine (`engine/src/curation_export.py`, `engine/src/curation_report.py`); the review
+screen does not use it yet.
+
+- **Export.** `export_copies` copies the final set, in order, to one generated folder as `001_<original name>`. The
+  number is the place in the set, zero-padded to three digits and wider when the set has more than 999 photos, so two
+  originals with the same name never collide. The name is made one safe path component (no separator or control
+  character, at most 200 characters, extension kept). Originals are only opened for reading. The call refuses, before
+  writing anything, a folder that is a link or holds an original; it creates each copy exclusively, so it cannot
+  overwrite an existing file; and it removes only the numbered files (`NNN_...`) that an earlier export left in the
+  folder. A source that is missing is listed and skipped, and its number stays unused.
+- **Reports.** `write_reports` writes `curation.csv` and `curation.html` for the photos of the largest tier (or the
+  final set, if larger), in selection order: position, tier, final-set flag, rank, original and exported file name, how
+  the rank was reached (`pairwise` or `prescore`), strength, uncertainty, prescore, group, content tag, the critique and
+  the number of alternates. They hold file names and no path, no image and no thumbnail. The page says whether the
+  rank came from pairwise judgments or from the prescore alone.
+- **Escaping.** All text, including model text and file names, goes through `html.escape` into the HTML, which has no
+  script, no external resource and a content security policy of `default-src 'none'`. In the CSV, a cell that would
+  start with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading apostrophe, and line breaks inside a cell
+  become spaces. Tests feed `<script>`, an `<img onerror>` tag, quotes and formula text and parse the page to prove that
+  no such tag or attribute exists.
+
+Not done: the stages are not called from `engine/main.py`, the API or the Angular review screen; that belongs to P04.7
+(persisted progress) and P04.8 (removing the old paths), and the old export in `engine/src/export_results.py` stays
+until then. The report and export folders, `output.base_dir` and `output.reports_dir`, are the ignored generated
+locations, but no code chooses them yet.
 
 ## Prompt rules
 

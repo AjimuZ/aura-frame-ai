@@ -45,7 +45,9 @@ must not return as a ranking signal.
 
 - A rerun on an unchanged collection, model and prompt costs no provider call and loads no image.
 - The shortlist, the tournament and the rank are plain functions that take their inputs explicitly. They are not called
-  by `engine/main.py` yet, because the prescore they need is built in P04.6 together with the selection.
+  by `engine/main.py` yet, because the prescore they need is built in P04.6 together with the selection. P04.6 added
+  the prescore and `run_curation`, which calls them ([ADR 0014](0014-selection-critique-reports-and-exports.md)); the
+  call from `engine/main.py` is still open.
 - The prior settings, the per-tag share and the failure limit are untuned starting values (`tournament` in
   `engine/config.yaml`), to be reviewed in P04.MEASURE.
 - The cache has no expiry; the table grows with the number of distinct pairs judged.

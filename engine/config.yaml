@@ -140,6 +140,15 @@ tournament:
   prior_precision: 0.5
   max_failed_in_a_row: 3
 
+# Diversity-aware selection (engine/src/selection.py). Maximal marginal relevance trades rank against similarity to the
+# photos already chosen: mmr_lambda 1 is rank only, 0 is novelty only. The tiers (Top 10, 25, 50, 100) are fixed and
+# nested; final_size is the proposed final set and a prefix of the same sequence. Only the first pool_size photos of the
+# ranking take part, never fewer than the largest tier. Untuned starting values.
+selection:
+  mmr_lambda: 0.75
+  final_size: 25
+  pool_size: 200
+
 aesthetic:
   enabled: true
   # Optional local weights for the LAION aesthetic predictor MLP. If absent, the engine

@@ -244,7 +244,7 @@ memory free at peak; no Ollama reference remains in the code; provider contract 
 - [x] P04.3 Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU.
 - [x] P04.4 Order-independent grouping, content tags and people signals with no identity.
 - [x] P04.5 Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache.
-- [ ] P04.6 Critique, diversity-aware selection, tiers, reports and exports.
+- [x] P04.6 Critique, diversity-aware selection, tiers, reports and exports.
 - [ ] P04.7 Persist per-stage progress so resume really works.
 - [ ] P04.8 Remove the old gate, ranker, slots, OpenCLIP and LAION paths.
 
@@ -286,6 +286,19 @@ the stage is skipped and the prescore decides. This closes assessment item B6 fo
 observed: a real model judging a pair, a full `analyze` run (the stage is not wired into `engine/main.py` until the
 prescore exists in P04.6), the settings on a real collection (P04.MEASURE), the Angular and Electron builds and the
 node tests (no node file changed).
+
+Progress 2026-11-02 (P04.6): `engine/src/critique.py`, `engine/src/selection.py`, `engine/src/curation.py`,
+`engine/src/curation_report.py` and `engine/src/curation_export.py` add the finalist critique (finalists only, run after
+the rank and the selection are fixed, text only), maximal marginal relevance with `lambda = 0.75` giving nested tiers of
+10, 25, 50 and 100 and a configurable final set (default 25), the prescore, `run_curation` (shortlist, tournament,
+selection, critique), CSV and HTML reports that escape all model text, and exports of copies named `001_<original name>`
+([Pipeline](pipeline.md#9-critique), [ADR 0014](decisions/0014-selection-critique-reports-and-exports.md)). This
+addresses assessment items A3, A4, B3, B4, B7 and B9 for the new path; the legacy code goes in P04.8. Observed:
+`bash scripts/check.sh --engine` passed 455 of 455 engine tests (424 before; 31 new, with a fake provider, synthetic
+vectors and small files); `npm run lint` printed no findings. Not observed: a real model writing a critique, a full
+`analyze` run (the stages are not called from `engine/main.py`, the API or the review screen; that is P04.7 and P04.8),
+the selection settings on a real collection (P04.MEASURE), the Angular and Electron builds and the node tests (no node
+file changed).
 
 Exit: the regression corpus in [Testing](testing.md#regression-corpus-p04) passes; a run on 2,000
 synthetic images completes on the reference PC with recorded time and peak memory; the benchmark
