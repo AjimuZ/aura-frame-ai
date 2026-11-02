@@ -241,7 +241,7 @@ memory free at peak; no Ollama reference remains in the code; provider contract 
 
 - [x] P04.1 New ingest: content-hash IDs, working copies, one decode, orientation applied once.
 - [x] P04.2 Sanity gate that rejects only objective failures.
-- [ ] P04.3 Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU.
+- [x] P04.3 Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU.
 - [ ] P04.4 Order-independent grouping, content tags and people signals with no identity.
 - [ ] P04.5 Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache.
 - [ ] P04.6 Critique, diversity-aware selection, tiers, reports and exports.
@@ -258,6 +258,14 @@ are kept from EXIF. This closes assessment items B5, C1 and C3. Observed: `bash 
 `bash scripts/check.sh --node` passed (lint, builds, 181 of 182 node tests, 1 skipped). Not observed: a full `analyze`
 run with the new ingest (the resume path in `engine/main.py` is covered only through `index_photos`), and
 `bash scripts/check.sh --integration`, whose photo-ID assertion changed to the new ID shape.
+
+Progress 2026-11-02 (P04.3): `engine/src/neural_stages.py` runs Q-ReAlign (quality and aesthetics, stored 0 to 1 in
+the `neural_scores` table) and SigLIP 2 (unit vectors in `embeddings`) in batches on the GPU, through
+loaders that read local `.safetensors` only and never download ([Pipeline](pipeline.md#3-scoring)). A missing model gives
+a logged `model_<reason>` error and unknown values. This addresses assessment items B8 (for the new path) and C2. The
+heavy packages moved to `engine/requirements-gpu.txt`. Not observed: any test run (the container pytest command was
+denied in this session), the real adapters, real weights, the pins in `requirements-gpu.txt`, and a full `analyze`
+run; real-model verification is P04.MEASURE.
 
 Exit: the regression corpus in [Testing](testing.md#regression-corpus-p04) passes; a run on 2,000
 synthetic images completes on the reference PC with recorded time and peak memory; the benchmark

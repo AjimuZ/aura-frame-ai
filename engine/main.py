@@ -3,7 +3,8 @@
 Subcommands:
   index                Discover and index photos in a folder.
   analyze              Run the full local pipeline (index -> quality -> faces -> gate ->
-                       embeddings -> aesthetic -> prerank -> vlm -> rank). Resumable.
+                       qrealign -> siglip2 embeddings -> aesthetic -> prerank -> vlm -> rank).
+                       Resumable.
   gemma-review         Run local AI review over the pre-ranked candidates.
   export-final         Export the selected final set to ordered folders.
   clear-data           Delete all generated data (DB, thumbnails, working, reports, output).
@@ -40,7 +41,7 @@ from src.cloud import (  # noqa: E402
     run_final_judge,
     run_stage,
 )
-from src.embeddings import assign_clusters, embed_photos  # noqa: E402
+from src.embeddings import assign_clusters  # noqa: E402
 from src.export_results import export_all, export_final_set, export_openai_quality  # noqa: E402
 from src.face_quality import score_faces  # noqa: E402
 from src.final_ranker import (  # noqa: E402
@@ -57,6 +58,7 @@ from src.generate_report import (  # noqa: E402
 )
 from src.index_photos import index_photos  # noqa: E402
 from src.index_photos import mark_duplicates  # noqa: E402
+from src.neural_stages import embed_siglip2, score_qrealign  # noqa: E402
 from src.quality_score import score_quality  # noqa: E402
 from src.vlm import judge_candidates  # noqa: E402
 from src.utils import (  # noqa: E402
@@ -135,8 +137,17 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if should_stop(config):
         return _cancel(conn, config)
 
+    # Q-ReAlign quality and aesthetic values (0 to 1, GPU batches) follow the preset's aesthetic switch. They are
+    # stored only; nothing ranks with them until the prescore arrives. A missing model leaves them unknown.
+    if config.get("aesthetic", {}).get("enabled", True):
+        score_qrealign(fresh, config, conn)
+        for photo in fresh:
+            db.set_stage(conn, photo.id, "qrealign", "done")
+    if should_stop(config):
+        return _cancel(conn, config)
+
     if config.get("embeddings", {}).get("enabled", True):
-        embed_photos(fresh, config, conn)
+        embed_siglip2(fresh, config, conn)
         clusters = assign_clusters(photos, config, conn)
         events.progress("embeddings", len(photos), len(photos), f"Grouped into {clusters} clusters")
         for photo in photos:

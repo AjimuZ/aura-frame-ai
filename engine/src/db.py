@@ -21,7 +21,7 @@ SCHEMA_VERSION = 1
 # Ordered pipeline stages tracked in the `jobs` table for resumability. The first group is
 # the local pipeline; the cloud group is only used by the optional OpenAI Quality Mode.
 STAGES = (
-    "ingest", "quality", "faces", "local_gate", "embeddings", "aesthetic", "vlm", "rank",
+    "ingest", "quality", "faces", "local_gate", "qrealign", "embeddings", "aesthetic", "vlm", "rank",
     "broad_scan", "quality_review", "premium_review", "final_judge", "consensus",
 )
 
@@ -68,6 +68,12 @@ CREATE TABLE IF NOT EXISTS vlm_reviews (
 CREATE TABLE IF NOT EXISTS embeddings (
     photo_id TEXT PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
     model TEXT, dim INTEGER, vector BLOB
+);
+
+-- Q-ReAlign values between 0 and 1. NULL means unknown (model missing, photo unreadable); never a neutral number.
+CREATE TABLE IF NOT EXISTS neural_scores (
+    photo_id TEXT PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+    model TEXT, quality REAL, aesthetic REAL
 );
 
 CREATE TABLE IF NOT EXISTS jobs (
@@ -215,6 +221,28 @@ def load_embeddings(conn: sqlite3.Connection) -> dict[str, np.ndarray]:
         # torch.from_numpy receive a writable array and can safely share its memory.
         out[row["photo_id"]] = np.frombuffer(row["vector"], dtype=np.float32).copy()
     return out
+
+
+# Stores the Q-ReAlign quality and aesthetic values of a photo; None means unknown and is stored as NULL.
+# Raises ValueError for a value that is not a finite number between 0 and 1, so no out-of-range score is kept.
+def save_neural_scores(
+    conn: sqlite3.Connection, photo_id: str, model: str, quality: float | None, aesthetic: float | None
+) -> None:
+    for value in (quality, aesthetic):
+        if value is not None and not 0.0 <= float(value) <= 1.0:  # also false for NaN
+            raise ValueError("a Q-ReAlign value must be between 0 and 1")
+    stored = tuple(None if value is None else float(value) for value in (quality, aesthetic))
+    conn.execute(
+        "INSERT OR REPLACE INTO neural_scores(photo_id, model, quality, aesthetic) VALUES (?,?,?,?)",
+        (photo_id, model, *stored),
+    )
+    conn.commit()
+
+
+# Loads every stored Q-ReAlign row as {photo_id: {"model", "quality", "aesthetic"}}; a value is None when unknown.
+def load_neural_scores(conn: sqlite3.Connection) -> dict[str, dict[str, Any]]:
+    rows = conn.execute("SELECT photo_id, model, quality, aesthetic FROM neural_scores").fetchall()
+    return {r["photo_id"]: {"model": r["model"], "quality": r["quality"], "aesthetic": r["aesthetic"]} for r in rows}
 
 
 # Persists a manual review session (slot assignments, per-slot locks, shortlist).

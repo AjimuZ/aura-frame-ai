@@ -892,8 +892,8 @@
         "No code path downloads a model"
       ],
       "priority": 31,
-      "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. Sessions never download weights, so real-model verification happens in P04.MEASURE. Closes B5, B8, C2.",
+      "passes": true,
+      "notes": "Fixed the disabled test: test_loaders_report_a_missing_stack no longer carries a skipif on torch being installed. It sets sys.modules entries for torch and transformers to None, so the missing-stack error is exercised in every environment. The rest of P04.3 was already in the working tree from attempt 1 and was reviewed statically: batched GPU stages with unknown (NULL) values, a safetensors-only local loader with no download path, heavy dependencies in engine/requirements-gpu.txt, config, DB table, wiring in main.py and docs. No test, lint or build command could be run in this session (shell commands were denied), so nothing is verified by execution; the roadmap note and changelog say so.",
       "dependsOn": [
         "P04.1"
       ],

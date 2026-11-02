@@ -83,8 +83,7 @@ engine_tests() {
     -v "$root/engine:/app/engine:ro" \
     python:3.12-slim bash -c '
       apt-get update -qq && apt-get install -y -qq libgl1 libglib2.0-0 &&
-      grep -vE "^(torch|open-clip-torch|timm)==" /app/engine/requirements.txt > /tmp/req.txt &&
-      pip install -q -r /tmp/req.txt &&
+      pip install -q -r /app/engine/requirements.txt &&
       cd /app && python -m pytest engine/tests -q -p no:cacheprovider'
 }
 

@@ -21,8 +21,5 @@ pydantic==2.10.4
 uvicorn==0.34.0
 httpx==0.28.1
 
-# Local image embeddings + aesthetic pre-scoring (CPU). Heavy but fully local.
-# The engine degrades gracefully (neutral scores) if these are not installed.
-torch==2.4.1
-open-clip-torch==2.32.0
-timm==1.0.27
+# The GPU stack (torch, transformers, safetensors) is in requirements-gpu.txt, so the engine check installs only
+# the packages above and stays fast. Without it, the Q-ReAlign and SigLIP 2 stages leave their values unknown.

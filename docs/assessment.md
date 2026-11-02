@@ -54,7 +54,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | B5 | ~~Embeddings ignore EXIF orientation~~ **Resolved in P04.1:** ingest applies the orientation once, and embeddings read the upright working copy (`engine/src/embeddings.py`) | Run: `engine/tests/test_ingest.py` (orientation 6 gives an upright working copy and thumbnail) |
 | B6 | Absolute 1 to 10 votes from the model are the main AI signal, the protocol that published evidence finds least reliable | `engine/src/vlm/schema.py:12` | Read, and [ADR 0006](decisions/0006-comparative-curation-pipeline.md) |
 | B7 | Without AI, the suitability term falls back to the technical score, so it counts twice. Diversity is a constant 60 | `engine/src/final_ranker.py:67`, `:74` | Read |
-| B8 | A clean install has no aesthetic weights, and the fallback derives a score from vector spread and shows it as a real score | `engine/src/aesthetic.py:34`, `:68` | Read |
+| B8 | A clean install has no aesthetic weights, and the fallback derives a score from vector spread and shows it as a real score. **Resolved in P04.3 for the new scoring path:** a missing Q-ReAlign or SigLIP 2 model stores an unknown value (NULL, or no embedding row) and a structured error, never a neutral number or a colour histogram. The old fallback in `engine/src/aesthetic.py` still feeds the legacy ranker and goes with it in P04.8 | `engine/src/neural_stages.py`, `engine/src/aesthetic.py:34`, `:68` | Run: `engine/tests/test_neural_stages.py` (missing model, unusable answers, failed batch) with fake models; the legacy fallback is read |
 | B9 | Penalties match free model text, in two languages | `engine/src/final_ranker.py:113`–`116` | Read |
 | B10 | Clustering depends on input order: first-fit, with the first member as centroid | `engine/src/embeddings.py:91` | Read |
 
@@ -63,7 +63,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | ID | Defect | Location | Evidence |
 | --- | --- | --- | --- |
 | C1 | ~~Each original is fully decoded three times, by quality, faces and embeddings~~ **Resolved in P04.1:** ingest decodes each original once and the three stages read the working copy | Run: `engine/tests/test_ingest.py` counts one decode per original |
-| C2 | Models run on CPU, one image at a time, on a PC with a 12 GB GPU | `engine/src/embeddings.py:37`–`41` | Read |
+| C2 | ~~Models run on CPU, one image at a time, on a PC with a 12 GB GPU~~ **Resolved in P04.3 in code, not yet measured:** the engine sends Q-ReAlign and SigLIP 2 batches of the configured size to the GPU (`engine/src/neural_stages.py`, `engine/src/gpu_models.py`), and `analyze` no longer calls OpenCLIP. Speed and memory on the reference PC stay unmeasured until P04.MEASURE | Run: `engine/tests/test_neural_stages.py` proves batching and device selection with fake models; real GPU behavior is unverified |
 | C3 | ~~Photo IDs hash the absolute path. Moving a folder loses all results~~ **Resolved in P04.1:** the ID is the SHA-256 of the content (`photo_id_for` in `engine/src/utils.py`) | Run: `engine/tests/test_ingest.py` (a moved file keeps its ID and results) |
 
 ### Environment and repository

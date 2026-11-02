@@ -194,6 +194,26 @@ created first, as the listing in `start.sh` does. If a volume that already holds
 fetcher stops with "the models volume is not writable by this user". It then needs its owner changed to uid 10001,
 for example with a throwaway root container of the same base image; this has not been needed or observed.
 
+### Scoring and embedding models (Q-ReAlign, SigLIP 2)
+
+The `api` service reads two model directories from the same `models` volume (mounted read-only, and named by
+`AURAFRAME_MODELS_DIR=/models`): `q-realign-mini` and `siglip2-base-patch16-224`, set in `models:` of
+`engine/config.yaml`. Each must hold the checkpoint as `.safetensors` files (sharded files are fine) and the model's
+configuration, tokenizer and processor files. **The engine never downloads them, and `fetch-models` does not list
+them yet:** their commits, sizes and SHA-256 values have not been pinned, so place the files in the volume yourself
+until P04.MEASURE adds them to the manifest.
+
+- A directory that holds only `.bin`, `.pt`, `.pth`, `.pkl` or `.ckpt` weights is refused: those formats can run code.
+- A missing directory, missing weights, an invalid safetensors header, `torch` and `transformers` not installed (the
+  `core` image), or `models.device: cuda` on a host without a GPU each end the stage with a log event of level `error`
+  and a `model_<reason>` code. The values of that stage stay unknown: Q-ReAlign rows hold NULL, and no embedding is
+  stored. The rest of the run continues, and nothing is substituted.
+- `models.device` is `auto` (GPU when available, else CPU), `cuda` or `cpu`. Batch sizes are `models.qrealign.batch_size`
+  (16) and `models.siglip2.batch_size` (32), clamped to 1 to 256; lower them if the GPU runs out of memory (a failed
+  batch is logged and left unknown).
+- The `full` image installs `engine/requirements-gpu.txt` (torch, transformers, safetensors). Its pins were not
+  resolved or built when they were added; the first `docker compose build api` is the check.
+
 ## Desktop shell build
 
 Status: **works on the reference PC (Windows) as of 2026-11-02** (P02.5). Not yet run on a Linux host.

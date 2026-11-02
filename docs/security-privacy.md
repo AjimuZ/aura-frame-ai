@@ -28,7 +28,7 @@ Status: **target design**. The final section lists what the current code does to
 | `api` to `codex` | Exposure of originals to a service with internet | Only anonymous, resized, EXIF-free copies cross this boundary, into a tmpfs. No path, name or database is mounted |
 | `codex` to OpenAI | Image content leaves the computer | Off by default, opt-in per library, call limit, all Codex tools and telemetry off |
 | `fetch-models` to internet | Tampered model files | Pinned repository revisions, sizes and SHA-256 checks, https only, and a file is renamed into place only after it passes. This service never sees photos and cannot reach the other services (implemented in P03.2) |
-| Model file loading | Code execution from model files | GGUF and safetensors only, by name and by first bytes. Pickle-based formats are refused before any download (implemented in P03.2 for the downloads) |
+| Model file loading | Code execution from model files | GGUF and safetensors only, by name and by first bytes. Pickle-based formats are refused before any download (implemented in P03.2 for the downloads). The Q-ReAlign and SigLIP 2 loaders (P04.3, `engine/src/model_loader.py`, `engine/src/gpu_models.py`) read `.safetensors` only, check the header, take one plain directory name of the models volume (no hub identifier, no path), and pass `local_files_only`, `use_safetensors` and no remote code; a test scans the source for download calls. Real checkpoints have not been loaded yet |
 
 ## Desktop shell hardening
 

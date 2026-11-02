@@ -1,6 +1,7 @@
 # api image: the FastAPI service and the Python engine, running as an unprivileged user.
-# Stage `core` has no torch stack, the same package set as the engine tests. Stage `full` adds PyTorch
-# with CUDA and is what compose.yaml builds by default.
+# Stage `core` has no torch stack, the same package set as the engine tests (engine/requirements.txt). Stage
+# `full` adds PyTorch with CUDA and transformers (engine/requirements-gpu.txt) and is what compose.yaml builds
+# by default.
 
 FROM python:3.12-slim@sha256:aa943ce411423c7582288f18707ff66eddcbaeb510502d747a72aeb34f30d159 AS core
 
@@ -20,9 +21,7 @@ RUN groupadd --gid 10001 auraframe \
     && install -d -o 10001 -g 10001 /data /exports /models /photos
 
 COPY engine/requirements.txt /app/requirements.txt
-RUN grep -vE '^(torch|open-clip-torch|timm)==' /app/requirements.txt > /tmp/core.txt \
-    && pip install -q -r /tmp/core.txt \
-    && rm /tmp/core.txt
+RUN pip install -q -r /app/requirements.txt
 
 COPY engine /app/engine
 COPY docker/api/healthcheck.py /app/healthcheck.py
@@ -36,5 +35,6 @@ CMD ["python", "-m", "uvicorn", "--factory", "api.app:create_app_from_env", "--h
 FROM core AS full
 
 USER root
-RUN pip install -q -r /app/requirements.txt
+COPY engine/requirements-gpu.txt /app/requirements-gpu.txt
+RUN pip install -q -r /app/requirements-gpu.txt
 USER 10001:10001

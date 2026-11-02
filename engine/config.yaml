@@ -18,6 +18,21 @@ ai:
     max_consecutive_failures: 3
     max_tokens: 512
 
+# Local models for the GPU scoring and embedding stages (engine/src/neural_stages.py). Each `dir` is one plain
+# directory name inside the models volume (AURAFRAME_MODELS_DIR in the api container, `dir` below elsewhere).
+# Only .safetensors weights load. The engine never downloads a model: put the files there first
+# (docs/operations.md#model-files). A missing model leaves its values unknown; nothing is invented.
+models:
+  dir: "./data/models"
+  # auto = cuda when available, else cpu; cuda = fail when there is no GPU; cpu = never use the GPU.
+  device: "auto"
+  qrealign:
+    dir: "q-realign-mini"
+    batch_size: 16
+  siglip2:
+    dir: "siglip2-base-patch16-224"
+    batch_size: 32
+
 input:
   photos_dir: "./data/input_originali"
   include_subfolders: true

@@ -4,6 +4,15 @@
 
 ### Added
 
+- `analyze` now scores each photo with Q-ReAlign (quality and aesthetics, values between 0 and 1) and embeds it with
+  SigLIP 2, both in batches on the GPU, reading the working copy. A missing model, a missing GPU when `models.device`
+  is `cuda`, or an unusable answer leaves the value unknown with a logged error code; no neutral score and no
+  colour-histogram substitute is ever stored. Models load from `.safetensors` files in one directory of the models
+  volume only, and the engine downloads nothing (`fetch-models` does not list them yet). The heavy packages moved to
+  `engine/requirements-gpu.txt`, installed by the `full` image, so the engine check installs only
+  `engine/requirements.txt`. Nothing ranks with the new values yet. Tested with fake models; the real adapters, the
+  checkpoints, the new pins and GPU speed are unverified until P04.MEASURE, and the container test run could not be
+  executed in the session that wrote this.
 - The sanity gate now rejects only objective failures: an unreadable file, an image format the pipeline does
   not accept, a byte-identical copy of an earlier photo, and an image under 256 px on the long side. Brightness
   and blur no longer reject (a smooth gradient and a night sky survive), and a screenshot only gets the

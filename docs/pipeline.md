@@ -79,12 +79,30 @@ prescore = 0.6 * aesthetic + 0.4 * quality - people_penalty
 
 The weights are starting values, tuned during P04 against the [evaluation](#evaluation).
 
+Implemented in P04.3 (`engine/src/neural_stages.py`, `engine/src/gpu_models.py`, `engine/src/model_loader.py`):
+`score_qrealign` reads the working copy of each non-rejected photo, sends batches of `models.qrealign.batch_size` to
+the model once for quality and once for aesthetics, and stores the two values in the `neural_scores` table. The
+value is the probability-weighted level of five rating words (excellent 1, good 0.75, fair 0.5, poor 0.25, bad 0). A
+value that is missing, not finite or outside 0 to 1 is stored as unknown (NULL), never clipped or replaced. The
+prescore formula above is not computed yet and nothing ranks with these values yet. Only the loaders read model
+files: `.safetensors` only, from one directory of the models volume, with no download path.
+Without the model (not in the volume, no `torch`, no GPU when `models.device` is `cuda`) the stage logs an `error`
+event with a `model_<reason>` code and leaves every value unknown. Verified with fake models only: the adapters and the
+real checkpoints have not run, so the prompt, the rating-word tokens and speed on the reference PC are unverified until
+P04.MEASURE.
+
 ### 4. Embedding and content tags
 
 SigLIP 2 produces one vector per photo, describing the whole frame, never a face. Zero-shot
 matching against fixed labels gives a content tag: `portrait`, `group`, `landscape`,
 `cityscape`, `architecture`, `nature`, `wildlife`, `pet`, `food`, `event`, `sport`, `macro`,
 `night`, `abstract`, `document`, `other`. The list contains no sensitive classes.
+
+Implemented in P04.3 (`embed_siglip2` in `engine/src/neural_stages.py`): batches of `models.siglip2.batch_size` give
+one float32 vector per photo, divided by its length, stored in the `embeddings` table with the model name. A zero,
+non-finite or wrongly shaped answer stores no vector, so grouping skips that photo; the old colour-histogram
+substitute is no longer used by `analyze`. Clustering never compares vectors of different sizes. Content tags are not
+implemented (P04.4), and the cluster distance of 0.12 was tuned for the old model and is revisited in P04.4.
 
 ### 5. Grouping
 

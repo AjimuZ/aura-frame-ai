@@ -102,7 +102,8 @@ def assign_clusters(photos: list[Photo], config: dict[str, Any], conn: Any) -> i
             continue
         assigned = -1
         for idx, centroid in enumerate(centroids):
-            if _cosine_distance(vec, centroid) <= distance:
+            # Vectors of another model (another size) are never comparable, so they never join a cluster.
+            if centroid.shape == vec.shape and _cosine_distance(vec, centroid) <= distance:
                 assigned = idx
                 break
         if assigned == -1:

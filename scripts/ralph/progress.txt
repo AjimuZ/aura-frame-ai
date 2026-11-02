@@ -64,6 +64,8 @@
 - When an ID scheme merges identical inputs, record every dropped input as its own rejected record with a distinct ID and a stated reason, so a rejection is visible and counted instead of silent.
 - Decide format support from decoded content (`image.format`), not the file extension, and keep 'recognized but unsupported' distinct from 'unreadable'.
 - Reject policy belongs in one place (the gate). Measurement stages only measure, and anything subjective is a soft flag.
+- Never gate a test on whether an optional package is installed; make the import fail through sys.modules so the same test runs in the light and the full environment.
+- Represent an unobtainable value as NULL or a missing row and validate range at the storage boundary, so no stage can store an invented neutral score.
 
 ---
 
@@ -687,4 +689,16 @@ Privacy and security: no new network or filesystem access. Originals are still o
   - The flag code treats a brightness mean or Laplacian variance of exactly 0 as unmeasured, so an all-black or perfectly flat image gets no low_light or possible_blur flag. Tests avoid asserting those flags at 0.
   - P04.8 deletes `local_gate.py`; the tests in `test_sanity_gate.py` check the policy through `index_photos`, `score_quality` and `run_local_gate`, so they are the ones to port. `export_results._REJECT_FOLDERS` still has dead reasons (`too_blurry`, `too_dark`, `no_face`, `likely_screenshot` and others) that can be removed with it.
   - To keep a synthetic screenshot flat after the JPEG working copy, align colour blocks to 8 px boundaries; otherwise ringing raises the unique-gray-level ratio above the 0.35 screenshot heuristic.
+---
+
+## 2026-11-02T14:07:45Z - P04.3
+- Fixed the disabled test: test_loaders_report_a_missing_stack no longer carries a skipif on torch being installed. It sets sys.modules entries for torch and transformers to None, so the missing-stack error is exercised in every environment. The rest of P04.3 was already in the working tree from attempt 1 and was reviewed statically: batched GPU stages with unknown (NULL) values, a safetensors-only local loader with no download path, heavy dependencies in engine/requirements-gpu.txt, config, DB table, wiring in main.py and docs. No test, lint or build command could be run in this session (shell commands were denied), so nothing is verified by execution; the roadmap note and changelog say so.
+- Files changed: engine/tests/test_neural_stages.py, engine/src/neural_stages.py, engine/src/gpu_models.py, engine/src/model_loader.py, engine/src/db.py, engine/src/embeddings.py, engine/main.py, engine/config.yaml, engine/requirements.txt, engine/requirements-gpu.txt, scripts/check.sh, docker/api/Dockerfile, compose.yaml, CHANGELOG.md, docs/pipeline.md, docs/operations.md, docs/testing.md, docs/security-privacy.md, docs/assessment.md, docs/roadmap.md
+- **Learnings for future iterations:**
+  - No tests, lint or build ran in the session that wrote P04.3, so the first step of the next session should be the engine container command; failures are most likely in engine/tests/test_neural_stages.py, which has never been executed.
+  - Q-ReAlign values live in the neural_scores table (photo_id, model, quality, aesthetic; NULL means unknown) via db.save_neural_scores and db.load_neural_scores; embeddings stay in the embeddings table with the model name. The old embed_photos and OpenCLIP aesthetic code still exist for the current ranking and are removed in P04.8.
+  - Stages accept an injected scorer or embedder (objects with name, device and score/embed) or a loader callable, so tests need no torch; the real adapters in gpu_models.py were written against the transformers API without access to the checkpoints and need checking in P04.MEASURE.
+  - Model directories are plain names under the models volume (AURAFRAME_MODELS_DIR in the api container, models.dir elsewhere); model_dir_name refuses hub IDs and paths. fetch-models does not list the new models yet, so weights must be placed by hand.
+  - To simulate a missing optional package in a test, use monkeypatch.setitem(sys.modules, name, None) instead of a skipif on find_spec; it runs everywhere.
+  - Nothing ranks with the new Q-ReAlign values yet; the prescore that uses them comes in a later package.
 ---

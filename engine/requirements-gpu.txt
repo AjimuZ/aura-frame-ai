@@ -1,0 +1,11 @@
+# AuraFrame AI - heavy local inference stack for the Q-ReAlign and SigLIP 2 stages (engine/src/gpu_models.py).
+# Installed on top of requirements.txt by the `full` stage of docker/api/Dockerfile. The engine check does not
+# install it: tests use fake models, so the check stays fast. The engine loads local safetensors only, with
+# local_files_only, and compose.yaml sets HF_HUB_OFFLINE=1 and HF_HUB_DISABLE_TELEMETRY=1 for the api service.
+#
+# Unverified: these pins were chosen from docs/technology.md (transformers >= 5.2) and were not resolved or
+# built in the session that added them. The first `docker compose build api` is the check; adjust torch to the
+# release that transformers requires if pip reports a conflict.
+torch==2.4.1
+transformers==5.2.0
+safetensors==0.6.2

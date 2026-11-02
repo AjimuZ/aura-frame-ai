@@ -65,15 +65,22 @@ docker run --rm -e PYTHONDONTWRITEBYTECODE=1 \
   -v "$(pwd)/engine:/app/engine:ro" \
   python:3.12-slim bash -c '
     apt-get update -qq && apt-get install -y -qq libgl1 libglib2.0-0
-    grep -vE "^(torch|open-clip-torch|timm)==" /app/engine/requirements.txt > /tmp/req.txt
-    pip install -q -r /tmp/req.txt
+    pip install -q -r /app/engine/requirements.txt
     cd /app && python -m pytest engine/tests -q -p no:cacheprovider'
 ```
 
 In Git Bash on Windows, prefix the command with `MSYS_NO_PATHCONV=1` and use `$(pwd -W)`.
 
-Limit: without the torch stack, embeddings and aesthetics run on their fallback paths. Those paths
-are what the suite asserts. The OpenCLIP and LAION paths are not covered.
+The check installs `engine/requirements.txt` only. The heavy inference stack (torch, transformers, safetensors)
+is in `engine/requirements-gpu.txt`, which only the `full` stage of the `api` image installs, and a test fails if a
+heavy package returns to `requirements.txt`. An older form of this command filtered `torch`, `open-clip-torch` and
+`timm` out with `grep -vE`; it still works, because the filter now removes nothing.
+
+Limit: the suite has no torch stack and no model files. The Q-ReAlign and SigLIP 2 stages are tested with fake
+models (batching, device request, 0 to 1 values, unit-length vectors, unknown values, safetensors-only loading, no
+download calls). The real adapters in `engine/src/gpu_models.py`, the real checkpoints and the pins in
+`requirements-gpu.txt` are unverified until P04.MEASURE and the first build of the `full` image. The legacy
+OpenCLIP and LAION paths are not covered.
 
 Where exports and reports go in the tests: each test builds its own `data`, `photos` and `exports` roots under
 pytest's temporary folder. The API writes copies to `<exports>/<library id>/output/top_06_final_set` and the
