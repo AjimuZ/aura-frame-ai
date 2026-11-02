@@ -1,10 +1,12 @@
 # AI providers
 
 Status: the contract and the local llama-server provider are **implemented** in `engine/src/providers`
-(P03.1), tested against a fake server only. They are **not yet wired into the pipeline**, no model has been
-run, and the Codex CLI provider is **planned** ([P05](roadmap.md)). Its sidecar image, config and volumes exist
-since P05.1 ([ADR 0016](decisions/0016-codex-sidecar-image.md)) but have not been built or run, and nothing calls
-them yet. The pipeline still uses the legacy client
+(P03.1), tested against a fake server only. They are **not yet wired into the pipeline**, and no model has been
+run. The Codex CLI provider is **implemented in the engine** since P05.2.1 (`engine/src/providers/codex.py`,
+[ADR 0017](decisions/0017-codex-provider-gate-and-cap.md)) and tested against a fake CLI only; its transport to the
+sidecar, `--provider codex`, `--codex-login` and the opt-in dialog are **planned** ([P05](roadmap.md)). The sidecar
+image, config and volumes exist since P05.1 ([ADR 0016](decisions/0016-codex-sidecar-image.md)) but have not been
+built or run, and nothing calls them yet. The pipeline still uses the legacy client
 until [P03](roadmap.md) and [P04](roadmap.md) land. Decisions: [ADR 0003](decisions/0003-llama-cpp-runtime.md),
 [ADR 0004](decisions/0004-default-local-model.md),
 [ADR 0005](decisions/0005-codex-cli-provider.md).
@@ -32,7 +34,8 @@ Contract:
 - A failed provider degrades the run to the local prescore and says so in the UI.
 - No method raises. A failure comes back as a result with `ok=False` and a short `error` code
   (`invalid_input`, `unreachable`, `timeout`, `model_missing`, `http_<status>`, `invalid_output`,
-  `call_limit`, `degraded`). The error never holds model text, image data or a path.
+  `call_limit`, `degraded`; the Codex provider adds `opt_in_required`, `cli_failed`, `no_output` and
+  `exchange_failed`). The error never holds model text, image data or a path.
 
 Types (all in `engine/src/providers/contract.py`):
 
@@ -59,7 +62,8 @@ Limits (`ai.local` in `engine/config.yaml`, built by `ProviderSettings.from_mapp
 | `max_tokens` | 512 | 64 to 2,048 |
 
 `GuardedProvider` wraps any provider. After `max_consecutive_failures` failures in a row, or at `max_calls`,
-it stops calling the provider and sets `status.degraded` with a reason for the UI. `compare_or_prescore`
+it stops calling the provider and sets `status.degraded` with a reason for the UI. It also adopts the degraded
+state of an inner provider that keeps its own `status`, such as the Codex provider at its cap. `compare_or_prescore`
 returns a low-confidence verdict from the two prescores (source `prescore`) whenever a call fails, so the
 tournament can go on. Choosing that path in the pipeline and showing the reason in the UI come with P04.
 
@@ -213,6 +217,41 @@ treat `auth.json` like a password.
   stale when model names change. `model_reasoning_effort` defaults to `low` for this short task.
 - Plan limits and API costs are the user's. Each call is a full agent turn, so it costs more than
   a bare image request. P05 measures this.
+
+### Engine provider
+
+**Status: implemented (P05.2.1), tested with a fake CLI only.** `CodexProvider` in `engine/src/providers/codex.py`
+follows the provider contract ([ADR 0017](decisions/0017-codex-provider-gate-and-cap.md)):
+
+- **Opt-in gate.** The provider is built with `opted_in=False` by default, and only the boolean `True` turns it on.
+  Without it, every call returns `opt_in_required` before a copy is checked, a file is written or a process starts,
+  and `health()` says opt-in is required. There is deliberately no opt-in key in `engine/config.yaml`.
+- **Call cap.** Every CLI start, retries included, counts against `max_calls`. At the cap the provider refuses with
+  `call_limit` and reports `degraded`; wrapped in `GuardedProvider(provider, settings.guard_settings())`, the guard
+  reports it too, and `compare_or_prescore` returns prescore verdicts from then on.
+- **One call.** A fresh private folder holds `a.jpg`, `b.jpg` (or `a.jpg` for a critique) and `schema.json`. The CLI
+  runs there with relative names, `shell=False`, no stdin, its output discarded, and an environment of `PATH`,
+  `HOME`, `CODEX_HOME` and the locale only. It writes `verdict.json`, which is validated against the verdict schema.
+  The folder is removed whatever happens. A comparison adds one sentence to the prompt saying the first attachment
+  is image A.
+- **Failure.** The CLI missing is `unreachable` and not retried; a timeout, a non-zero exit (`cli_failed`), no
+  verdict file (`no_output`) and invalid JSON or schema (`invalid_output`) are retried within `max_retries`.
+
+Settings (`ai.codex` in `engine/config.yaml`, built by `CodexSettings.from_mapping`):
+
+| Setting | Default | Hard bounds or rule |
+| --- | --- | --- |
+| `model` | empty (the CLI's default) | letters, digits, `.`, `_`, `:` and `-`, at most 64, not starting with `-` |
+| `reasoning_effort` | `low` | `minimal`, `low`, `medium` or `high` |
+| `timeout_seconds` (per CLI start) | 180 | 0.25 to 600 |
+| `max_retries` | 1 | 0 to 5 |
+| `retry_delay_seconds` (times the attempt number) | 2 | 0 to 10 |
+| `max_calls` (CLI starts per run) | 200 | 1 to 20,000 |
+| `max_consecutive_failures` (for the guard) | 3 | 1 to 20 |
+
+Not yet decided or observed: how the `api` container hands a call to the sidecar (the default runner needs `codex`
+in the same container, which `api` does not have; P05.2.2 and P05.3), the flags against the real CLI 0.166.0,
+and whether the CLI's structured output accepts `maxLength` and `maxItems` in the verdict schemas.
 
 ## No provider
 

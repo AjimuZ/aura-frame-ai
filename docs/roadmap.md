@@ -337,6 +337,18 @@ case), including the new policy cases and `tests/codex-sidecar.test.cjs`; `.gita
 endings on a Windows checkout. Not observed: the image building, the CLI
 running in it, and `bash scripts/check.sh --integration` with its new "codex is not started by up" assertion.
 
+Progress 2026-11-02 (P05.2.1, part of P05.2): `engine/src/providers/codex.py` adds `CodexProvider` and
+`CodexSettings` (`ai.codex`, cap 200). Without `opted_in=True` no copy is checked, no file is written and no process
+starts; every CLI start, retries included, counts against the cap, after which the provider and its `GuardedProvider`
+report `degraded` and the prescore decides; each call runs in a fresh private folder holding only `a.jpg`, `b.jpg` and
+`schema.json`, with `shell=False` and a minimal environment, and the verdict file is schema-checked
+([AI providers](ai-providers.md#engine-provider), [ADR 0017](decisions/0017-codex-provider-gate-and-cap.md)).
+Observed: `bash scripts/check.sh --engine` passed 500 of 500 engine tests, including the 27 cases of the new
+`engine/tests/test_codex_provider.py` (fake CLI started as a real subprocess); `npm run lint` printed no findings. Not
+observed: the real CLI, a real account, the sidecar image. Still open in P05.2: the transport from `api` to the
+sidecar (the default runner needs the CLI in the same container), `--provider codex`, `--codex-login` and the
+opt-in dialog.
+
 Exit: the contract and data-shape tests pass; without opt-in the sidecar is not running and no call
 can happen; a real run with the owner's account completes on synthetic images.
 

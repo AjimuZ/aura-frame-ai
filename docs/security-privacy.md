@@ -122,6 +122,14 @@ Verified on 2026-11-01 by reading the source.
   `bash scripts/check.sh --compose` enforces these rules from the resolved configuration. Nothing calls it yet (P05.2),
   and its image has not been built, so none of this has been observed in a running container
   ([ADR 0016](decisions/0016-codex-sidecar-image.md)).
+- Since P05.2.1 (2026-11-02), the engine's Codex provider (`engine/src/providers/codex.py`) acts only when built with
+  `opted_in=True`; no configuration key can set that. Without it, no file is written and no process starts. It accepts
+  only copies that pass `check_copy`, writes them as `a.jpg` and `b.jpg` in a fresh private folder that is removed
+  after each call, starts the CLI with `shell=False`, relative file names and only `PATH`, `HOME`, `CODEX_HOME` and the
+  locale in its environment, discards its output, and validates model and effort names before they reach argv.
+  `engine/tests/test_codex_provider.py` proves with a fake CLI that what it receives carries no EXIF, ICC, comment,
+  file name, photo folder or API key. Nothing calls the provider yet, and the transport to the sidecar is open
+  ([ADR 0017](decisions/0017-codex-provider-gate-and-cap.md)).
 - A personal first name was hard-coded as the default library name, which broke the project rule
   against personal data in code. Fixed in P01.2.2; see [assessment](assessment.md#environment-and-repository).
   The `package.json` author field no longer holds a personal name, and `tests/personal-data.test.cjs`

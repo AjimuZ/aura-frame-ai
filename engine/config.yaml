@@ -17,6 +17,18 @@ ai:
     max_calls: 1000
     max_consecutive_failures: 3
     max_tokens: 512
+  # Optional Codex CLI judge (engine/src/providers/codex.py), read by CodexSettings. There is no opt-in key on
+  # purpose: only the per-library confirmation turns the provider on, never this file. Not wired into a run yet.
+  # Each CLI start, retries included, counts against max_calls (1-20000).
+  codex:
+    # Empty uses the CLI's own default model.
+    model: ""
+    reasoning_effort: "low"
+    timeout_seconds: 180
+    max_retries: 1
+    retry_delay_seconds: 2
+    max_calls: 200
+    max_consecutive_failures: 3
 
 # Local models for the GPU scoring and embedding stages (engine/src/neural_stages.py). Each `dir` is one plain
 # directory name inside the models volume (AURAFRAME_MODELS_DIR in the api container, `dir` below elsewhere).

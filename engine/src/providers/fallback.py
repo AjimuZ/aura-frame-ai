@@ -40,8 +40,16 @@ class GuardedProvider:
             self.status.reason = reason
             _LOG.warning("Provider degraded to the prescore: %s", reason)
 
+    # Adopts the degraded state of an inner provider that keeps its own status, such as the Codex
+    # provider at its call cap, so a caller reading `status` of the guard sees it.
+    def _follow_inner(self) -> None:
+        inner = getattr(self._inner, "status", None)
+        if getattr(inner, "degraded", False) is True:
+            self._degrade(str(getattr(inner, "reason", None) or "The provider reported itself degraded."))
+
     # Reserves one call. Returns an error code when the provider must not be called, else None.
     def _admit(self) -> str | None:
+        self._follow_inner()
         if self.status.degraded:
             return f"degraded: {self.status.reason}"
         if self.status.calls >= self._settings.max_calls:
@@ -57,6 +65,7 @@ class GuardedProvider:
             return
         self.status.failures += 1
         self._consecutive += 1
+        self._follow_inner()
         if self._consecutive >= self._settings.max_consecutive_failures:
             self._degrade(f"The provider failed {self._consecutive} times in a row ({error}).")
 

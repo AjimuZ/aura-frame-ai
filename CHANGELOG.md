@@ -4,6 +4,14 @@
 
 ### Added
 
+- The engine has a Codex CLI provider (`engine/src/providers/codex.py`) as a building block. It does nothing until it
+  is built with explicit opt-in: without it no copy is checked, no file is written and no process starts, and no
+  setting in `engine/config.yaml` can turn it on. Each verdict is one `codex exec` start in a fresh private folder
+  holding only the anonymous copies as `a.jpg` and `b.jpg` and the verdict schema, with no shell and a minimal
+  environment; the verdict is schema-checked and the folder removed whatever happens. Every start, retries included,
+  counts against a per-run cap (`ai.codex.max_calls`, default 200), after which the run goes on with the local
+  prescore. `GuardedProvider` now also reports an inner provider that degraded itself. Tested against a fake CLI
+  (500 engine tests); nothing calls it yet, the transport to the sidecar is not built, and the real CLI has not run.
 - The container stack has an optional `codex` sidecar for the opt-in Codex CLI judge, behind the profile `codex`, so
   no `up` starts it. Its image (`docker/codex/`) pins `node:22-slim` by digest and `@openai/codex@0.166.0`, runs as
   uid 10001 on a read-only root, and installs a config with web search, history, analytics, feedback, telemetry and

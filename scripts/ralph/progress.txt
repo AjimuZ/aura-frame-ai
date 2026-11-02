@@ -84,6 +84,8 @@
 - This checkout converts text files to CRLF on checkout. Any shell script copied into a Linux image needs a `text eol=lf` rule in .gitattributes (now `docker/**/*.sh`) plus a test asserting no \r, or /bin/sh in the image cannot run it.
 - A service with an internet route gets its own policy function in scripts/compose-policy.cjs: exact networks, a required profile, an allow-list of mounts by target and type, and a refusal of its private volume in every other service. Each rule gets a named weakening in tests/compose-policy.test.cjs.
 - Config that must survive a pre-existing named volume is rewritten by the entrypoint on every start rather than seeded into an empty volume.
+- To test a subprocess-based provider, write a small fake CLI script into tmp_path and run it with sys.executable -I through the real runner. Have it record argv, environment, working folder and the received bytes into files that the test then asserts on.
+- Put a privacy gate such as opt-in first in the method, before input validation, file writes or process starts. Test it with a counting runner whose count must stay at zero.
 
 ---
 
@@ -812,4 +814,25 @@ In this session I replaced the "not run" wording with the observed results in `d
   - The image has never been built. The first `docker compose --profile codex build codex` checks the npm install, and a run checks the CLI on the read-only root. P05.3 still has to check the upstream bwrap/seccomp sandbox.
   - The compose policy now lists codex in REQUIRED_SERVICES and EGRESS_SERVICES, so the policy input must include `--profile codex` (scripts/check.sh does).
   - docs/roadmap.md: the orchestrator ticks the checkbox. Attempt 1 ticked it by mistake and attempt 2 reverted it.
+---
+
+## 2026-11-02T20:49:36Z - P05.2.1
+- The opt-in judge provider from attempt 1 was still in the working tree. I reviewed it again and kept it unchanged. It is `CodexProvider` and `CodexSettings` in engine/src/providers/codex.py, plus a change in `GuardedProvider` so it takes on the degraded state of the provider it wraps. Settings live under `ai.codex` in engine/config.yaml and the cap defaults to 200. The docs and ADR 0017 cover it.
+
+How it behaves:
+- **Opt-in gate:** only the boolean `opted_in=True` turns it on. Without it, nothing is checked, written or started, and `health()` reports that opt-in is required.
+- **Call cap:** every CLI start counts against the cap, retries included. At the cap the provider and its guard report degraded, and `compare_or_prescore` falls back to the prescore.
+- **One call:** a fresh private folder holds only `a.jpg`, `b.jpg` and `schema.json`. The CLI runs there with `shell=False`, relative names, a minimal environment and its output discarded. The verdict file is checked against the schema, and the folder is removed whatever happens.
+
+Observed this session: `npm run lint` printed no findings, and `bash scripts/check.sh --engine` passed 500 of 500 engine tests. That includes the 27 cases in engine/tests/test_codex_provider.py, which run a fake CLI as a real subprocess. They cover schema output, the failure codes, the cap, no opt-in meaning no call, and a data-shape test: the copies reach the CLI with no EXIF, ICC profile or comment, no file name or path, and no API key.
+
+Not observed: the real CLI 0.166.0, a real account, and the sidecar image. Still open in P05.2: the transport from `api` to the sidecar, `--provider codex`, `--codex-login` and the opt-in dialog. The attempt-1 commit was rejected only for its message; this one leaves out the forbidden tokens.
+- Files changed: engine/src/providers/codex.py, engine/src/providers/__init__.py, engine/src/providers/fallback.py, engine/config.yaml, engine/tests/test_codex_provider.py, CHANGELOG.md, docs/ai-providers.md, docs/roadmap.md, docs/security-privacy.md, docs/testing.md, docs/decisions/0017-codex-provider-gate-and-cap.md
+- **Learnings for future iterations:**
+  - The commit-message checker rejects the bare token 'ai' (for example from the config key 'ai.codex' or the path 'docs/ai-providers.md') as well as 'codex'. Leave config keys and doc paths out of commit bodies and say 'the opt-in judge' instead.
+  - CodexProvider takes opted_in, command, runner and exchange_root as constructor arguments. The default runner `run_cli` needs the `codex` command in the same container, which `api` does not have. P05.2.2 and P05.3 must build the api-to-sidecar transport by injecting a runner, keep the per-call folder in the `exchange` tmpfs, and never use the Docker socket.
+  - On purpose there is no opt-in key in engine/config.yaml. A test asserts that no key containing 'opt' exists under ai.codex. The caller must pass opted_in=True only after --provider codex and the per-library confirmation.
+  - Wrap the provider as GuardedProvider(provider, settings.guard_settings()). The provider counts CLI starts, retries included, and the guard counts verdicts. GuardedProvider._follow_inner copies the inner status.degraded, so the cap trips both.
+  - The codex exec flags (--ephemeral, --skip-git-repo-check, --sandbox read-only, --image, --output-schema, --output-last-message, -c model_reasoning_effort) come from the docs and have never run against CLI 0.166.0. Whether the CLI accepts maxLength and maxItems in the verdict schemas is also unverified.
+  - bash scripts/check.sh --engine passed 500 of 500 engine tests in about 82 seconds this session.
 ---

@@ -1127,8 +1127,8 @@
         "A data-shape test proves that what reaches the sidecar has no EXIF, file name or path"
       ],
       "priority": 40,
-      "passes": false,
-      "notes": "",
+      "passes": true,
+      "notes": "The opt-in judge provider from attempt 1 was still in the working tree. I reviewed it again and kept it unchanged. It is `CodexProvider` and `CodexSettings` in engine/src/providers/codex.py, plus a change in `GuardedProvider` so it takes on the degraded state of the provider it wraps. Settings live under `ai.codex` in engine/config.yaml and the cap defaults to 200. The docs and ADR 0017 cover it.\n\nHow it behaves:\n- **Opt-in gate:** only the boolean `opted_in=True` turns it on. Without it, nothing is checked, written or started, and `health()` reports that opt-in is required.\n- **Call cap:** every CLI start counts against the cap, retries included. At the cap the provider and its guard report degraded, and `compare_or_prescore` falls back to the prescore.\n- **One call:** a fresh private folder holds only `a.jpg`, `b.jpg` and `schema.json`. The CLI runs there with `shell=False`, relative names, a minimal environment and its output discarded. The verdict file is checked against the schema, and the folder is removed whatever happens.\n\nObserved this session: `npm run lint` printed no findings, and `bash scripts/check.sh --engine` passed 500 of 500 engine tests. That includes the 27 cases in engine/tests/test_codex_provider.py, which run a fake CLI as a real subprocess. They cover schema output, the failure codes, the cap, no opt-in meaning no call, and a data-shape test: the copies reach the CLI with no EXIF, ICC profile or comment, no file name or path, and no API key.\n\nNot observed: the real CLI 0.166.0, a real account, and the sidecar image. Still open in P05.2: the transport from `api` to the sidecar, `--provider codex`, `--codex-login` and the opt-in dialog. The attempt-1 commit was rejected only for its message; this one leaves out the forbidden tokens.",
       "dependsOn": [
         "P05.1"
       ],
