@@ -91,6 +91,19 @@ async function findPhoto(
   return { source, fileName: typeof storedName === 'string' ? storedName : path.basename(source) };
 }
 
+// Returns `wanted` when it is an existing directory, otherwise `fallback`, which is created if missing.
+// A library folder is never created here: the API creates it, and on Linux a folder made by the person's account
+// could not be written by the API user (uid 10001).
+function existingFolder(wanted: string, fallback: string): string {
+  try {
+    if (fs.statSync(wanted).isDirectory()) return wanted;
+  } catch {
+    // Not there yet: the exports folder opens instead.
+  }
+  fs.mkdirSync(fallback, { recursive: true });
+  return fallback;
+}
+
 function isSameFile(source: string, destination: string): boolean {
   const normalize = (value: string): string => {
     const resolved = path.resolve(value);
@@ -124,8 +137,7 @@ export function registerFilesystemIpc(libraries: LibraryRegistryStore, backend: 
   // dialog is cancelled. Sends nothing while the services are down, and refuses with a fixed message then.
   ipcMain.handle('export:photo', async (_event, libraryId: string, photoId: string): Promise<boolean> => {
     const photo = await findPhoto(backend, libraries, libraryId, photoId);
-    const exportDir = path.join(libraries.outputDir(libraryId), 'exported_photos');
-    fs.mkdirSync(exportDir, { recursive: true });
+    const exportDir = existingFolder(libraries.outputDir(libraryId), libraries.exportsRoot());
     const safeName = path.basename(photo.fileName) || `photo${path.extname(photo.source)}`;
     const result = await dialog.showSaveDialog({
       title: 'Export photo',
@@ -148,16 +160,14 @@ export function registerFilesystemIpc(libraries: LibraryRegistryStore, backend: 
     return true;
   });
 
-  // Opens the local output folder in the OS file explorer, creating it if needed.
+  // Opens the host folder that holds this library's copies, which is `<exports>/<library id>/output` as mounted
+  // at `/exports` in the API. Before the first copy exists, the exports folder itself opens.
   ipcMain.handle('fs:openOutputFolder', async (_event, libraryId: string): Promise<void> => {
-    const dir = libraries.outputDir(libraryId);
-    fs.mkdirSync(dir, { recursive: true });
-    await shell.openPath(dir);
+    await shell.openPath(existingFolder(libraries.outputDir(libraryId), libraries.exportsRoot()));
   });
 
+  // Same for the reports of this library: `<exports>/<library id>/reports`.
   ipcMain.handle('fs:openReportsFolder', async (_event, libraryId: string): Promise<void> => {
-    const dir = libraries.reportsDir(libraryId);
-    fs.mkdirSync(dir, { recursive: true });
-    await shell.openPath(dir);
+    await shell.openPath(existingFolder(libraries.reportsDir(libraryId), libraries.exportsRoot()));
   });
 }

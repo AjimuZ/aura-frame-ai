@@ -89,8 +89,9 @@ recreating `api` for another folder can change its address.
 with the same package set as the engine tests, and the integration check uses it.
 
 Not observed yet: the `full` stage building, a GPU in a container, `vision` serving a model, and the
-engine running in `api`. The `/exports` mount exists, but the API still writes exports under `/data`
-until P02.4.5 connects it.
+engine running in `api`. The API writes copies and reports under the `/exports` mount, in a folder per
+library (see [Library data layout](#library-data-layout)); no run has written there on a real host yet, and
+the GPU overlay choice made by Electron main has not been observed with a real Docker.
 
 ## Storage
 
@@ -98,7 +99,7 @@ until P02.4.5 connects it.
 | --- | --- | --- | --- |
 | photos | bind mount, read-only | The folder chosen in the app, at `/photos` | Originals stay untouched |
 | data | named volume | SQLite, thumbnails, working copies, embeddings | SQLite with WAL needs a real Linux filesystem, not a Windows bind mount |
-| exports | bind mount | Copies and reports, at `./data/output` (Git-ignored) | Electron opens them in the file manager |
+| exports | bind mount | Copies and reports of every library, at `/exports/<library id>/`. `start.sh` and a bare compose use `./data/output` (Git-ignored); Electron main uses `exports/` in its `userData` folder | Electron opens them in the file manager |
 | models | named volume | GGUF and PyTorch model files | Survives image rebuilds, and can be mounted read-only |
 | exchange | tmpfs | Anonymous copies for the Codex sidecar | Gone when the container stops |
 | codex-home | named volume | Codex credentials and config | Visible only to the sidecar |
@@ -158,8 +159,17 @@ against a fake HTTP server only:
 - `startAnalysis`, `pauseAnalysis`, `resumeAnalysis`, `cancelAnalysis`, `getAnalysisStatus`, `onProgress`,
   `getPhotos`, `exportFinalSet`, `clearGeneratedData`, `getReviewSession` and `saveReviewSession` use the routes
   above. Channels are unchanged, and so are the shapes except for `getPhotos` (see the thumbnails item below).
-- `startAnalysis` runs `docker compose up -d --wait` with the folder in the environment (not `--no-deps api`,
-  and without `compose.gpu.yaml`), and resolves before the run starts. Its outcome arrives as events.
+- `startAnalysis` runs `docker compose up -d --wait` with the photo folder and the exports folder in the
+  environment (`AURAFRAME_PHOTOS_DIR`, `AURAFRAME_EXPORTS_DIR`; never in the arguments, and not `--no-deps api`),
+  and resolves before the run starts. Its outcome arrives as events. Before `up`, main runs `nvidia-smi -L`
+  through `spawn` with `shell: false`: when it succeeds, `-f compose.gpu.yaml` joins `-f compose.yaml` (as
+  `start.sh` does without `--cpu`), and `down` names the same files. A missing or failing `nvidia-smi` means no
+  overlay, not an error. Main creates the exports folder (`exports/` in `userData`) and refuses one that
+  contains the photo folder or lies inside it, or that is not an absolute directory.
+- `fs:openOutputFolder` and `fs:openReportsFolder` open `<exports>/<library id>/output` and
+  `<exports>/<library id>/reports` on the host, which is what the API sees at `/exports/<library id>/output` and
+  `/exports/<library id>/reports`. Before the first copy exists, the exports folder opens instead, and no library
+  folder is created on the host. `export:photo` offers the library's `output` folder as the save location.
 - The client only talks to `127.0.0.1`, adds the token and the Host header, and follows no redirect. Refusals
   become fixed messages, and an answer or event that contains the token is dropped.
 - No request leaves main, and so no token, until `stack.start` has resolved true in this session, and none from
@@ -213,10 +223,13 @@ Written in `engine/api/storage.py`; the routes for photos, media, providers, dat
 | --- | --- | --- |
 | `AURAFRAME_PHOTOS_ROOT` | `/photos` | The chosen folder, mounted read-only |
 | `AURAFRAME_DATA_ROOT` | `/data` | The writable volume for generated data |
+| `AURAFRAME_EXPORTS_ROOT` | `/exports` | The writable mount of the folder the person opens |
 
-Each library keeps its generated data under `<data root>/libraries/<library id>/`, using the engine's
-own `--data-root` layout: `working/auraframe.db`, `working/thumbs/`, `output/` and `reports/`. The two
-roots may not contain each other, so clearing data cannot reach an original.
+Each library keeps its working data under `<data root>/libraries/<library id>/`, using the engine's own
+`--data-root` layout: `working/auraframe.db` and `working/thumbs/`. Its copies and reports go under
+`<exports root>/<library id>/`: `output/` (with `top_06_final_set/` for the exported final set) and `reports/`,
+which is the engine's `--exports-root`. The three roots may not contain one another, so clearing data cannot
+reach an original and an export cannot land in the photos folder.
 
 Rules the routes follow:
 
@@ -225,8 +238,10 @@ Rules the routes follow:
 - `GET /api/libraries/{id}/media/{photo_id}` looks the photo up in SQLite. The stored path must
   resolve inside the photos root (`?variant=original`) or the library's `thumbs/` directory (default
   `?variant=thumbnail`), else the answer is 404 `media_unavailable`.
-- `DELETE /api/libraries/{id}/data` removes `working`, `output` and `reports` of that library only. It
-  is idempotent and does not follow symlinks. It never touches the photos root.
+- `DELETE /api/libraries/{id}/data` removes `working` (plus any `output` and `reports` left in the library's
+  data folder by earlier versions) and the library's `output` and `reports` under the exports root. It
+  is idempotent and does not follow symlinks. It never touches the photos root. A folder it may not remove
+  is a 409 `data_folder_unwritable`.
 - `GET /api/libraries/{id}/photos` returns the stored camelCase records, or `[]` for a library with no
   database yet. `GET` and `PUT /api/libraries/{id}/review` use the `slotAssignments`, `locks` and
   `shortlist` shape of the bridge, and `PUT` rejects unknown fields and oversized bodies.
@@ -245,7 +260,7 @@ against the real engine.
 | `GET /api/libraries/{id}/runs/current` | The latest run of that library in the `AnalysisStatus` shape, or an idle status |
 | `POST /api/libraries/{id}/runs/current/pause`, `/resume`, `/cancel` | Write the engine's `working/control.json`. 409 `no_active_run` when that library has no running analysis |
 | `GET /api/libraries/{id}/events` | Server-sent events: the run's buffered JSONL events, then live ones. The stream ends with the run. 404 `no_run` before any run |
-| `POST /api/libraries/{id}/exports` | Body `{"ids": [...]}`. Copies the originals into `output/top_06_final_set/NN_<photo id>.<ext>` and answers `{"exported": n}` |
+| `POST /api/libraries/{id}/exports` | Body `{"ids": [...]}`. Copies the originals into `/exports/<library id>/output/top_06_final_set/NN_<photo id>.<ext>` and answers `{"exported": n}` |
 
 Rules these routes follow:
 
@@ -257,14 +272,18 @@ Rules these routes follow:
 - One run exists at a time across all libraries. Cancel gives the engine 30 seconds to stop on its own,
   then kills it. A cancel left in `control.json` by an earlier run is cleared when a new run starts.
 - Events are the engine's JSONL lines. Lines that are not JSON objects with a lowercase `type`, or that
-  exceed 4096 bytes, are dropped. The photos root and data root paths are replaced by `<photos>` and
-  `<data>`, and each event gets the `libraryId`. At most 10000 events are kept per run, oldest first
+  exceed 4096 bytes, are dropped. The photos, data and exports root paths are replaced by `<photos>`,
+  `<data>` and `<exports>`, and each event gets the `libraryId`. At most 10000 events are kept per run, oldest first
   dropped. If the engine exits without a `done` or `error` event, the API adds one. The engine's stderr
   is not forwarded; it goes to the API container log.
 - Exports are validated before anything is copied: ids match the photo id pattern (1 to 500), are known
   to the library, and point to an image file inside the photos root. Otherwise HTTP 422 and no file is
-  written. A symlinked output folder is refused with 409, and a symlinked destination file is replaced,
-  never followed. Originals are only read.
+  written. A symlinked library folder or output folder is refused with 409 `export_folder_unsafe`, and a
+  symlinked destination file is replaced, never followed. Originals are only read.
+- The exports mount must be writable by the API user (uid 10001). The route checks that before it copies and
+  the run route checks it before it starts the engine, so a folder the API cannot write to gives
+  409 `export_folder_unwritable` with a fixed message, not a failed run or a silent empty folder.
+  The run passes `--exports-root` so the engine writes its reports under the same library folder.
 
 ## Target repository layout
 

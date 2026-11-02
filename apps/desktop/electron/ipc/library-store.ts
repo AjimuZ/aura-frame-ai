@@ -10,6 +10,8 @@ interface LibraryRegistry extends LibraryState {
 interface LibraryStoreOptions {
   now?: () => string;
   createId?: () => string;
+  // Host folder behind the stack's `/exports` mount. Defaults to `exports` next to the registry.
+  exportsPath?: string;
 }
 
 const DEFAULT_LIBRARY_NAME = 'My library';
@@ -18,6 +20,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 export class LibraryRegistryStore {
   private readonly registryPath: string;
   private readonly librariesPath: string;
+  private readonly exportsPath: string;
   private readonly now: () => string;
   private readonly createId: () => string;
   private registry: LibraryRegistry | null = null;
@@ -28,6 +31,7 @@ export class LibraryRegistryStore {
   ) {
     this.registryPath = path.join(rootPath, 'libraries.json');
     this.librariesPath = path.join(rootPath, 'libraries');
+    this.exportsPath = path.resolve(options.exportsPath ?? path.join(rootPath, 'exports'));
     this.now = options.now ?? (() => new Date().toISOString());
     this.createId = options.createId ?? randomUUID;
   }
@@ -174,6 +178,7 @@ export class LibraryRegistryStore {
       throw error;
     }
     fs.rmSync(staged, { recursive: true, force: true });
+    this.removeExports(libraryId);
     return this.getState();
   }
 
@@ -193,14 +198,19 @@ export class LibraryRegistryStore {
     return path.join(this.libraryRoot(libraryId), 'working');
   }
 
-  outputDir(libraryId: string): string {
-    this.getLibrary(libraryId);
-    return path.join(this.libraryRoot(libraryId), 'output');
+  // Returns the host folder behind the stack's `/exports` mount. It is the value main gives to ComposeStack.
+  exportsRoot(): string {
+    return this.exportsPath;
   }
 
+  // Returns the host folder that holds this library's copies: the API writes `<exports>/<library id>/output`.
+  outputDir(libraryId: string): string {
+    return path.join(this.libraryExportsDir(libraryId), 'output');
+  }
+
+  // Returns the host folder that holds this library's reports: the engine writes `<exports>/<library id>/reports`.
   reportsDir(libraryId: string): string {
-    this.getLibrary(libraryId);
-    return path.join(this.libraryRoot(libraryId), 'reports');
+    return path.join(this.libraryExportsDir(libraryId), 'reports');
   }
 
   containsWorkingFile(libraryId: string, requestedPath: string): boolean {
@@ -216,6 +226,24 @@ export class LibraryRegistryStore {
     const root = path.resolve(this.workingDir(libraryId));
     const candidate = path.resolve(requestedPath);
     return this.isInside(root, candidate) ? candidate : null;
+  }
+
+  // Returns `<exports>/<library id>`, the same layout as `library_exports_dir` in engine/api/storage.py.
+  // Nothing is created: on Linux a folder made here by the person's account could not be written by the API user.
+  private libraryExportsDir(libraryId: string): string {
+    this.getLibrary(libraryId);
+    this.libraryRoot(libraryId);
+    return path.join(this.exportsPath, libraryId);
+  }
+
+  // Removes this library's copies and reports from the host once its registry entry is gone. A folder the
+  // person's account may not remove is left in place: the library is already deleted from the registry.
+  private removeExports(libraryId: string): void {
+    try {
+      fs.rmSync(path.join(this.exportsPath, libraryId), { recursive: true, force: true });
+    } catch {
+      // Nothing to report: the API's data removal has already cleared what it could.
+    }
   }
 
   private validateName(name: string, currentId?: string): string {

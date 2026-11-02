@@ -11,6 +11,7 @@ const test = require('node:test');
 // The handlers import `ipcMain` and `dialog` from electron, which only exist inside the app.
 const handlers = new Map();
 const dialogCalls = [];
+const openedPaths = [];
 let nextDialogResult = { canceled: true };
 const electronPath = require.resolve('electron');
 require.cache[electronPath] = {
@@ -25,7 +26,12 @@ require.cache[electronPath] = {
         return nextDialogResult;
       },
     },
-    shell: { openPath: async () => '' },
+    shell: {
+      openPath: async (folder) => {
+        openedPaths.push(folder);
+        return '';
+      },
+    },
     safeStorage: { isEncryptionAvailable: () => false },
     app: { getPath: () => os.tmpdir() },
   },
@@ -34,6 +40,7 @@ require.cache[electronPath] = {
 const { registerFilesystemIpc } = require('../dist-electron/ipc/filesystem.ipc.js');
 const { registerLibrariesIpc } = require('../dist-electron/ipc/libraries.ipc.js');
 const { ApiClient } = require('../dist-electron/api-client.js');
+const { ComposeStack } = require('../dist-electron/compose-stack.js');
 const { LibraryRegistryStore } = require('../dist-electron/ipc/library-store.js');
 
 const FIRST_ID = '11111111-1111-4111-8111-111111111111';
@@ -104,6 +111,7 @@ async function setup(t, { up = true, storedPath = '/photos/trips/synthetic.jpg' 
 
   handlers.clear();
   dialogCalls.length = 0;
+  openedPaths.length = 0;
   nextDialogResult = { canceled: true };
   registerFilesystemIpc(libraries, backend);
   registerLibrariesIpc(libraries, () => false, backend);
@@ -283,6 +291,15 @@ test('libraries:delete keeps the library when the API fails, and says so without
   assert.ok(libraries.hasLibrary(SECOND_ID));
 });
 
+test('libraries:delete names an unwritable exports folder with a fixed message and keeps the library', async (t) => {
+  const { api, libraries, invoke } = await setup(t);
+  api.routes.set(`DELETE /api/libraries/${SECOND_ID}/data`, (res) =>
+    api.json(res, 409, { code: 'data_folder_unwritable', message: '/exports/secret-place' }),
+  );
+  await rejectsWithout(invoke('libraries:delete', SECOND_ID), ['/exports', 'secret-place'], /could not be removed/);
+  assert.ok(libraries.hasLibrary(SECOND_ID));
+});
+
 test('libraries:delete refuses the last library and an unknown one without sending anything', async (t) => {
   const { api, libraries, invoke } = await setup(t);
   api.routes.set(`DELETE /api/libraries/${SECOND_ID}/data`, (res) => api.json(res, 200, {}));
@@ -294,4 +311,66 @@ test('libraries:delete refuses the last library and an unknown one without sendi
   await rejectsWithout(invoke('libraries:delete', '33333333-3333-4333-8333-333333333333'), [], /Unknown local library/);
   assert.deepEqual(api.requests, []);
   assert.ok(libraries.hasLibrary(FIRST_ID));
+});
+
+// Starts a ComposeStack on a fake spawn with the store's exports folder, and returns the environment compose got.
+async function mountedEnvironment({ libraries, folder }) {
+  const calls = [];
+  const spawn = (command, args, options) => {
+    calls.push({ command, args, env: options.env });
+    const listeners = {};
+    setImmediate(() => listeners.close?.(0));
+    return {
+      on(event, listener) {
+        listeners[event] = listener;
+        return this;
+      },
+    };
+  };
+  const stack = new ComposeStack({ composeDir: '/repo', exportsDir: libraries.exportsRoot(), spawn, baseEnv: {} });
+  assert.equal(await stack.start(folder), true);
+  return calls.find((call) => call.command === 'docker').env;
+}
+
+test('the output and reports buttons open the host folders the stack mounts at /exports', async (t) => {
+  const setupResult = await setup(t);
+  const { libraries, invoke } = setupResult;
+  const mounted = (await mountedEnvironment(setupResult)).AURAFRAME_EXPORTS_DIR;
+  // The API writes <exports>/<library id>/output and /reports; the host sees them under the mounted folder.
+  const output = path.join(mounted, FIRST_ID, 'output');
+  const reports = path.join(mounted, FIRST_ID, 'reports');
+  fs.mkdirSync(path.join(output, 'top_06_final_set'), { recursive: true });
+  fs.mkdirSync(reports, { recursive: true });
+
+  await invoke('fs:openOutputFolder', FIRST_ID);
+  await invoke('fs:openReportsFolder', FIRST_ID);
+
+  assert.equal(libraries.outputDir(FIRST_ID), output);
+  assert.equal(libraries.reportsDir(FIRST_ID), reports);
+  assert.deepEqual(openedPaths, [output, reports]);
+  assert.notEqual(libraries.outputDir(FIRST_ID), libraries.outputDir(SECOND_ID), 'one folder per library');
+});
+
+test('before anything is written the buttons open the exports folder and create no library folder', async (t) => {
+  const { libraries, invoke } = await setup(t);
+  await invoke('fs:openOutputFolder', FIRST_ID);
+  await invoke('fs:openReportsFolder', FIRST_ID);
+
+  assert.deepEqual(openedPaths, [libraries.exportsRoot(), libraries.exportsRoot()]);
+  assert.equal(fs.existsSync(path.join(libraries.exportsRoot(), FIRST_ID)), false);
+  await assert.rejects(invoke('fs:openOutputFolder', '../escape'), /Unknown local library/);
+});
+
+test('deleting a library removes its host copies and reports and leaves the others', async (t) => {
+  const { api, libraries, invoke } = await setup(t);
+  api.routes.set(`DELETE /api/libraries/${SECOND_ID}/data`, (res) => api.json(res, 200, { removed: 1 }));
+  const mine = path.join(libraries.outputDir(SECOND_ID), 'top_06_final_set');
+  const other = path.join(libraries.outputDir(FIRST_ID), 'top_06_final_set');
+  fs.mkdirSync(mine, { recursive: true });
+  fs.mkdirSync(other, { recursive: true });
+
+  await invoke('libraries:delete', SECOND_ID);
+
+  assert.equal(fs.existsSync(path.join(libraries.exportsRoot(), SECOND_ID)), false);
+  assert.equal(fs.existsSync(other), true);
 });

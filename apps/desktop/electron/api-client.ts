@@ -40,6 +40,8 @@ const REFUSAL_MESSAGES = new Map<string, string>([
   ['unknown_photo_ids', 'Some photos are not part of this library.'],
   ['photo_unavailable', 'Some photos are no longer available.'],
   ['export_folder_unsafe', 'The export folder cannot be used.'],
+  ['export_folder_unwritable', 'The export folder cannot be written by the analysis service. See docs/operations.md.'],
+  ['data_folder_unwritable', 'The generated data could not be removed.'],
 ]);
 
 export const REQUEST_FAILED_MESSAGE = 'The request to the analysis service failed.';

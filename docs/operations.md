@@ -18,7 +18,7 @@ AURAFRAME_API_TOKEN=<at least 16 characters> AURAFRAME_PHOTOS_DIR=<folder> \
 | --- | --- | --- |
 | `AURAFRAME_API_TOKEN` | none | Session token. `api` refuses to start without one |
 | `AURAFRAME_PHOTOS_DIR` | `./data/no-photos` | Folder mounted read-only at `/photos` |
-| `AURAFRAME_EXPORTS_DIR` | `./data/output` | Folder mounted at `/exports` |
+| `AURAFRAME_EXPORTS_DIR` | `./data/output` | Folder mounted at `/exports`. The API writes `/exports/<library id>/output` (copies) and `/exports/<library id>/reports` there. The app sets it to `exports/` in its `userData` folder |
 | `AURAFRAME_PORT` | `8420` | Port of `gateway` on `127.0.0.1` |
 | `AURAFRAME_API_TARGET` | `full` | Build stage of `api`. `core` leaves out PyTorch |
 | `AURAFRAME_VISION_MODEL`, `AURAFRAME_VISION_MMPROJ` | The files in [AI providers](ai-providers.md#server-settings) | Model files in the `models` volume |
@@ -26,8 +26,14 @@ AURAFRAME_API_TOKEN=<at least 16 characters> AURAFRAME_PHOTOS_DIR=<folder> \
 - Leave out `--profile local` to run without `vision`. Leave out `compose.gpu.yaml` on a host without a GPU.
 - `vision` does not become healthy until its model files are in the `models` volume, which nothing fills
   yet (P03.2). Until then, run without the profile.
-- On Linux, create the exports folder first, writable by uid 10001. Docker otherwise creates it as root.
-  The API does not write there yet (P02.4.5).
+- On Linux, create the exports folder first, writable by uid 10001 (for example `chown 10001:10001` on it).
+  Docker otherwise creates it as root. The API runs as uid 10001 and writes copies and reports there: when it
+  cannot, an export or an analysis start answers HTTP 409 `export_folder_unwritable` and the window shows
+  "The export folder cannot be written by the analysis service", instead of failing later or leaving the folder
+  empty. Deleting a library whose folder cannot be cleaned says "The generated data could not be removed" and keeps
+  the library. The app creates its own
+  exports folder with your account, so on Linux change its owner (or mode) once to uid 10001; on Docker Desktop
+  for Windows the folder is writable as it is. Neither was observed on a real host.
 - Image builds do not download model files.
 
 ## Prerequisites
@@ -162,7 +168,7 @@ Electron itself runs outside this limit, on the remaining system memory.
 | --- | --- | --- |
 | Originals | The folder you chose, read-only | Never |
 | Library list, settings, encrypted key | Electron `userData` | Uninstalling or deleting the folder |
-| Exports, reports | `./data/output` | Delete the folder |
+| Exports, reports | `exports/<library id>/` in the app's `userData` folder (the output and reports buttons open it); `./data/output` for `start.sh` and a bare compose | The app, per library, when the library is deleted; or delete the folder |
 | Database, thumbnails, working copies | Volume `auraframe_data` | The app, per library, or `docker volume rm` |
 | Model files | Volume `auraframe_models` | `docker volume rm` |
 | Codex credentials | Volume `auraframe_codex_home` | `docker volume rm` |
@@ -191,7 +197,8 @@ npm install
 npm start
 ```
 
-Starting an analysis from the window runs `docker compose up -d --wait` with the chosen folder, then calls the
+Starting an analysis from the window runs `docker compose up -d --wait` with the chosen folder and the exports
+folder, adding `-f compose.gpu.yaml` when `nvidia-smi -L` succeeds, then calls the
 API on `127.0.0.1` (`AURAFRAME_PORT`, default `8420`). Docker must be running, otherwise the app reports that the
 services could not be started. Until a run starts the services, the app sends the API nothing and shows no
 photos, including those of earlier runs; saving a review, exporting and clearing data report that the service is

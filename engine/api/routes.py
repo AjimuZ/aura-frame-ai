@@ -145,7 +145,7 @@ def build_api_router(settings: ApiSettings, runs: RunSupervisor) -> APIRouter:
             headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
         )
 
-    # Copies the chosen photos into the library's output folder. Originals are only read.
+    # Copies the chosen photos into the library's folder under the exports mount. Originals are only read.
     @router.post("/libraries/{library_id}/exports", response_model=ExportResponse)
     def post_export(library_id: LibraryId, request: ExportRequest) -> ExportResponse:
         return ExportResponse(exported=export_photos(settings, library_id, request.ids))
@@ -197,10 +197,16 @@ def build_api_router(settings: ApiSettings, runs: RunSupervisor) -> APIRouter:
         return ProvidersResponse(providers=_provider_statuses())
 
     # Removes the generated data of one library (database, thumbnails, outputs, reports).
-    # It is idempotent: a library with nothing to remove answers `removed: 0`.
+    # It is idempotent: a library with nothing to remove answers `removed: 0`. A folder the API
+    # may not write to (the exports mount on Linux) is a 409, never a silent partial removal.
     @router.delete("/libraries/{library_id}/data", response_model=ClearDataResponse)
     def delete_data(library_id: LibraryId) -> ClearDataResponse:
-        return ClearDataResponse(removed=clear_library_data(settings, library_id))
+        try:
+            return ClearDataResponse(removed=clear_library_data(settings, library_id))
+        except OSError as error:
+            raise ApiError(
+                409, "data_folder_unwritable", "The generated data could not be removed."
+            ) from error
 
     # Returns the latest saved review session, or JSON null when none was saved yet.
     @router.get("/libraries/{library_id}/review", response_model=ReviewSession | None)

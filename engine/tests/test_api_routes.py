@@ -18,6 +18,7 @@ from api.storage import (
     library_config,
     library_db_file,
     library_dir,
+    library_exports_dir,
     library_thumbs_dir,
 )
 from src import db
@@ -58,7 +59,9 @@ def _store(settings: ApiSettings, library_id: str, photo: Photo) -> None:
 @pytest.fixture()
 def world(tmp_path: Path) -> World:
     photos_root = tmp_path / "photos"
-    settings = ApiSettings(data_root=tmp_path / "data", photos_root=photos_root)
+    settings = ApiSettings(
+        data_root=tmp_path / "data", photos_root=photos_root, exports_root=tmp_path / "exports"
+    )
     photos = [_jpeg(photos_root / "a.jpg", 40), _jpeg(photos_root / "sub" / "b.jpg", 200)]
     thumbs = [
         _jpeg(library_thumbs_dir(settings, LIB) / "a.jpg", 41),
@@ -252,11 +255,14 @@ def test_providers_report_a_minimal_status_shape(world: World) -> None:
 
 def test_delete_data_removes_only_generated_data(world: World) -> None:
     base = library_dir(world.settings, LIB)
-    (base / "output").mkdir(parents=True)
-    (base / "output" / "export.txt").write_text("copy", encoding="utf-8")
-    (base / "reports").mkdir()
+    shown = library_exports_dir(world.settings, LIB)
+    (shown / "output").mkdir(parents=True)
+    (shown / "output" / "export.txt").write_text("copy", encoding="utf-8")
+    (shown / "reports").mkdir()
     sibling = library_dir(world.settings, OTHER_LIB) / "working"
     sibling.mkdir(parents=True)
+    sibling_export = library_exports_dir(world.settings, OTHER_LIB) / "output"
+    sibling_export.mkdir(parents=True)
     before = [p.read_bytes() for p in world.photos + [world.outside]]
 
     response = world.client.delete(f"/api/libraries/{LIB}/data")
@@ -264,9 +270,10 @@ def test_delete_data_removes_only_generated_data(world: World) -> None:
     assert response.status_code == 200
     assert response.json() == {"removed": 3}
     assert not (base / "working").exists()
-    assert not (base / "output").exists()
-    assert not (base / "reports").exists()
+    assert not (shown / "output").exists()
+    assert not (shown / "reports").exists()
     assert sibling.is_dir()
+    assert sibling_export.is_dir()
     assert [p.read_bytes() for p in world.photos + [world.outside]] == before
     assert world.client.get(f"/api/libraries/{LIB}/photos").json() == []
 
@@ -287,6 +294,30 @@ def test_delete_data_does_not_follow_a_symlink_out_of_the_library(world: World, 
     world.client.delete(f"/api/libraries/{OTHER_LIB}/data")
     assert (target / "keep.txt").read_text(encoding="utf-8") == "keep"
     assert not (base / "output").exists()
+
+
+def test_delete_data_does_not_follow_a_symlink_in_the_exports_folder(
+    world: World, tmp_path: Path
+) -> None:
+    shown = library_exports_dir(world.settings, OTHER_LIB)
+    shown.mkdir(parents=True)
+    target = tmp_path / "precious"
+    target.mkdir()
+    (target / "keep.txt").write_text("keep", encoding="utf-8")
+    (shown / "reports").symlink_to(target, target_is_directory=True)
+    world.client.delete(f"/api/libraries/{OTHER_LIB}/data")
+    assert (target / "keep.txt").read_text(encoding="utf-8") == "keep"
+    assert not (shown / "reports").exists()
+
+
+def test_the_library_config_puts_copies_and_reports_under_the_exports_root(world: World) -> None:
+    output = library_config(world.settings, LIB)["output"]
+    shown = world.settings.exports_root / LIB
+    working = library_dir(world.settings, LIB) / "working"
+    assert Path(output["base_dir"]) == shown / "output"
+    assert Path(output["reports_dir"]) == shown / "reports"
+    assert Path(output["working_dir"]) == working
+    assert Path(output["db_path"]) == working / "auraframe.db"
 
 
 # --- review ---------------------------------------------------------------------------------
@@ -367,16 +398,33 @@ def test_new_routes_refuse_a_foreign_host(world: World, method: str, path: str) 
 
 
 def test_overlapping_roots_are_rejected(tmp_path: Path) -> None:
+    far = tmp_path / "far"
     with pytest.raises(ValueError):
-        ApiSettings(data_root=tmp_path / "photos" / "data", photos_root=tmp_path / "photos")
+        ApiSettings(
+            data_root=tmp_path / "photos" / "data", photos_root=tmp_path / "photos", exports_root=far
+        )
     with pytest.raises(ValueError):
-        ApiSettings(data_root=tmp_path, photos_root=tmp_path / "photos")
+        ApiSettings(data_root=tmp_path, photos_root=tmp_path / "photos", exports_root=far)
     with pytest.raises(ValueError):
-        ApiSettings(data_root=tmp_path / "same", photos_root=tmp_path / "same")
+        ApiSettings(data_root=tmp_path / "same", photos_root=tmp_path / "same", exports_root=far)
+
+
+def test_the_exports_root_may_not_overlap_the_photos_or_the_data_root(tmp_path: Path) -> None:
+    photos = tmp_path / "photos"
+    data = tmp_path / "data"
+    for exports in (photos / "out", tmp_path, photos, data / "out", data):
+        with pytest.raises(ValueError):
+            ApiSettings(data_root=data, photos_root=photos, exports_root=exports)
 
 
 def test_library_dir_rejects_an_invalid_id(tmp_path: Path) -> None:
-    settings = ApiSettings(data_root=tmp_path / "data", photos_root=tmp_path / "photos")
+    settings = ApiSettings(
+        data_root=tmp_path / "data",
+        photos_root=tmp_path / "photos",
+        exports_root=tmp_path / "exports",
+    )
     for bad in ("", "..", "../x", "a/b", "-a"):
         with pytest.raises(ValueError):
             library_dir(settings, bad)
+        with pytest.raises(ValueError):
+            library_exports_dir(settings, bad)

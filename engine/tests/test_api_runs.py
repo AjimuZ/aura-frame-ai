@@ -22,7 +22,13 @@ from PIL import Image
 
 from api.app import create_app
 from api.security import TOKEN_ENV_VAR
-from api.storage import ApiSettings, library_config, library_control_file, library_dir
+from api.storage import (
+    ApiSettings,
+    library_config,
+    library_control_file,
+    library_dir,
+    library_exports_dir,
+)
 from src import db
 from src.utils import Photo, photo_id_for
 
@@ -176,6 +182,7 @@ def make_world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
         settings = ApiSettings(
             data_root=tmp_path / "data",
             photos_root=photos_root,
+            exports_root=tmp_path / "exports",
             engine_command=engine_command or (sys.executable, str(stub), mode),
         )
         ids = [_store(settings, LIB, photo) for photo in photos]
@@ -244,6 +251,7 @@ def test_the_engine_is_started_from_validated_options_only(make_world: WorldFact
     assert args[0] == "analyze"
     assert args[args.index("--input") + 1] == str(world.settings.photos_root)
     assert args[args.index("--data-root") + 1] == str(library_dir(world.settings, LIB))
+    assert args[args.index("--exports-root") + 1] == str(library_exports_dir(world.settings, LIB))
     assert args[args.index("--preset") + 1] == "balanced"
     assert "--gemma" not in args and "--no-subfolders" not in args
 
@@ -480,12 +488,14 @@ def test_export_copies_the_originals_into_the_library_output(make_world: WorldFa
     assert response.json() == {"exported": 2}
     assert "/" not in response.text
 
-    folder = library_dir(world.settings, LIB) / "output" / "top_06_final_set"
+    folder = library_exports_dir(world.settings, LIB) / "output" / "top_06_final_set"
     copies = sorted(folder.iterdir())
     assert [p.name for p in copies] == [f"01_{world.photo_ids[0]}.jpg", f"02_{world.photo_ids[1]}.jpg"]
     assert [_digest(p) for p in copies] == before
     assert [_digest(p) for p in world.photos] == before
     assert all(p.exists() for p in world.photos)
+    assert folder.resolve().is_relative_to(world.settings.exports_root)
+    assert not (library_dir(world.settings, LIB) / "output").exists()
 
 
 def test_export_follows_request_order_and_ignores_repeated_ids(make_world: WorldFactory) -> None:
@@ -493,7 +503,7 @@ def test_export_follows_request_order_and_ignores_repeated_ids(make_world: World
     ids = [world.photo_ids[1], world.photo_ids[0], world.photo_ids[1]]
     response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": ids})
     assert response.json() == {"exported": 2}
-    folder = library_dir(world.settings, LIB) / "output" / "top_06_final_set"
+    folder = library_exports_dir(world.settings, LIB) / "output" / "top_06_final_set"
     assert sorted(p.name for p in folder.iterdir()) == [
         f"01_{world.photo_ids[1]}.jpg",
         f"02_{world.photo_ids[0]}.jpg",
@@ -515,7 +525,7 @@ def test_export_refuses_an_unknown_id_and_copies_nothing(make_world: WorldFactor
     response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": ids})
     assert response.status_code == 422
     assert response.json()["code"] == "unknown_photo_ids"
-    assert not (library_dir(world.settings, LIB) / "output").exists()
+    assert not (library_exports_dir(world.settings, LIB) / "output").exists()
 
 
 def test_export_of_a_library_without_data_is_refused(make_world: WorldFactory) -> None:
@@ -545,7 +555,7 @@ def test_export_ids_are_validated(make_world: WorldFactory, ids: Any) -> None:
     world = make_world()
     response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": ids})
     assert response.status_code == 422
-    assert not (library_dir(world.settings, LIB) / "output").exists()
+    assert not (library_exports_dir(world.settings, LIB) / "output").exists()
 
 
 @pytest.mark.parametrize(
@@ -558,7 +568,7 @@ def test_export_bodies_reject_extra_fields(make_world: WorldFactory, extra: dict
         f"/api/libraries/{LIB}/exports", json={"ids": world.photo_ids, **extra}
     )
     assert response.status_code == 422
-    assert not (library_dir(world.settings, LIB) / "output").exists()
+    assert not (library_exports_dir(world.settings, LIB) / "output").exists()
 
 
 def test_export_refuses_a_photo_outside_the_photos_root(make_world: WorldFactory) -> None:
@@ -567,7 +577,7 @@ def test_export_refuses_a_photo_outside_the_photos_root(make_world: WorldFactory
     response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": [stray]})
     assert response.status_code == 422
     assert response.json()["code"] == "photo_unavailable"
-    assert not (library_dir(world.settings, LIB) / "output").exists()
+    assert not (library_exports_dir(world.settings, LIB) / "output").exists()
 
 
 def test_export_refuses_a_photo_whose_file_is_gone(make_world: WorldFactory) -> None:
@@ -576,7 +586,7 @@ def test_export_refuses_a_photo_whose_file_is_gone(make_world: WorldFactory) -> 
     response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": world.photo_ids})
     assert response.status_code == 422
     assert response.json()["code"] == "photo_unavailable"
-    assert not (library_dir(world.settings, LIB) / "output").exists()
+    assert not (library_exports_dir(world.settings, LIB) / "output").exists()
 
 
 def test_export_never_writes_through_a_symlinked_output_folder(
@@ -585,7 +595,7 @@ def test_export_never_writes_through_a_symlinked_output_folder(
     world = make_world()
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
-    output = library_dir(world.settings, LIB) / "output"
+    output = library_exports_dir(world.settings, LIB) / "output"
     output.mkdir(parents=True)
     (output / "top_06_final_set").symlink_to(elsewhere, target_is_directory=True)
     response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": world.photo_ids})
@@ -600,12 +610,68 @@ def test_export_does_not_follow_a_symlinked_target_file(
     world = make_world()
     victim = tmp_path / "victim.jpg"
     victim.write_bytes(b"keep me")
-    folder = library_dir(world.settings, LIB) / "output" / "top_06_final_set"
+    folder = library_exports_dir(world.settings, LIB) / "output" / "top_06_final_set"
     folder.mkdir(parents=True)
     (folder / f"01_{world.photo_ids[0]}.jpg").symlink_to(victim)
     response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": world.photo_ids})
     assert response.status_code == 200
     assert victim.read_bytes() == b"keep me"
+
+
+def test_export_refuses_a_symlinked_library_exports_folder(
+    make_world: WorldFactory, tmp_path: Path
+) -> None:
+    world = make_world()
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    world.settings.exports_root.mkdir(parents=True)
+    library_exports_dir(world.settings, LIB).symlink_to(elsewhere, target_is_directory=True)
+    response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": world.photo_ids})
+    assert response.status_code == 409
+    assert response.json()["code"] == "export_folder_unsafe"
+    assert list(elsewhere.iterdir()) == []
+
+
+def test_export_into_an_unusable_exports_mount_is_a_structured_error(
+    make_world: WorldFactory,
+) -> None:
+    world = make_world()
+    world.settings.exports_root.write_text("not a folder", encoding="utf-8")
+    response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": world.photo_ids})
+    assert response.status_code == 409
+    assert response.json()["code"] == "export_folder_unwritable"
+    assert str(world.settings.exports_root) not in response.text
+
+
+def test_export_into_a_folder_the_api_user_cannot_write_is_a_structured_error(
+    make_world: WorldFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = make_world()
+    monkeypatch.setattr("api.exports.os.access", lambda *_args, **_kwargs: False)
+    response = world.client.post(f"/api/libraries/{LIB}/exports", json={"ids": world.photo_ids})
+    assert response.status_code == 409
+    assert response.json()["code"] == "export_folder_unwritable"
+    assert not (library_exports_dir(world.settings, LIB) / "output").exists()
+
+
+def test_a_run_is_refused_before_the_engine_starts_when_exports_cannot_be_written(
+    make_world: WorldFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = make_world("quick")
+    monkeypatch.setattr("api.exports.os.access", lambda *_args, **_kwargs: False)
+    response = world.client.post(f"/api/libraries/{LIB}/runs")
+    assert response.status_code == 409
+    assert response.json()["code"] == "export_folder_unwritable"
+    assert not (world.stub_dir / "argv.json").exists()
+    assert world.client.get(f"/api/libraries/{LIB}/runs/current").json()["step"] == "idle"
+
+
+def test_a_run_creates_the_library_folder_under_the_exports_mount(make_world: WorldFactory) -> None:
+    world = make_world("quick")
+    world.client.post(f"/api/libraries/{LIB}/runs")
+    _wait_stopped(world.client)
+    assert library_exports_dir(world.settings, LIB).is_dir()
+
 
 
 # --- guard ----------------------------------------------------------------------------------

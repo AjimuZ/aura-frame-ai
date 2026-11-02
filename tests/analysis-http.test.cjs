@@ -111,9 +111,21 @@ async function setup(t, options = {}) {
   const spawnCalls = [];
   const stack = new ComposeStack({
     composeDir: root,
+    exportsDir: path.join(root, 'exports'),
     createToken: () => TOKEN,
     baseEnv: {},
     spawn: (command, args, spawnOptions) => {
+      if (command === 'nvidia-smi') {
+        // The GPU probe is not a docker command: it answers "no GPU" at once and is left out of spawnCalls.
+        const probe = {};
+        setImmediate(() => probe.close?.(1));
+        return {
+          on(event, listener) {
+            probe[event] = listener;
+            return this;
+          },
+        };
+      }
       const call = {
         command,
         args,
@@ -734,7 +746,8 @@ for (const [name, leave] of Object.entries(LEAVING_PATHS)) {
     });
 
     await invoke('analysis:start', LIBRARY_ID, config);
-    assert.equal(spawnCalls.length, 1);
+    // The GPU probe runs before `up`, so the docker command is spawned a tick after the start call returns.
+    await waitFor(() => spawnCalls.length === 1, 'docker up to be spawned');
     assert.ok(spawnCalls[0].args.includes('up'));
 
     leave(app);

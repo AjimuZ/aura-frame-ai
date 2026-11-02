@@ -63,16 +63,21 @@ def load_dotenv(path: Path | None = None) -> None:
 
 # Rewrites every generated-artifact path under a single root (the desktop userData dir).
 # Originals are never touched; only working/thumbs/db/output/reports are redirected.
-def apply_data_root(config: dict[str, Any], data_root: str | None) -> dict[str, Any]:
+# With `exports_root`, the copies and reports (`output`, `reports`) go under that root instead, so
+# the API container can keep them in the folder the person opens while `working` stays in its volume.
+def apply_data_root(
+    config: dict[str, Any], data_root: str | None, exports_root: str | None = None
+) -> dict[str, Any]:
     if not data_root:
         return config
     root = Path(data_root)
+    shown = Path(exports_root) if exports_root else root
     out = config["output"]
     out["working_dir"] = str(root / "working")
     out["thumbs_dir"] = str(root / "working" / "thumbs")
     out["db_path"] = str(root / "working" / "auraframe.db")
-    out["base_dir"] = str(root / "output")
-    out["reports_dir"] = str(root / "reports")
+    out["base_dir"] = str(shown / "output")
+    out["reports_dir"] = str(shown / "reports")
     return config
 
 

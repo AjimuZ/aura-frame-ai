@@ -11,6 +11,7 @@ from itertools import islice
 from typing import Any, Iterator
 
 from .errors import ApiError
+from .exports import prepare_exports_dir
 from .models import RunRequest, RunStatus
 from .security import TOKEN_ENV_VAR
 from .storage import ApiSettings, library_control_file, library_dir
@@ -127,9 +128,12 @@ class RunSupervisor:
         photos_root = self._settings.photos_root
         if not photos_root.is_dir():
             raise ApiError(409, "photos_unavailable", "No photo folder is available to analyze.")
+        # Refuses here, before any engine starts, when the exports mount cannot be written.
+        exports_dir = prepare_exports_dir(self._settings, library_id)
         data_dir = library_dir(self._settings, library_id)
         args = [*self._settings.engine_command, "analyze"]
         args += ["--input", str(photos_root), "--data-root", str(data_dir)]
+        args += ["--exports-root", str(exports_dir)]
         args += ["--preset", options.preset]
         if not options.includeSubfolders:
             args.append("--no-subfolders")
@@ -279,6 +283,7 @@ class RunSupervisor:
         for root, label in (
             (self._settings.photos_root, "<photos>"),
             (self._settings.data_root, "<data>"),
+            (self._settings.exports_root, "<exports>"),
         ):
             text = text.replace(str(root), label)
         if not text or len(text.encode("utf-8")) > MAX_EVENT_BYTES:

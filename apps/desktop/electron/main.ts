@@ -77,7 +77,7 @@ void app.whenReady().then(() => {
   try {
     const libraries = new LibraryRegistryStore(dataRoot());
     libraries.initialize();
-    const stack = new ComposeStack({ composeDir: repoRoot() });
+    const stack = new ComposeStack({ composeDir: repoRoot(), exportsDir: libraries.exportsRoot() });
     const api = new ApiClient({ port: gatewayPort(process.env), session: stack });
     protocol.handle('afmedia', (request) => handleMediaRequest({ api, libraries }, request));
     registerSettingsIpc();

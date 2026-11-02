@@ -1,5 +1,6 @@
-"""Copy-only export of chosen photos into a library's output folder."""
+"""Copy-only export of chosen photos into a library's folder under the exports mount."""
 
+import os
 import shutil
 from contextlib import closing
 from pathlib import Path
@@ -13,14 +14,41 @@ from .storage import (
     is_inside,
     library_config,
     library_db_file,
-    library_dir,
+    library_exports_dir,
 )
 
 EXPORT_FOLDER = "top_06_final_set"
 
+_UNWRITABLE_MESSAGE = (
+    "The export folder cannot be written by the analysis service. See docs/operations.md."
+)
+
+
+def prepare_exports_dir(settings: ApiSettings, library_id: str) -> Path:
+    """Create and check `<exports_root>/<library id>` and return it.
+
+    The directory must be a real directory inside the exports root that the API user can write
+    to. Nothing outside the exports root is touched, and a symlink in its place is refused, not
+    followed. The run route calls this before it starts the engine, so a folder the API cannot
+    write to (on Linux, a host folder owned by someone else than uid 10001) stops the work at once.
+
+    Raises ApiError 409 `export_folder_unsafe` for a symlink or a path that leaves the root, and
+    409 `export_folder_unwritable` when the folder cannot be created or written.
+    """
+    base = library_exports_dir(settings, library_id)
+    if base.is_symlink() or not is_inside(base, settings.exports_root):
+        raise ApiError(409, "export_folder_unsafe", "The export folder cannot be used.")
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise _unwritable() from error
+    if not base.is_dir() or not os.access(base, os.W_OK | os.X_OK):
+        raise _unwritable()
+    return base
+
 
 def export_photos(settings: ApiSettings, library_id: str, photo_ids: list[str]) -> int:
-    """Copy the originals of `photo_ids` into `<library>/output/top_06_final_set` and return the count.
+    """Copy the originals of `photo_ids` into `<exports>/<library id>/output/top_06_final_set` and return the count.
 
     The files are named `NN_<photo id><extension>` in request order, and repeated ids are copied
     once. Originals are only read: each source must be a regular image file inside the photos
@@ -28,21 +56,30 @@ def export_photos(settings: ApiSettings, library_id: str, photo_ids: list[str]) 
     followed. Nothing is copied unless every id passes, so a refusal leaves the folder as it was.
 
     Raises ApiError 422 for an id the library does not know or a photo that is no longer
-    available inside the photos root, and 409 when the output folder is not safe to write.
+    available inside the photos root, 409 `export_folder_unsafe` when the output folder is not
+    safe to write, and 409 `export_folder_unwritable` when the exports mount cannot be written.
     """
     ordered = list(dict.fromkeys(photo_ids))
     sources = _resolve_sources(settings, library_id, ordered)
-    base = library_dir(settings, library_id)
+    base = prepare_exports_dir(settings, library_id)
     config = library_config(settings, library_id)
     destination = Path(config["output"]["base_dir"]) / EXPORT_FOLDER
     if destination.is_symlink() or not is_inside(destination, base):
         raise ApiError(409, "export_folder_unsafe", "The export folder cannot be used.")
-    destination.mkdir(parents=True, exist_ok=True)
-    for position, (photo_id, source) in enumerate(zip(ordered, sources), start=1):
-        target = destination / f"{position:02d}_{photo_id}{source.suffix.lower()}"
-        target.unlink(missing_ok=True)
-        shutil.copy2(source, target)
+    try:
+        destination.mkdir(parents=True, exist_ok=True)
+        for position, (photo_id, source) in enumerate(zip(ordered, sources), start=1):
+            target = destination / f"{position:02d}_{photo_id}{source.suffix.lower()}"
+            target.unlink(missing_ok=True)
+            shutil.copy2(source, target)
+    except OSError as error:
+        raise _unwritable() from error
     return len(sources)
+
+
+# Builds the structured refusal for an exports folder the API user cannot write.
+def _unwritable() -> ApiError:
+    return ApiError(409, "export_folder_unwritable", _UNWRITABLE_MESSAGE)
 
 
 # Looks every id up in the library database and returns the resolved original of each, in order.

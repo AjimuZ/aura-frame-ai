@@ -21,6 +21,7 @@ Status: **target design**. The final section lists what the current code does to
 | Electron main to host files | An export reads outside the library, or overwrites an original | Native save dialog, source must resolve inside the library folder, an original cannot be the destination |
 | `gateway` to `api` | Path traversal, unsafe input | Pydantic validation. Images served by photo ID only, never by path. The service sees only `/photos`, never a host path |
 | `api` to photos | Damage to originals | Read-only mount. The container cannot write there, whatever the code does |
+| `api` to exports | Copies written outside the exports folder, or into the photo folder | The only writable host mount. Main creates it apart from the photo folder and passes it only in the environment; the API copies there only, follows no symlink, and keeps each library in `/exports/<library id>/` |
 | `api` to internet | Data leak from a bug or a dependency | `backend` is an internal network with no route out. An exit check proves it |
 | Image content to AI | Text inside a photo tries to steer the model | Output limited by JSON Schema, no tools available, and reasons are escaped when rendered |
 | AI output to UI and reports | Script injection | Treated as untrusted text, always escaped, and never rendered as HTML |

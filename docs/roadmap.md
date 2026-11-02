@@ -53,7 +53,7 @@ the retired-terms test and the personal-data test. Not observed: the desktop app
 - [x] P02.1 Add `compose.yaml`, Dockerfiles, networks, volumes and hardening.
 - [x] P02.2 Add `start.sh` with the contract in [Operations](operations.md#startsh).
 - [x] P02.3 Add the FastAPI application: runs, events, photos, media, exports, data.
-- [ ] P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of
+- [x] P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of
       the child process, `afmedia` proxied, chosen folder mounted read-only.
 - [ ] P02.5 Build the desktop shell in a container, or record why the host fallback is needed.
 - [ ] P02.6 Remove `start.py` and the Python paths from Electron.
@@ -148,6 +148,19 @@ both handlers send nothing while the services are not up (the deletion is refuse
 test ran with a directory junction. Not run: the engine container tests (no engine file changed), `--compose` and
 `--integration`. Not observed: these handlers against the real API or in a running Electron, including the native save
 dialog. Still open in P02.4: `/exports` and `compose.gpu.yaml` (P02.4.5).
+
+Progress 2026-11-02 (later): P02.4.5 connected the `/exports` mount. `ComposeStack` takes an exports folder, creates and
+validates it in main (absolute, a directory, apart from the photo folder), and passes it only as
+`AURAFRAME_EXPORTS_DIR`. The API writes copies to `/exports/<library id>/output/top_06_final_set`, and the run passes
+the engine `--exports-root` so reports land in `/exports/<library id>/reports`. `fs:openOutputFolder` and
+`fs:openReportsFolder` open the matching host folders. `ComposeStack` probes `nvidia-smi -L` (spawn, `shell: false`) and
+adds `-f compose.gpu.yaml` on success, and `down` names the same files. A folder the API cannot write gives 409
+`export_folder_unwritable`. Details: [Bridge mapping](architecture.md#bridge-mapping),
+[Library data layout](architecture.md#library-data-layout), [Operations](operations.md#compose-stack). Observed: lint,
+`build:electron`, `build:angular` and `bash scripts/check.sh --compose` passed; the Node tests passed (130: 129 passed, 1
+skipped, the symlink case of `compose-stack`); the engine container tests passed (190 of 190). Not observed: the
+unwritable case with a real uid 10001 on a Linux host (simulated in the tests), a real Docker, `nvidia-smi` or GPU
+overlay, and a running Electron. `--integration` was not run. P02.4 is left for the orchestrator to tick.
 
 ## 4. P03 — Local AI runtime
 

@@ -40,7 +40,7 @@
   the services it started and keeps the data, after waiting for a start in progress. If Docker has not finished
   within 10 minutes, a dialog says what may still be running and the app exits. This has been tested with a fake
   server and a fake Docker only, not against the real services. Still open: showing earlier results before a run
-  starts the services. The final set is copied into the data volume, so the output folder button does not show it yet.
+  starts the services.
 - Thumbnails now come from the containerised engine. The window asks for a thumbnail by photo ID, and Electron main
   fetches it from the API with the session token, so the window holds no photo path and no token. Until this
   session has started the services, nothing is sent and the thumbnail counts as missing. Originals cannot be
@@ -52,6 +52,15 @@
   to the API before this session has started the services. A start refused because a run is still finishing now shows
   the refusal in the window instead of staying at "Starting...". Tested with a fake server and a temporary folder only,
   not in a running window.
+- Copies and reports now reach the folder that the output and reports buttons open. The window starts the services
+  with an exports folder (`exports` in the app's data folder), the API writes the final set to
+  `<exports>/<library id>/output/top_06_final_set`, and the engine writes its reports to
+  `<exports>/<library id>/reports`. The folder is created by the app, and one that holds the photo folder or lies inside
+  it is refused. If the API cannot write to it (on Linux, a folder not owned by uid 10001), the window says so
+  instead of failing silently; see the Linux note in `docs/operations.md`. Deleting a library also removes its copies
+  and reports. The window also adds the GPU overlay (`compose.gpu.yaml`) when `nvidia-smi -L` succeeds, as
+  `start.sh` does. Tested with a fake Docker, a fake server and synthetic images only; the unwritable-folder case is
+  simulated, and nothing was run against a real Docker, GPU or Linux host.
 
 ### Changed
 

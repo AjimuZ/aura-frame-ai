@@ -74,10 +74,10 @@ from src.utils import (  # noqa: E402
 )
 
 
-# Loads config and applies optional --data-root and --preset overrides in one place.
+# Loads config and applies optional --data-root, --exports-root and --preset overrides in one place.
 def _prepare_config(args: argparse.Namespace) -> dict:  # type: ignore[type-arg]
     config = load_config(args.config)
-    apply_data_root(config, getattr(args, "data_root", None))
+    apply_data_root(config, getattr(args, "data_root", None), getattr(args, "exports_root", None))
     apply_preset(config, getattr(args, "preset", None))
     return config
 
@@ -543,6 +543,11 @@ def build_parser() -> argparse.ArgumentParser:
     def _common(p: argparse.ArgumentParser) -> None:
         p.add_argument("--config", default=None, help="Path to config.yaml")
         p.add_argument("--data-root", default=None, help="Redirect generated data under this dir")
+        p.add_argument(
+            "--exports-root",
+            default=None,
+            help="With --data-root, write the output copies and reports under this dir instead",
+        )
         p.add_argument("--preset", default=None, choices=["fast", "balanced", "quality"])
 
     sub = parser.add_subparsers(dest="command", required=True)
