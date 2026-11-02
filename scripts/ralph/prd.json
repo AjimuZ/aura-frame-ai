@@ -1164,13 +1164,13 @@
     {
       "id": "P05.2.3",
       "title": "P05.2.3 Per-library opt-in dialog in the UI, stating what is sent and the number of calls",
-      "description": "Add a per-library Codex opt-in (stored in the library registry in Electron main, typed IPC, validated). The Angular dialog states exactly what is sent (resized, EXIF-stripped anonymous copies) and the number of calls. The API refuses a codex run without both opt-ins.",
+      "description": "Add a per-library Codex opt-in, enforced on the API run request (refuse a codex run unless both the command-line opt-in and this per-library opt-in are set), stored in the Electron registry with typed, validated IPC, and surfaced in an Angular dialog that states exactly what is sent (resized, EXIF-stripped anonymous copies) and the number of calls (the configured cap). This spans the engine API, Electron main/IPC and the Angular UI.",
       "acceptanceCriteria": [
         "Opt-in is required both by `--provider codex` and per library in the UI, and the dialog states what is sent and the number of calls"
       ],
       "priority": 40,
       "passes": false,
-      "notes": "BLOCKED: P05.2.3.2: unknown dependency P05.2.3a; P05.2.3.3: unknown dependency P05.2.3b",
+      "notes": "UNBLOCKED by the owner's supervising session on 2026-11-02: the preflight's split was right about the three-way boundary (API run-request refusal, Electron registry/IPC, Angular dialog) but two of the three children named a sibling by its proposed title in `dependsOn` (\"P05.2.3a\", \"P05.2.3b\"), which `apply_split` cannot resolve since real child ids are only assigned once the split lands. I fixed the root cause in the global preflight prompt (assets/prompts/preflight.md, outside this repository) so a fresh split relies only on `sequential` for intra-split ordering. I also touched this description so the task is treated as a new version and gets a fresh preflight instead of replaying the broken split.",
       "dependsOn": [
         "P05.1",
         "P05.2.2"
