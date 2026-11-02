@@ -1,4 +1,4 @@
-"""Tests for the Local Minimal Gate and OpenAI Quality Mode (no real API calls).
+"""Tests for the sanity gate policy and OpenAI Quality Mode (no real API calls).
 
 All images are synthetic and all OpenAI interactions are faked. These tests assert the
 privacy-critical behaviors (aspect-preserving resize, no forced square, EXIF removal, temp
@@ -37,18 +37,19 @@ def _measured(**kwargs) -> Photo:
 
 # --- Local Minimal Gate ---------------------------------------------------------------
 
-# A truly black frame is a hard reject; a moderately dark one is only soft-flagged.
-def test_gate_hard_rejects_black_keeps_dark(config: dict) -> None:
-    black = _measured(brightness_mean=4.0)
-    apply_local_minimal_gate(black, config)
-    assert black.gate_status == "hard_reject"
-    assert not black.eligible_for_openai
-
-    dark = _measured(brightness_mean=20.0)
-    apply_local_minimal_gate(dark, config)
-    assert dark.gate_status != "hard_reject"
-    assert dark.eligible_for_openai
-    assert "local_flag_low_light" in dark.soft_flags
+# Brightness never rejects: a black frame and a moderately dark one are only soft-flagged.
+def test_gate_keeps_black_and_dark(config: dict) -> None:
+    for mean in (4.0, 20.0):
+        photo = _measured(brightness_mean=mean)
+        apply_local_minimal_gate(photo, config)
+        assert photo.gate_status != "hard_reject"
+        assert photo.status != "rejected"
+        assert photo.eligible_for_openai
+        assert "local_flag_low_light" in photo.soft_flags
+    bright = _measured(brightness_mean=252.0)
+    apply_local_minimal_gate(bright, config)
+    assert bright.gate_status != "hard_reject" and bright.eligible_for_openai
+    assert "local_flag_low_light" in bright.soft_flags
 
 
 # A missing face is never an automatic rejection — only a soft flag, still eligible.
@@ -60,12 +61,21 @@ def test_gate_keeps_faceless_photo(config: dict) -> None:
     assert "local_flag_face_not_detected" in photo.soft_flags
 
 
-# Extremely small images are hard-rejected for resolution.
-def test_gate_hard_rejects_tiny_resolution(config: dict) -> None:
+# Images under 256 px on the long side are rejected; only the long side counts.
+def test_gate_rejects_under_256_on_the_long_side(config: dict) -> None:
     photo = _measured(width=200, height=200)
     apply_local_minimal_gate(photo, config)
     assert photo.gate_status == "hard_reject"
-    assert photo.hard_reject_reason == "extremely_low_resolution"
+    assert photo.hard_reject_reason == "too_small"
+    assert photo.status == "rejected" and photo.reject_reason == "too_small"
+
+    narrow = _measured(width=255, height=100)
+    apply_local_minimal_gate(narrow, config)
+    assert narrow.gate_status == "hard_reject"
+
+    thin_strip = _measured(width=256, height=60)
+    apply_local_minimal_gate(thin_strip, config)
+    assert thin_strip.gate_status != "hard_reject"  # long side 256 is kept, however thin
 
 
 # Near-duplicates are kept as duplicate_candidate (not rejected).

@@ -1,15 +1,14 @@
-"""Local Minimal Gate: privacy-first, deliberately permissive triage.
+"""Sanity gate: rejects only objective failures and flags everything else.
 
-The gate's only job is to remove objectively unusable photos (corrupt/unreadable, exact
-duplicate, fully black, fully white, extremely low resolution, extreme blur, clearly
-non-photographic) and to attach soft flags to everything else. It does NOT judge photo
-quality: borderline photos (no face detected, small face, group, selfie, mildly dark
-or blurry, odd composition, low local score) are KEPT and flagged so the optional OpenAI
-review can decide. Rule of thumb: "when in doubt, keep it for OpenAI."
+The gate removes a photo only when it is objectively unusable: an unreadable file (recorded as
+failed_read), an unsupported image format, a byte-identical copy of an earlier photo, or an image
+whose long side is under the configured minimum (256 px by default). It does NOT judge quality:
+brightness and blur never reject (a night sky, fog or a smooth gradient is not a defect), and
+screenshots and documents only get a soft flag. Rule of thumb: "when in doubt, keep it."
 
 It runs after quality + face measurement and assigns each photo a gate_status, soft flags,
-eligibility, and an OpenAI processing priority. Only hard_reject / failed_read are excluded
-from OpenAI; everything else flows forward.
+eligibility, and a processing priority. Only hard_reject / failed_read are excluded from later
+stages; everything else flows forward.
 """
 
 from datetime import datetime, timezone
@@ -26,14 +25,12 @@ PRIORITY: dict[str, int] = {
     "duplicate_candidate": 4,
 }
 
+MIN_LONG_SIDE = 256
+
+# Soft-flag thresholds only: none of these can reject a photo.
 _DEFAULT_THRESHOLDS: dict[str, float] = {
-    "min_width_hard_reject": 400,
-    "min_height_hard_reject": 400,
-    "extreme_blur_threshold": 35,
     "possible_blur_threshold": 120,
-    "extreme_dark_brightness": 10,
     "possible_dark_brightness": 35,
-    "extreme_bright_brightness": 245,
     "possible_bright_brightness": 230,
     "small_face_score": 25,
     "low_local_score": 40,
@@ -59,45 +56,20 @@ def _decide(photo: Photo, gate_status: str, *, eligible: bool, hard_reason: str 
     return photo
 
 
-# Returns an extreme-only hard-reject reason, or "" to keep the photo. Each rule can be
-# disabled via local_gate.hard_reject in config.
-def _extreme_hard_reject_reason(photo: Photo, th: dict[str, float], rules: dict[str, Any]) -> str:
-    def on(name: str) -> bool:
-        return bool(rules.get(name, True))
-
-    if on("extremely_low_resolution") and photo.width and photo.height and (
-        photo.width < th["min_width_hard_reject"] or photo.height < th["min_height_hard_reject"]
-    ):
-        return "extremely_low_resolution"
-    if on("fully_black_image") and photo.brightness_mean < th["extreme_dark_brightness"]:
-        return "fully_black_image"
-    if on("fully_white_image") and photo.brightness_mean > th["extreme_bright_brightness"]:
-        return "fully_white_image"
-    if on("extreme_blur") and photo.laplacian_variance < th["extreme_blur_threshold"]:
-        return "extreme_blur"
-    if on("non_photographic_image") and photo.likely_screenshot:
-        return "non_photographic_image"
-    return ""
+# Returns the minimum long side in pixels below which an image is rejected: the configured
+# local_gate.min_long_side, or MIN_LONG_SIDE when absent or not a number.
+def _min_long_side(config: dict[str, Any]) -> int:
+    try:
+        return int(config.get("local_gate", {}).get("min_long_side", MIN_LONG_SIDE))
+    except (TypeError, ValueError):
+        return MIN_LONG_SIDE
 
 
-# Reproduces the legacy aggressive rejection thresholds for strict mode (parity with the
-# pre-gate pipeline). Returns a reject reason or "".
-def _strict_reject_reason(photo: Photo, config: dict[str, Any]) -> str:
-    f = config.get("filters", {})
-    blur_threshold = float(f.get("blur_threshold", 120))
-    if photo.laplacian_variance < blur_threshold * 0.4:
-        return "too_blurry"
-    if photo.brightness_mean < float(f.get("min_brightness", 35)):
-        return "too_dark"
-    if photo.brightness_mean > float(f.get("max_brightness", 230)):
-        return "too_bright"
-    aspect = photo.width / photo.height if photo.height else 1.0
-    if photo.width and photo.height and not (
-        float(f.get("min_aspect_ratio", 0.4)) <= aspect <= float(f.get("max_aspect_ratio", 2.6))
-    ):
-        return "bad_aspect"
-    if photo.likely_screenshot:
-        return "likely_screenshot"
+# Returns "too_small" when the decoded image has a long side under the minimum, else "". Sizes
+# of 0 mean "not measured" and never reject. Only the size can reject here, never the content.
+def _size_reject_reason(photo: Photo, config: dict[str, Any]) -> str:
+    if photo.width and photo.height and max(photo.width, photo.height) < _min_long_side(config):
+        return "too_small"
     return ""
 
 
@@ -136,6 +108,10 @@ def _attach_soft_flags(photo: Photo, th: dict[str, float], config: dict[str, Any
         _flag(photo, "local_flag_low_local_score")
     if _looks_old(photo):
         _flag(photo, "local_flag_old_photo")
+    # A screenshot is flagged, never rejected; scoring ranks it low. Documents will be flagged the
+    # same way from their content tag (P04.4); no gate rule may reject either.
+    if photo.likely_screenshot:
+        _flag(photo, "local_flag_screenshot")
 
 
 # True when the photo's capture/modification time is more than ~5 years old (best effort).
@@ -160,13 +136,13 @@ def _is_low_priority(photo: Photo) -> bool:
     )
 
 
-# Applies only minimal local rejection rules before OpenAI review, attaching soft flags
-# instead of discarding photos on weak technical signals. Mutates the photo in place.
+# Decides one photo: rejects it only for an objective failure and otherwise keeps it with soft
+# flags. Rejections: unreadable (gate_status "failed_read"); exact duplicate, unsupported format
+# or too small (gate_status "hard_reject" with hard_reject_reason "exact_duplicate",
+# "unsupported_format" or "too_small"). Brightness, blur and screenshots never reject.
+# Mutates the photo in place.
 def apply_local_minimal_gate(photo: Photo, config: dict[str, Any]) -> Photo:
-    gate_cfg = config.get("local_gate", {})
-    mode = str(gate_cfg.get("mode", "minimal"))
     th = _thresholds(config)
-    rules = gate_cfg.get("hard_reject", {}) or {}
 
     # Pre-existing terminal states from ingest/quality/duplicate detection.
     if photo.status == "rejected" and photo.reject_reason == "unreadable_image":
@@ -176,22 +152,13 @@ def apply_local_minimal_gate(photo: Photo, config: dict[str, Any]) -> Photo:
     if photo.status == "rejected":
         return _decide(photo, "hard_reject", eligible=False, hard_reason=photo.reject_reason or "rejected")
 
-    # Strict/legacy mode: aggressive rejection parity, then stop.
-    if mode == "strict":
-        reason = _strict_reject_reason(photo, config)
-        if reason:
-            photo.status = "rejected"
-            photo.reject_reason = reason
-            return _decide(photo, "hard_reject", eligible=False, hard_reason=reason)
-
-    # Minimal mode: extreme-only hard rejects.
-    hard = _extreme_hard_reject_reason(photo, th, rules)
-    if hard:
+    too_small = _size_reject_reason(photo, config)
+    if too_small:
         photo.status = "rejected"
-        photo.reject_reason = hard
-        return _decide(photo, "hard_reject", eligible=False, hard_reason=hard)
+        photo.reject_reason = too_small
+        return _decide(photo, "hard_reject", eligible=False, hard_reason=too_small)
 
-    # Keep the photo: attach soft flags and classify it as an OpenAI candidate.
+    # Keep the photo: attach soft flags and classify it as a candidate.
     _attach_soft_flags(photo, th, config)
     if photo.is_near_duplicate:
         return _decide(photo, "duplicate_candidate", eligible=True)

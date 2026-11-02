@@ -52,6 +52,22 @@ Rejects only: unreadable files, byte-identical duplicates, unsupported formats, 
 under 256 px on the long side. Everything else continues. Brightness and blur do not reject
 here. Screenshots and documents get a flag and rank low through scoring.
 
+Implemented in P04.2 (`engine/src/local_gate.py`, with `engine/src/ingest.py` and `engine/src/index_photos.py`):
+
+| Reject | Where it is decided | Recorded as |
+|---|---|---|
+| Unreadable or corrupt file | ingest; the run continues with the next file | `gate_status` `failed_read` |
+| Format outside JPEG, PNG, WebP and HEIC | ingest, from the decoded content, not the extension | `hard_reject`, reason `unsupported_format` |
+| Byte-identical copy | indexing: every copy after the first in path order gets its own record, with no working copy | `hard_reject`, reason `exact_duplicate` |
+| Long side under `local_gate.min_long_side` (256) | gate | `hard_reject`, reason `too_small` |
+
+A screenshot gets the `local_flag_screenshot` soft flag and stays eligible. Documents are not flagged yet: they arrive
+as a content tag in P04.4. The legacy `strict` mode was removed, so no setting makes brightness, blur, aspect ratio or
+a missing face reject. The soft flags `local_flag_low_light` and `local_flag_possible_blur` remain flags only.
+Limits: only files with a supported extension are discovered, so a `.gif` or `.bmp` file is not listed at all; the
+format check applies to supported-extension files whose content is another format. The blur and brightness flag
+thresholds were set on full-size images and are not retuned yet.
+
 ### 3. Scoring
 
 Q-ReAlign Mini scores each working copy twice, for image quality and for aesthetics, in GPU

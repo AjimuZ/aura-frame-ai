@@ -240,7 +240,7 @@ memory free at peak; no Ollama reference remains in the code; provider contract 
 **Depends on:** P03. **Areas:** engine, database, reports.
 
 - [x] P04.1 New ingest: content-hash IDs, working copies, one decode, orientation applied once.
-- [ ] P04.2 Sanity gate that rejects only objective failures.
+- [x] P04.2 Sanity gate that rejects only objective failures.
 - [ ] P04.3 Q-ReAlign scoring and SigLIP 2 embeddings, batched on the GPU.
 - [ ] P04.4 Order-independent grouping, content tags and people signals with no identity.
 - [ ] P04.5 Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache.

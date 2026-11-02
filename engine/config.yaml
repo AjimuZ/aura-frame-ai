@@ -113,24 +113,13 @@ privacy:
   # Mask absolute paths in emitted logs (filename only) for privacy-safe auditing.
   mask_paths_in_logs: true
 
-# Local Minimal Gate: the local pipeline only removes objectively unusable photos and
-# adds soft flags for everything else. "When in doubt, keep it" — borderline photos are
-# preserved for the optional OpenAI review rather than discarded on weak technical signals.
+# Sanity gate: rejects only objective failures and adds soft flags for everything else.
+# The only rejections are: an unreadable file, an unsupported image format, a byte-identical
+# copy of an earlier photo, and a long side under min_long_side. Brightness, blur, screenshots
+# and near-duplicates never reject: "when in doubt, keep it".
 local_gate:
-  mode: "minimal"            # minimal | strict (legacy aggressive rejection)
-  reject_policy: "extreme_only"
-  when_in_doubt: "keep_for_openai"
-
-  hard_reject:
-    corrupted_file: true
-    unsupported_format: true
-    exact_duplicates: true
-    extreme_near_duplicates: false   # near-dups are kept as duplicate_candidate, not rejected
-    fully_black_image: true
-    fully_white_image: true
-    extremely_low_resolution: true
-    extreme_blur: true
-    non_photographic_image: true
+  # Images whose long side is under this many pixels are rejected.
+  min_long_side: 256
 
   soft_flags_only:
     face_not_detected: true
@@ -144,17 +133,11 @@ local_gate:
     low_local_score: true
 
   thresholds:
-    min_width_hard_reject: 400
-    min_height_hard_reject: 400
-    extreme_blur_threshold: 35
     possible_blur_threshold: 120
-    extreme_dark_brightness: 10
     possible_dark_brightness: 35
-    extreme_bright_brightness: 245
     possible_bright_brightness: 230
     small_face_score: 25
     low_local_score: 40
-    exact_duplicate_hash_distance: 0
     near_duplicate_hash_distance: 3
 
 # OpenAI Quality Mode: OPTIONAL parallel cloud review. OFF by default. Only resized,

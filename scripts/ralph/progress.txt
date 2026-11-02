@@ -61,6 +61,9 @@
 - Decode an original once, bake in orientation at that point, and hand every later stage a derived copy with no orientation tag; a stage that cannot find the copy reports it rather than reopening the original.
 - Write derived files to `<name>.part` and `os.replace` them into place, so a crash never leaves a truncated file that a later run would accept.
 - Test a privacy property from the data side: build a synthetic input that carries the forbidden field (GPS), assert the fixture really has it, then assert it is absent from the record, the database rows, the mirror file and the derived images.
+- When an ID scheme merges identical inputs, record every dropped input as its own rejected record with a distinct ID and a stated reason, so a rejection is visible and counted instead of silent.
+- Decide format support from decoded content (`image.format`), not the file extension, and keep 'recognized but unsupported' distinct from 'unreadable'.
+- Reject policy belongs in one place (the gate). Measurement stages only measure, and anything subjective is a soft flag.
 
 ---
 
@@ -655,4 +658,33 @@ I updated docs/ai-providers.md, docs/testing.md, the roadmap progress note and C
   - Tests that call `score_quality` or `score_faces` must ingest first and use the `data_config` fixture from conftest.py, which redirects generated files under tmp_path. A `Photo` built by hand has no working copy.
   - To count decodes in tests, wrap `PIL.Image.open` and `cv2.imread` with `monkeypatch` and record the path (see `DecodeRecorder` in engine/tests/test_ingest.py). To build EXIF with GPS, hand-encode the TIFF block (`_rich_exif`); Pillow's nested `get_ifd` writes did not produce a GPS block when I tried it.
   - Not verified: a full `analyze` run through engine/main.py with the new ingest, and `bash scripts/check.sh --integration`. Its photo-ID assertion in tests/integration/backend-run.sh now greps for a 64-hex `"id"` value. The `compose` check was not rerun because no compose file changed.
+---
+
+## 2026-11-02T13:50:51Z - P04.2
+- P04.2 is implemented. The gate rejects only four things: an unreadable file (`failed_read`), an unsupported format, a byte-identical copy, and a long side under 256 px. Brightness and blur no longer reject. A screenshot only gets the `local_flag_screenshot` flag. The legacy `strict` gate mode and its settings are removed.
+
+- **Unsupported format:** ingest now checks the decoded content against JPEG, MPO, PNG, WebP and HEIF, so a GIF saved as `.jpg` is rejected as `unsupported_format`. Truly corrupt bytes stay `unreadable_image`.
+- **Byte-identical copies:** `index_photos` used to drop later copies silently. Each copy now becomes its own rejected record (`duplicate-<path hash>` ID, shared `file_hash`, reason `duplicate_exact`, no working copy), so the rejection is visible and counted.
+- **Size rule:** `too_small` when the long side is under `local_gate.min_long_side` (256).
+
+**Checks:** `bash scripts/check.sh --engine` passed 287 of 287 (the 282 earlier plus 5 new gate tests). I did not run the node checks, the integration check, or a full `analyze` run; no node, compose or integration file changed.
+
+**Not done:**
+- Documents get no flag yet; that arrives with P04.4.
+- Only files with a supported extension are discovered, so a `.gif` or `.bmp` file is never listed.
+- `engine/src/export_results.py` still maps reject reasons that nothing emits any more (`too_blurry`, `too_dark`, `no_face` and others). I left them alone.
+- A photo with a brightness mean or Laplacian variance of exactly 0 gets no `low_light` or `possible_blur` flag, because the existing flag code treats 0 as unmeasured.
+
+Privacy and security: no new network or filesystem access. Originals are still only read.
+- Files changed: engine/src/local_gate.py, engine/src/ingest.py, engine/src/index_photos.py, engine/main.py, engine/config.yaml, engine/tests/test_sanity_gate.py, engine/tests/test_openai_quality.py, engine/tests/test_engine.py, engine/tests/test_ingest.py, CHANGELOG.md, docs/pipeline.md, docs/assessment.md
+- **Learnings for future iterations:**
+  - The gate reject reasons are `exact_duplicate`, `unsupported_format` and `too_small` (`hard_reject`), plus `failed_read` for unreadable files. `local_gate.min_long_side` (256) is the only reject setting left in config.
+  - `mark_duplicates` no longer takes `keep_near_duplicates`; near-duplicates are always flagged and kept. The `local_gate.mode`, `hard_reject` and extreme-threshold keys are removed from engine/config.yaml.
+  - Byte-identical copies are now separate records: `ingest.duplicate_record(path, original)` gives ID `duplicate-<32 hex of the path hash>`, the shared `file_hash`, status rejected and reason `duplicate_exact`, and no working copy or thumbnail. They are not `carried_over`, so `cmd_analyze` puts them in `fresh` and the gate records them each run. The ID does not match `PHOTO_ID_PATTERN`, like `unreadable-` IDs; nothing serves images for them.
+  - `ingest.SUPPORTED_FORMATS` is the allow-list of Pillow format names (JPEG, MPO, PNG, WEBP, HEIF). A format outside it returns early as `unsupported_format` before `image.load()` and before any derived file is written. Garbage bytes that Pillow cannot identify still raise and become `unreadable_image`.
+  - `discover_images` still filters by extension, so a supported-extension file with other content is rejected but a `.gif` or `.bmp` file is never seen.
+  - Screenshots are only flagged (`local_flag_screenshot`). The documents flag must come from the P04.4 content tag, as a soft flag with no reject rule.
+  - The flag code treats a brightness mean or Laplacian variance of exactly 0 as unmeasured, so an all-black or perfectly flat image gets no low_light or possible_blur flag. Tests avoid asserting those flags at 0.
+  - P04.8 deletes `local_gate.py`; the tests in `test_sanity_gate.py` check the policy through `index_photos`, `score_quality` and `run_local_gate`, so they are the ones to port. `export_results._REJECT_FOLDERS` still has dead reasons (`too_blurry`, `too_dark`, `no_face`, `likely_screenshot` and others) that can be removed with it.
+  - To keep a synthetic screenshot flat after the JPEG working copy, align colour blocks to 8 px boundaries; otherwise ringing raises the unique-gray-level ratio above the 0.35 screenshot heuristic.
 ---

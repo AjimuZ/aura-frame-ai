@@ -4,6 +4,12 @@
 
 ### Added
 
+- The sanity gate now rejects only objective failures: an unreadable file, an image format the pipeline does
+  not accept, a byte-identical copy of an earlier photo, and an image under 256 px on the long side. Brightness
+  and blur no longer reject (a smooth gradient and a night sky survive), and a screenshot only gets the
+  `local_flag_screenshot` flag. Each byte-identical copy is now its own rejected record instead of being dropped
+  silently. The legacy `strict` gate mode and its settings were removed. Document photos are not flagged yet
+  (P04.4). Tested on synthetic images in the container run; a full `analyze` run was not repeated.
 - Ingest now decodes each original once and writes an upright working copy (long side at most 1,536 px) and a
   512 px thumbnail; quality, faces and embeddings read the working copy, and the EXIF orientation is applied once.
   Photo IDs are the SHA-256 of the content, so a moved or renamed file keeps its results, an unchanged file is not

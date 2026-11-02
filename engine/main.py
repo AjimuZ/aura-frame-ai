@@ -109,12 +109,7 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if resumed:
         events.log(f"Resuming: {resumed} unchanged photos skipped.", "info")
 
-    mode = config.get("local_gate", {}).get("mode", "minimal")
-    duplicates = mark_duplicates(
-        photos,
-        int(config["filters"].get("phash_distance", 5)),
-        keep_near_duplicates=(mode != "strict"),
-    )
+    duplicates = mark_duplicates(photos, int(config["filters"].get("phash_distance", 5)))
     events.progress("duplicates", len(photos), len(photos), f"Found {duplicates} duplicates")
     for photo in photos:
         db.upsert_photo(conn, photo)
@@ -129,8 +124,8 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if should_stop(config):
         return _cancel(conn, config)
 
-    # Local Minimal Gate: classify fresh photos (hard_reject only the extreme cases; soft-flag
-    # the rest) so the local pipeline stays permissive and OpenAI candidates are marked.
+    # Sanity gate: classify fresh photos (reject only objective failures; soft-flag the rest)
+    # so the local pipeline stays permissive and candidates are marked.
     # Resumed photos keep their previously stored gate decision.
     local_gate.run_local_gate(fresh, config)
     for photo in fresh:
@@ -291,7 +286,7 @@ def cmd_clear_data(args: argparse.Namespace) -> int:
 
 
 # Runs the Local Minimal Gate over a folder (no cloud): measure quality + faces, mark
-# duplicates, then classify each photo (hard_reject only the extremes; soft-flag the rest).
+# duplicates, then classify each photo (reject only objective failures; soft-flag the rest).
 # Produces the gate report and the photos.json the OpenAI flow consumes.
 def cmd_local_minimal_gate(args: argparse.Namespace) -> int:
     config = _prepare_config(args)
@@ -301,21 +296,13 @@ def cmd_local_minimal_gate(args: argparse.Namespace) -> int:
         return 1
     conn = db.connect(config)
     photos = index_photos(folder, config, not args.no_subfolders)
-    mode = config.get("local_gate", {}).get("mode", "minimal")
-    mark_duplicates(
-        photos,
-        int(config["filters"].get("phash_distance", 5)),
-        keep_near_duplicates=(mode != "strict"),
-    )
+    mark_duplicates(photos, int(config["filters"].get("phash_distance", 5)))
     total = len(photos)
     for i, photo in enumerate(photos, start=1):
         if photo.status != "rejected":
             score_quality(photo, config)
         if photo.status != "rejected":
             score_faces(photo, config)
-            if mode == "strict" and not photo.face_detected:
-                photo.status = "rejected"
-                photo.reject_reason = "no_face"
         if i % 25 == 0 or i == total:
             events.progress("quality", i, total, f"Measuring {i}/{total}")
     local_gate.run_local_gate(photos, config)
@@ -502,17 +489,13 @@ def _stage(conn, photos: list[Photo], config: dict, step: str, func) -> None:  #
             events.progress(step, i, total, f"{step} {i}/{total}")
 
 
-# Runs face scoring. In minimal mode a missing face is only a soft flag (added later by the
-# gate), never a rejection; strict/legacy mode keeps rejecting faceless photos outright.
+# Runs face scoring. A missing face is only a soft flag (added later by the gate), never a
+# rejection.
 def _face_stage(conn, photos: list[Photo], config: dict) -> None:  # type: ignore[no-untyped-def]
-    strict = config.get("local_gate", {}).get("mode", "minimal") == "strict"
     total = len(photos)
     for i, photo in enumerate(photos, start=1):
         if photo.status != "rejected":
             score_faces(photo, config)
-            if strict and not photo.face_detected:
-                photo.status = "rejected"
-                photo.reject_reason = "no_face"
         db.upsert_photo(conn, photo)
         db.set_stage(conn, photo.id, "faces", "done")
         if i % 10 == 0 or i == total:

@@ -33,6 +33,10 @@ THUMBNAIL_SIZE = 512
 _WORKING_JPEG_QUALITY = 95
 _THUMBNAIL_JPEG_QUALITY = 82
 
+# Pillow format names the pipeline accepts, whatever the file extension says. MPO is the JPEG
+# variant many cameras write; HEIF covers .heic through the registered opener.
+SUPPORTED_FORMATS = frozenset({"JPEG", "MPO", "PNG", "WEBP", "HEIF"})
+
 # EXIF tag numbers. Only these three values are ever read; everything else, including GPS, is
 # ignored, so it cannot reach the database or the UI.
 _EXIF_MAKE = 0x010F
@@ -102,13 +106,32 @@ def _unreadable_id(path: Path) -> str:
     return "unreadable-" + hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:32]
 
 
+# Builds the rejected record of a byte-identical copy. Copies share the content hash, so the
+# record gets its own path-based ID (never colliding with a content hash) and keeps the shared
+# hash in `file_hash`. It has no working copy: it exists so the rejection stays visible and counted.
+def duplicate_record(path: Path, original: Photo) -> Photo:
+    digest = hashlib.sha256(str(path.resolve()).encode("utf-8")).hexdigest()[:32]
+    return Photo(
+        id="duplicate-" + digest,
+        file_path=str(path),
+        file_name=path.name,
+        modified_at=original.modified_at,
+        created_at=original.created_at,
+        file_hash=original.file_hash,
+        status="rejected",
+        reject_reason="duplicate_exact",
+    )
+
+
 # Ingests a single image into a Photo (metadata only; no scoring yet).
 #
 # The ID is the SHA-256 of the file content. When `known` holds a stored record with that ID and
 # its working copy (and thumbnail) still exist, the file is not decoded again: the stored record is
 # returned with the new path, name and times, and `carried_over` set. A moved or renamed file
 # therefore keeps its results. A file that cannot be read comes back rejected as
-# "unreadable_image". The original is only ever opened for reading.
+# "unreadable_image"; bytes that Pillow recognizes as an image of a format outside
+# SUPPORTED_FORMATS come back rejected as "unsupported_format" without any derived file. The
+# original is only ever opened for reading.
 def ingest_image(
     path: Path,
     config: dict[str, Any],
@@ -153,6 +176,11 @@ def ingest_image(
     try:
         ensure_dir(working_copies_dir(config))
         with Image.open(path) as image:
+            if image.format not in SUPPORTED_FORMATS:
+                # Recognized as an image, but not one the pipeline handles (GIF, BMP, TIFF, ...).
+                photo.status = "rejected"
+                photo.reject_reason = "unsupported_format"
+                return photo
             image.load()
             photo.exif = _minimal_exif(image)
             # The only place orientation is applied; the copies below carry no orientation tag.

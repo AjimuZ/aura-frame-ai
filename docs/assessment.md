@@ -39,7 +39,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | ID | Defect | Location | Evidence |
 | --- | --- | --- | --- |
 | A1 | A photo without a face never reaches the AI, and is categorized `REJECT` | `engine/src/final_ranker.py:176`, `:36` | Run: a technically perfect faceless photo gives 0 candidates, category `REJECT` |
-| A2 | The gate discards valid photographs: global blur measure and mean brightness | `engine/src/local_gate.py:72`–`77` | Run: a smooth scene (variance 0.1) is rejected as `extreme_blur`; a starry sky (mean 0.14) as `fully_black_image` |
+| A2 | ~~The gate discards valid photographs: global blur measure and mean brightness~~ **Resolved in P04.2:** the gate rejects only unreadable files, unsupported formats, byte-identical copies and images under 256 px on the long side (`engine/src/local_gate.py`) | Run: `engine/tests/test_sanity_gate.py` (a smooth gradient and a black image with bright points survive; dark, bright and flat images are kept) |
 | A3 | Prompts, score fields and slots assume one narrow purpose | `engine/src/vlm/schema.py`, `engine/src/cloud/openai_prompts.py`, `engine/src/final_ranker.py` | Read: see [retired vocabulary](#retired-vocabulary) |
 | A4 | The final set is six fixed slots, tied to the old purpose | `engine/src/final_ranker.py:189` | Read |
 

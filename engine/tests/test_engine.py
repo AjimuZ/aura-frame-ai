@@ -20,28 +20,29 @@ def test_blur_variance_ordering(sharp_image: Path, blurry_image: Path) -> None:
     assert blur_variance(sharp) > blur_variance(flat)
 
 
-# score_quality only MEASURES now; the Local Minimal Gate decides. A moderately dark photo
-# is kept and soft-flagged (low_light); only a truly black frame is a hard reject.
+# score_quality only MEASURES now; the gate decides. A dark photo is never rejected for its
+# brightness: it is kept and soft-flagged (low_light).
 def test_minimal_gate_dark_handling(dark_image: Path, data_config: dict) -> None:
     photo = ingest_image(dark_image, data_config)
     score_quality(photo, data_config)
     assert photo.status != "rejected"  # measurement never rejects a readable image
     apply_local_minimal_gate(photo, data_config)
-    if photo.brightness_mean < 10:
-        assert photo.gate_status == "hard_reject"
-    else:
-        assert photo.gate_status != "hard_reject"
-        assert photo.eligible_for_openai
-        assert "local_flag_low_light" in photo.soft_flags
+    assert photo.gate_status != "hard_reject"
+    assert photo.eligible_for_openai
+    assert "local_flag_low_light" in photo.soft_flags
 
 
-# Byte-identical files share one content-hash ID, so indexing keeps the first copy only; the
-# exact-duplicate marker still rejects two records that carry the same file hash.
+# Byte-identical files share one content-hash ID, so indexing keeps the first copy as the photo
+# and records every later copy as a separate record rejected as an exact duplicate. The marker
+# still rejects two records that carry the same file hash.
 def test_duplicate_detection(sharp_image: Path, tmp_path: Path, data_config: dict) -> None:
     copy_path = tmp_path / "sharp_copy.jpg"
     copy_path.write_bytes(sharp_image.read_bytes())
     photos = index_photos(tmp_path, data_config, include_subfolders=False)
-    assert [p.file_name for p in photos] == ["sharp.jpg"]
+    assert [p.file_name for p in photos] == ["sharp.jpg", "sharp_copy.jpg"]
+    assert photos[0].status != "rejected"
+    assert photos[1].status == "rejected" and photos[1].reject_reason == "duplicate_exact"
+    assert photos[1].id != photos[0].id and photos[1].file_hash == photos[0].file_hash
     twin = Photo(id="twin", file_path="x.jpg", file_name="x.jpg", file_hash=photos[0].file_hash)
     assert mark_duplicates([photos[0], twin]) >= 1
     assert twin.status == "rejected" and twin.reject_reason == "duplicate_exact"

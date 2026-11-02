@@ -267,7 +267,8 @@ def test_a_missing_working_copy_forces_a_new_decode(tmp_path: Path, data_config:
     assert working_copy_path(data_config, again.id).is_file()
 
 
-# Byte-identical files collapse to one photo (the first in path order), and the copy is not decoded.
+# Byte-identical files give one photo (the first in path order); the copy is not decoded and is
+# recorded as a separate record rejected as an exact duplicate.
 def test_identical_files_collapse_to_one_photo(
     tmp_path: Path, data_config: dict, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -281,8 +282,11 @@ def test_identical_files_collapse_to_one_photo(
 
     photos = index_photos(folder, data_config, include_subfolders=False)
 
-    assert [p.file_name for p in photos] == ["a.jpg", "c.jpg"]
-    assert len({p.id for p in photos}) == 2
+    assert [p.file_name for p in photos] == ["a.jpg", "b_copy.jpg", "c.jpg"]
+    assert len({p.id for p in photos}) == 3
+    assert [p.status == "rejected" for p in photos] == [False, True, False]
+    assert photos[1].reject_reason == "duplicate_exact"
+    assert photos[1].file_hash == photos[0].file_hash
     assert recorder.decodes_of(first) == 1
     assert recorder.decodes_of(twin) == 0
 
