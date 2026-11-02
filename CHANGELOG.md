@@ -61,6 +61,11 @@
   and reports. The window also adds the GPU overlay (`compose.gpu.yaml`) when `nvidia-smi -L` succeeds, as
   `start.sh` does. Tested with a fake Docker, a fake server and synthetic images only; the unwritable-folder case is
   simulated, and nothing was run against a real Docker, GPU or Linux host.
+- `./start.sh --rebuild` now also builds the desktop app into `release/` in a container. It uses the
+  `electronuserland/builder` images pinned by digest (`:wine` on Windows, `:latest` on Linux) and mounts only the build
+  inputs, read-only. `AURAFRAME_BUILDER_IMAGE` can give another pinned image. On the reference Windows PC,
+  `./start.sh --rebuild --cpu` exited 0 and wrote the unsigned NSIS installer and `win-unpacked/`. Not yet observed:
+  running the built app, and a build on a Linux host. The script still does not launch the window.
 
 ### Changed
 

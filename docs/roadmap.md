@@ -55,7 +55,7 @@ the retired-terms test and the personal-data test. Not observed: the desktop app
 - [x] P02.3 Add the FastAPI application: runs, events, photos, media, exports, data.
 - [x] P02.4 Make Electron main a client of the API: same bridge and IPC channels, HTTP in place of
       the child process, `afmedia` proxied, chosen folder mounted read-only.
-- [ ] P02.5 Build the desktop shell in a container, or record why the host fallback is needed.
+- [x] P02.5 Build the desktop shell in a container, or record why the host fallback is needed.
 - [x] P02.6 Remove `start.py` and the Python paths from Electron.
 
 Exit: `./start.sh` opens the Electron window; a synthetic folder chosen in the native dialog completes
@@ -161,6 +161,15 @@ adds `-f compose.gpu.yaml` on success, and `down` names the same files. A folder
 skipped, the symlink case of `compose-stack`); the engine container tests passed (190 of 190). Not observed: the
 unwritable case with a real uid 10001 on a Linux host (simulated in the tests), a real Docker, `nvidia-smi` or GPU
 overlay, and a running Electron. `--integration` was not run. P02.4 is left for the orchestrator to tick.
+
+Progress 2026-11-02 (P02.5): `start.sh --rebuild` builds the desktop shell in a digest-pinned image, with only the
+build inputs mounted ([Operations](operations.md#desktop-shell-build)). With the owner's authorization, both builder
+tags were pulled and their digests read with `docker inspect` and set in `start.sh`. Observed on the reference PC:
+`./start.sh --rebuild --cpu` exited 0, wrote `release/AuraFrame AI Setup 1.0.0.exe` and `release/win-unpacked/` from
+the `:wine` image, then started the services and the gateway answered `/health`. An earlier `./start.sh --rebuild` with
+the GPU overlay wrote the same files, but the session's 10-minute command limit stopped the script before its exit
+code. R15 records the outcome, and no host fallback is needed on this PC. `node --test tests/start-sh.test.cjs` passed.
+Not observed: running the built app, and the Linux route.
 
 ## 4. P03 — Local AI runtime
 

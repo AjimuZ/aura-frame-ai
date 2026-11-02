@@ -24,6 +24,11 @@ esac
 MIN_DOCKER_MEMORY_GB=10
 HEALTH_TIMEOUT_SECONDS=420
 TOKEN_FILE="data/session-token"
+# Builder images of the desktop shell, as name@sha256:<digest>. The digests were read from the pulled :wine and
+# :latest tags on 2026-11-02 and are never guessed. Empty would mean no pin, and the shell build is then skipped.
+# AURAFRAME_BUILDER_IMAGE supplies another pin without editing this file.
+BUILDER_IMAGE_WINDOWS="electronuserland/builder@sha256:f3a8d451994c881d0972e7b1846ee4d4fdc15eb41fc6b1f350b38cbf99ca90fe"
+BUILDER_IMAGE_LINUX="electronuserland/builder@sha256:22c93521ff6ea682e7ef153bb4846d90b769aa3b3f3f3be9ec9090aabc3e877c"
 
 mode="start"
 provider=""
@@ -240,6 +245,45 @@ health_check() {
   fi
 }
 
+# build_desktop_shell: builds the app into release/ in the digest-pinned builder image; exits 1 when that fails.
+# With no pin it warns and builds nothing, because a floating tag is never run. A pin in another form exits 1.
+# Only the build inputs are mounted, read-only, so the personal folders, the data folder and the session token
+# stay out of the container. The build works on a copy inside it and writes only to release/. It needs the internet
+# for npm and the Electron download, and it runs with the host's user so that release/ stays owned by that user.
+build_desktop_shell() {
+  local image platform_flag root input
+  local mounts=()
+  case "$(uname -s 2>/dev/null)" in
+    MINGW* | MSYS* | CYGWIN*)
+      image="${AURAFRAME_BUILDER_IMAGE:-$BUILDER_IMAGE_WINDOWS}"
+      platform_flag="--win"
+      ;;
+    *)
+      image="${AURAFRAME_BUILDER_IMAGE:-$BUILDER_IMAGE_LINUX}"
+      platform_flag="--linux"
+      ;;
+  esac
+  if [ -z "$image" ]; then
+    echo "start.sh: warning: the desktop shell was not built: no builder image digest is recorded yet." >&2
+    echo "start.sh: warning: see docs/operations.md#desktop-shell-build." >&2
+    return 0
+  fi
+  if ! [[ "$image" =~ @sha256:[0-9a-f]{64}$ ]]; then
+    fail_prerequisite "The builder image must be pinned as name@sha256:<64 hex characters>, got '$image'."
+  fi
+  mkdir -p release || fail_prerequisite "Could not create the release folder."
+  root="$(pwd -W 2>/dev/null || pwd)"
+  for input in package.json package-lock.json angular.json tsconfig.json tsconfig.app.json tsconfig.electron.json apps; do
+    mounts+=(-v "$root/$input:/src/$input:ro")
+  done
+  docker run --rm --user "$(id -u):$(id -g)" --cap-drop ALL --security-opt no-new-privileges \
+    -e HOME=/tmp/home -e ELECTRON_CACHE=/tmp/home/.cache/electron \
+    -e ELECTRON_BUILDER_CACHE=/tmp/home/.cache/electron-builder \
+    "${mounts[@]}" -v "$root/release:/out" "$image" \
+    bash -c "cp -r /src /tmp/build && cd /tmp/build && npm ci && npm run build && npx electron-builder $platform_flag --publish never && cp -r release/. /out/" ||
+    fail_prerequisite "Building the desktop shell failed in $image. See docs/operations.md#desktop-shell-build."
+}
+
 # start_stack: builds what changed, starts the services and waits for their health checks.
 start_stack() {
   local profile_args=()
@@ -249,6 +293,9 @@ start_stack() {
   if [ "$rebuild" -eq 1 ]; then
     compose ${profile_args[@]+"${profile_args[@]}"} build --no-cache ||
       fail_prerequisite "Building the images failed."
+    if [ "$backend_only" -eq 0 ]; then
+      build_desktop_shell
+    fi
   fi
   # Compose rebuilds an image only when its sources changed, thanks to the layer cache.
   if ! compose ${profile_args[@]+"${profile_args[@]}"} up -d --build --wait --wait-timeout "$HEALTH_TIMEOUT_SECONDS"; then
@@ -268,7 +315,7 @@ report_started() {
     echo "start.sh: the session token is in ${TOKEN_FILE} (ignored by Git). Stop with './start.sh --stop'."
     return 0
   fi
-  echo "start.sh: the desktop window is not launched by this script yet: its container build comes in P02.5." >&2
+  echo "start.sh: the desktop window is not launched by this script yet: '--rebuild' builds it into release/, but launching it is not implemented." >&2
   echo "start.sh: the services stay up; stop them with './start.sh --stop'." >&2
 }
 

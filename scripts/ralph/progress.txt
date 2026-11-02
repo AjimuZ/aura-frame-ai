@@ -43,6 +43,8 @@
 - When an async step (such as a probe) is added before a spawn, update the fakes in every test that counts spawns, and have them wait for the spawn instead of assuming it is synchronous.
 - A host folder given to a container goes through one validation function in main and reaches compose only through the child environment, never through argv; the test asserts both the environment value and its absence from the arguments.
 - When a module cannot import the error type because of an import cycle, let it raise the standard OSError and map it to a structured error in the route layer.
+- Pin container images by reading `docker inspect --format '{{index .RepoDigests 0}}' <tag>` after a pull. Never guess a digest. Record the date and the source tag next to the pin.
+- When a long real run is cut by a tool time limit, rerun a lighter variant that still exercises the path under test (for example `--cpu`), so the exit code is observed. Record both runs honestly.
 
 ---
 
@@ -477,4 +479,42 @@ The P02.4.2 checkbox and scripts/ralph/prd.json were left alone.
   - P02.6 needed only documentation edits; the code criteria were already met.
   - docs/decisions/0002 and 0009 still list the launcher removal as a consequence; they are history and were left alone.
   - Lint and builds were not run in this attempt; the orchestrator's checks are the only verification.
+---
+
+## 2026-11-02T11:09:56Z - P02.5
+- The container build of the desktop shell works on the reference Windows PC, so the host fallback is not needed there. I pulled `electronuserland/builder:wine` and `:latest`, read their digests with `docker inspect` and pinned both in `start.sh`:
+- `BUILDER_IMAGE_WINDOWS` = `electronuserland/builder@sha256:f3a8d451…ca90fe`
+- `BUILDER_IMAGE_LINUX` = `electronuserland/builder@sha256:22c93521…e877c`
+
+**Real runs:**
+- `./start.sh --rebuild --cpu` exited 0. The `:wine` image wrote `release/AuraFrame AI Setup 1.0.0.exe` (unsigned NSIS, x64), its `.blockmap` and `release/win-unpacked/` (with `resources/app.asar`). The services then started and the gateway answered `/health`.
+- The earlier `./start.sh --rebuild` (with the GPU overlay) wrote the same files. The 10-minute command limit stopped the script in its later steps, so its exit code was not observed.
+
+**Code and test changes:**
+- I updated the message `start.sh` prints after a start: it now says `--rebuild` builds the window into `release/` but launching it is not implemented.
+- `tests/start-sh.test.cjs` now takes an `edit` option that rewrites the copied script, so the empty-pin case is still tested.
+- A new test checks that the recorded pins are upstream digests and are chosen by host platform. The window-message test now matches the new text.
+
+**Docs:** risk R15 records the outcome. `docs/operations.md` (desktop shell build), `docs/testing.md`, the roadmap progress note and `CHANGELOG.md` are updated. There was no failure, so no decision record was needed. I left the roadmap checkbox for the orchestrator.
+
+**Checks run:**
+- `node --test tests/start-sh.test.cjs`: 19 of 19 passed.
+- `bash scripts/check.sh --integration`: 3 passed, all assertions hold.
+- `bash scripts/check.sh`: 8 passed. That covers lint, both builds, `start.sh` syntax, the Node tests (137: 136 passed, 1 skipped, the existing symlink case), the engine container tests (190 of 190) and both compose checks.
+
+**Not observed:** running the installer or `AuraFrame AI.exe`, a build on a Linux host, and Wine being used (the build log names no Wine step).
+
+**Findings:**
+- The `npm ci` inside the builder reported 80 audit findings in the locked tree (2 low, 51 moderate, 24 high, 3 critical). It also warned that six packages run install scripts that `allowScripts` does not cover.
+- `./start.sh --stop` was refused by the command policy, so the `auraframe` stack started by the `--cpu` run is still up on 127.0.0.1:8420. The owner can stop it with `./start.sh --stop`.
+- `scripts/ralph/prd.json` shows a change made by the orchestrator, not by me.
+- Files changed: start.sh, tests/start-sh.test.cjs, CHANGELOG.md, docs/operations.md, docs/risks.md, docs/roadmap.md, docs/testing.md
+- **Learnings for future iterations:**
+  - A full `./start.sh --rebuild` with the GPU overlay takes more than the 10-minute Bash tool limit, because `--no-cache` rebuilds the GPU stage of `api`. `./start.sh --rebuild --cpu` finishes inside it, with the shell build taking about 4 minutes.
+  - The `docker run` behind the builder survives the start.sh process being killed (it is not attached to a TTY), so `release/` can be complete even when the script's exit code was not observed.
+  - electron-builder 26.18 in the `:wine` image built the Windows NSIS target with no Wine step in its log. In Git Bash the container ran as the host uid (197609), and the Docker Desktop bind mount still let it write `release/`.
+  - `npm ci` in the builder reports 80 audit findings (3 critical, 24 high) in package-lock.json and warns that six packages run install scripts not covered by allowScripts (@parcel/watcher, electron-winstaller, two esbuild versions, lmdb, msgpackr-extract). It is a candidate for a dependency task.
+  - `./start.sh --stop` and commands chained with `;` are not in the session allowlist. After `./start.sh --rebuild`, the `auraframe` stack stays up on 127.0.0.1:8420 until someone stops it.
+  - In `tests/start-sh.test.cjs`, `runStart` now takes `edit: (script) => script` to rewrite the copied start.sh. Use it instead of extra environment hooks when a test needs different constants.
+  - The product name in the build output contains a word the commit validator refuses. Never quote the installer file name in a commit message.
 ---

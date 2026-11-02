@@ -91,8 +91,9 @@ Behaviour as implemented:
   `none` otherwise, with an explanation. `--provider local` with missing files exits `1`. The files are
   listed read-only through a throwaway `vision` container, which downloads no model.
 - Start: `docker compose up -d --build --wait`, with `--profile local` only when the local provider runs
-  and `compose.gpu.yaml` only without `--cpu`. `--rebuild` first builds the images without the cache.
-  Then the script asks the gateway for `/health` with the token. Failing either gives exit `3`.
+  and `compose.gpu.yaml` only without `--cpu`. `--rebuild` first builds the images without the cache, then the
+  [desktop shell](#desktop-shell-build), which `--backend-only` leaves out. Then the script asks the gateway for
+  `/health` with the token. A failed `up` or `/health` gives exit `3`.
 - The token is 64 hex characters from `/dev/urandom`. Compose reads it from the environment, `curl` reads it
   from a configuration on stdin, and it is never printed. `--backend-only` also writes it to
   `data/session-token`, readable by the user only and ignored by Git.
@@ -109,8 +110,9 @@ These flags are valid, but their feature comes later. Each prints a "not availab
 | `--fetch-models` | P03.2 |
 | `--codex-login`, `--provider codex` | P05.2 |
 
-The window is not launched either: its container build comes in P02.5. After a start, the script prints that,
-leaves the services running, and `--stop` ends them. `--rebuild` rebuilds the images only. A window started
+The window is not launched either: `--rebuild` builds it into `release/` ([desktop shell](#desktop-shell-build)), but
+launching it is not implemented. After a start, the script prints that, leaves the services running, and `--stop` ends
+them. A window started
 separately brings its own token, so its first run makes compose recreate `api` with that token.
 
 ## First start
@@ -124,12 +126,49 @@ The folder dialog is native. Electron mounts the chosen folder read-only in the 
 
 ## Desktop shell build
 
-`start.sh` builds the Electron app into `release/` (Git-ignored) with `electron-builder`, in the official
+Status: **works on the reference PC (Windows) as of 2026-11-02** (P02.5). Not yet run on a Linux host.
+
+`./start.sh --rebuild` builds the Electron app into `release/` (Git-ignored) with `electron-builder`, in the official
 `electronuserland/builder:wine` image on Windows and `electronuserland/builder` on Linux, pinned by digest.
 This route rules out native runtime dependencies without prebuilds. The app's runtime dependencies have
 none. The native modules in build tools (`lmdb`, `@parcel/watcher`) run only inside the container.
 
-**Not yet tried on this PC.** If it fails, the fallback is to build on the host with Node.js:
+- The digests are the constants `BUILDER_IMAGE_WINDOWS` and `BUILDER_IMAGE_LINUX` in `start.sh`. They were read with
+  `docker inspect --format '{{index .RepoDigests 0}}'` after pulling the tags on 2026-11-02:
+
+  | Tag | Pinned as |
+  | --- | --- |
+  | `electronuserland/builder:wine` | `electronuserland/builder@sha256:f3a8d451994c881d0972e7b1846ee4d4fdc15eb41fc6b1f350b38cbf99ca90fe` |
+  | `electronuserland/builder:latest` | `electronuserland/builder@sha256:22c93521ff6ea682e7ef153bb4846d90b769aa3b3f3f3be9ec9090aabc3e877c` |
+
+  To move a pin, pull the tag, read its digest the same way and edit the constant. If a constant is empty,
+  `--rebuild` prints a warning and builds no shell.
+- `AURAFRAME_BUILDER_IMAGE` overrides the constant for the host's platform. A value that is not
+  `name@sha256:<64 hex characters>` exits `1`, so a floating tag is never run.
+- The container gets only `package.json`, `package-lock.json`, `angular.json`, the three `tsconfig` files and `apps/`,
+  all read-only, and `release/` to write to. It never sees the repository root, so the personal folders, `data/` and
+  the session token stay out. It runs as the host's user with all capabilities dropped. It needs the internet for npm
+  and the Electron download.
+- A failed build exits `1` before the services start. A start without `--rebuild` builds no shell, because the
+  script does not launch the window yet.
+
+Observed on the reference PC (Windows 11, Docker Desktop with the WSL2 backend and 7 GB of memory for Docker) on
+2026-11-02:
+
+- `./start.sh --rebuild --cpu` exited `0`. In the `:wine` image it ran `npm ci`, the Angular and Electron builds and
+  `electron-builder --win`, and wrote `release/AuraFrame AI Setup 1.0.0.exe` (NSIS, x64), its `.blockmap` and
+  `release/win-unpacked/` (with `resources/app.asar`). Then the services were rebuilt and started, and the gateway
+  answered `/health`.
+- An earlier `./start.sh --rebuild` (with the GPU overlay) produced the same files, but the session's 10-minute
+  command limit stopped the script during its later steps, so its exit code was not observed. The `--no-cache`
+  build of the GPU image takes most of that time.
+- The build log shows `npm ci` reporting 80 audit findings in the locked dependency tree (2 low, 51 moderate, 24
+  high, 3 critical) and a warning that six packages run install scripts. The installer is unsigned and uses
+  the default Electron icon, and the log names no Wine step.
+- Not observed: the installer or `win-unpacked/AuraFrame AI.exe` being run, and the Linux route.
+
+The host fallback is therefore not needed on this PC. If the route fails on another host, the fallback is to build on
+the host with Node.js:
 
 ```bash
 npm ci && npm run build && npx electron .
