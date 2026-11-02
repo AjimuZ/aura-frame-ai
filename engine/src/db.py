@@ -10,6 +10,7 @@ frame for clustering/diversity only - they are not face/identity embeddings.
 
 import json
 import sqlite3
+from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
@@ -21,9 +22,9 @@ SCHEMA_VERSION = 1
 # Ordered pipeline stages tracked in the `jobs` table for resumability. The first group is
 # the local pipeline; the cloud group is only used by the optional OpenAI Quality Mode.
 STAGES = (
-    "ingest", "quality", "faces", "local_gate", "qrealign", "embeddings", "aesthetic", "vlm", "rank",
-    "broad_scan", "quality_review", "premium_review", "final_judge", "consensus",
-)
+    "ingest", "quality", "faces", "local_gate", "qrealign", "embeddings", "content_tags", "aesthetic", "vlm",
+    "rank", "broad_scan", "quality_review", "premium_review", "final_judge", "consensus",
+)  # fmt: skip
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
@@ -96,6 +97,17 @@ CREATE TABLE IF NOT EXISTS jobs (
     PRIMARY KEY (photo_id, stage)
 );
 
+-- Exact values the camelCase record rounds or leaves out, so a resumed photo ranks and gates like a fresh one.
+CREATE TABLE IF NOT EXISTS photo_measures (
+    photo_id TEXT PRIMARY KEY REFERENCES photos(id) ON DELETE CASCADE,
+    brightness_mean REAL, laplacian_variance REAL, people_penalty REAL
+);
+
+-- Stages that work on the whole collection (grouping): the key is a hash of every input, the result is JSON.
+CREATE TABLE IF NOT EXISTS stage_runs (
+    stage TEXT PRIMARY KEY, input_key TEXT NOT NULL, result TEXT, updated_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS review_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     created_at TEXT,
@@ -148,6 +160,46 @@ def get_stage(conn: sqlite3.Connection, photo_id: str, stage: str) -> str:
     return row["state"] if row else "pending"
 
 
+# Marks one stage as `state` for many photos in a single transaction, so a batch is recorded whole or not at all.
+# The caller writes the stage's results first: a photo marked "done" always has its data stored.
+def set_stages(conn: sqlite3.Connection, photo_ids: Iterable[str], stage: str, state: str) -> None:
+    with conn:
+        conn.executemany(
+            "INSERT OR REPLACE INTO jobs(photo_id, stage, state, updated_at) VALUES(?, ?, ?, datetime('now'))",
+            [(photo_id, stage, state) for photo_id in photo_ids],
+        )
+
+
+# Returns the IDs of the photos whose `stage` is recorded as done.
+def done_ids(conn: sqlite3.Connection, stage: str) -> set[str]:
+    rows = conn.execute("SELECT photo_id FROM jobs WHERE stage = ? AND state = 'done'", (stage,)).fetchall()
+    return {row["photo_id"] for row in rows}
+
+
+# Forgets every stage state of one photo, so each stage runs on it again. Used when a photo is ingested anew and
+# its stored results no longer describe what is in memory.
+def clear_stages(conn: sqlite3.Connection, photo_id: str) -> None:
+    with conn:
+        conn.execute("DELETE FROM jobs WHERE photo_id = ?", (photo_id,))
+
+
+# Stores the result of a collection-level stage under the hash of its inputs, replacing the earlier one.
+def save_stage_run(conn: sqlite3.Connection, stage: str, input_key: str, result: Any) -> None:
+    with conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO stage_runs(stage, input_key, result, updated_at) VALUES(?, ?, ?, datetime('now'))",
+            (stage, input_key, json.dumps(result, ensure_ascii=False)),
+        )
+
+
+# Returns the stored result of a collection-level stage when it was computed from exactly `input_key`, else None.
+def load_stage_run(conn: sqlite3.Connection, stage: str, input_key: str) -> Any | None:
+    row = conn.execute(
+        "SELECT result FROM stage_runs WHERE stage = ? AND input_key = ?", (stage, input_key)
+    ).fetchone()
+    return None if row is None else json.loads(row["result"])
+
+
 # Removes every other record stored for the same file path. A photo ID is the content hash, so
 # when the bytes at a path change (or the record predates content IDs) the old record describes
 # content that is no longer there; the cascade drops its scores, faces and embedding with it.
@@ -163,15 +215,26 @@ def _drop_superseded(conn: sqlite3.Connection, photo: Photo) -> None:
         conn.execute("DELETE FROM jobs WHERE photo_id = ?", (photo_id,))
 
 
+_PHOTO_COLUMNS = (
+    "id", "file_path", "file_name", "file_hash", "perceptual_hash", "width", "height", "created_at", "modified_at",
+    "exif", "thumb_path", "cluster_id", "likely_screenshot", "status", "reject_reason", "data",
+)  # fmt: skip
+
+# Updates the row in place on a known ID. INSERT OR REPLACE would delete it first, and with foreign keys on that
+# delete cascades to the photo's Q-ReAlign scores, embedding and content tag, losing finished work.
+_UPSERT_PHOTO = (
+    f"INSERT INTO photos({', '.join(_PHOTO_COLUMNS)}) VALUES ({', '.join(['?'] * len(_PHOTO_COLUMNS))})"
+    f" ON CONFLICT(id) DO UPDATE SET {', '.join(f'{c} = excluded.{c}' for c in _PHOTO_COLUMNS[1:])}"
+)
+
+
 # Persists one fully/partly analyzed photo across the normalized tables. Records that the same
-# path held before under another ID (changed content, or an older ID scheme) are replaced.
+# path held before under another ID (changed content, or an older ID scheme) are replaced. The
+# photo's rows in neural_scores, embeddings and content_tags are kept.
 def upsert_photo(conn: sqlite3.Connection, photo: Photo) -> None:
     _drop_superseded(conn, photo)
     conn.execute(
-        "INSERT OR REPLACE INTO photos("
-        "id, file_path, file_name, file_hash, perceptual_hash, width, height,"
-        "created_at, modified_at, exif, thumb_path, cluster_id, likely_screenshot,"
-        "status, reject_reason, data) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        _UPSERT_PHOTO,
         (
             photo.id, photo.file_path, photo.file_name, photo.file_hash,
             photo.perceptual_hash, photo.width, photo.height,
@@ -200,6 +263,11 @@ def upsert_photo(conn: sqlite3.Connection, photo: Photo) -> None:
             photo.face_clarity_score, photo.eyes_visible_score, photo.head_yaw,
             photo.head_pitch, photo.occlusion_score, int(photo.group_photo),
         ),
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO photo_measures(photo_id, brightness_mean, laplacian_variance, people_penalty)"
+        " VALUES (?,?,?,?)",
+        (photo.id, photo.brightness_mean, photo.laplacian_variance, photo.people_penalty),
     )
     if photo.gemma is not None:
         conn.execute(
@@ -349,11 +417,40 @@ def load_latest_review_session(conn: sqlite3.Connection) -> dict[str, Any] | Non
     }
 
 
-# Loads every stored photo back into Photo objects (used by gemma-review / export).
+# Columns of the normalized tables that hold the exact value of a Photo attribute the camelCase record rounds or
+# omits, as (SQL expression, attribute).
+_EXACT_COLUMNS = (
+    ("s.technical", "technical_score"), ("s.blur", "blur_score"), ("s.brightness", "brightness_score"),
+    ("s.contrast", "contrast_score"), ("s.resolution", "resolution_score"), ("s.aesthetic", "aesthetic_score"),
+    ("s.face_quality", "face_quality_score"), ("f.size_score", "face_size_score"),
+    ("f.center_score", "face_center_score"), ("f.clarity_score", "face_clarity_score"),
+    ("f.eyes_score", "eyes_visible_score"), ("f.head_yaw", "head_yaw"), ("f.head_pitch", "head_pitch"),
+    ("f.occlusion", "occlusion_score"), ("m.brightness_mean", "brightness_mean"),
+    ("m.laplacian_variance", "laplacian_variance"), ("m.people_penalty", "people_penalty"),
+)  # fmt: skip
+
+
+# Loads every stored photo back into Photo objects, in insertion order. The file hash, perceptual hash, EXIF subset
+# and the exact scores come from their own columns, so a reused photo is identical to the one that was stored and a
+# resumed run gates, groups and ranks it exactly as an uninterrupted run would. A missing column value (a record
+# from before a table existed) keeps what the camelCase record holds.
 def load_photos(conn: sqlite3.Connection) -> list[Photo]:
+    columns = ", ".join(f"{expression} AS {attribute}" for expression, attribute in _EXACT_COLUMNS)
+    rows = conn.execute(
+        f"SELECT p.data, p.file_hash, p.perceptual_hash, p.exif, {columns} FROM photos p"
+        " LEFT JOIN scores s ON s.photo_id = p.id LEFT JOIN faces f ON f.photo_id = p.id"
+        " LEFT JOIN photo_measures m ON m.photo_id = p.id ORDER BY p.rowid"
+    ).fetchall()
     photos: list[Photo] = []
-    for row in conn.execute("SELECT data FROM photos").fetchall():
-        photos.append(_photo_from_camel(json.loads(row["data"])))
+    for row in rows:
+        photo = _photo_from_camel(json.loads(row["data"]))
+        photo.file_hash = row["file_hash"] or ""
+        photo.perceptual_hash = row["perceptual_hash"] or ""
+        photo.exif = json.loads(row["exif"] or "{}")
+        for _, attribute in _EXACT_COLUMNS:
+            if row[attribute] is not None:
+                setattr(photo, attribute, float(row[attribute]))
+        photos.append(photo)
     return photos
 
 

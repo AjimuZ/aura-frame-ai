@@ -78,6 +78,9 @@
 - Load images lazily, only on a cache miss. Tests can then prove that a rerun does zero work by counting both provider calls and loader calls.
 - Do not use conditional pytest.skip to cope with host limits such as missing symlink support. Simulate the condition with monkeypatch so the test always runs.
 - For deterministic reranking, break every tie by a stable content ID and test that reversed and shuffled input gives the same result.
+- Persist progress at the unit the stage really works in (per photo, or per GPU batch), and write the stored values in the same transaction as the state flag, so a state marked done always has its values.
+- Store exact raw values (unrounded penalties, raw gate measures, hashes) next to display values, so a resumed run decides exactly as an uninterrupted run would.
+- Test resume by killing at several stage positions with an injected exception, rerunning, and asserting both that no finished photo is processed again and that the final library equals an uninterrupted run.
 
 ---
 
@@ -774,4 +777,24 @@ Privacy and security: no new network or filesystem access. Originals are still o
   - The `selection` settings in engine/config.yaml are untuned; P04.MEASURE should review them.
   - Tests that depend on symbolic links must not skip. Monkeypatch Path.is_symlink instead, since Windows hosts often cannot create links. A conditional pytest.skip is flagged as a disabled test.
   - bash scripts/check.sh --engine takes about a minute, mostly the container dependency install, and ran fine from the allowlisted shell.
+---
+
+## 2026-11-02T19:45:44Z - P04.7
+- The resume work from the earlier attempt was already in the working tree and it holds up. The Docker daemon was reachable this time, and `bash scripts/check.sh --engine` passed 473 of 473 engine tests, including the new `engine/tests/test_resume.py`. `npm run lint` printed no findings.
+
+The tests cover:
+- A run killed in mid-stage, then rerun, repeats no finished work.
+- Per-photo, per-stage state is stored in SQLite.
+- Pause, resume and cancel work through the API. The new API test in `test_resume.py` drives the real engine; the existing control-file test is in `test_api_runs.py`.
+
+The kills are simulated by an uncaught exception, not a real signal. No real model, GPU or long collection was run. The curation stages from P04.5 and P04.6 are still not wired into `analyze`; that moved to P04.8.
+
+In this session I replaced the "not run" wording with the observed results in `docs/roadmap.md`, `docs/testing.md`, `docs/assessment.md` and `docs/pipeline.md`. The roadmap checkbox is untouched. `scripts/ralph/prd.json` shows as modified in the working tree; I did not edit it, since it is orchestrator-owned.
+- Files changed: engine/main.py, engine/src/db.py, engine/src/embeddings.py, engine/src/neural_stages.py, engine/src/index_photos.py, engine/src/content_tags.py, engine/tests/test_resume.py, docs/decisions/0015-per-stage-resume.md, docs/decisions/0014-selection-critique-reports-and-exports.md, docs/pipeline.md, docs/roadmap.md, docs/testing.md, docs/assessment.md, CHANGELOG.md
+- **Learnings for future iterations:**
+  - `cmd_analyze` in engine/main.py stores per-photo, per-stage state in the `jobs` table. New tables `photo_measures` and `stage_runs` hold exact raw values and the grouping input hash. A stage that touches the photo set must register itself with the same per-stage job helpers in engine/src/db.py, or its work is repeated on resume.
+  - P04.8 must wire `run_curation` (P04.5 and P04.6) into `analyze` on top of this resume layer. Give the tournament and critique stages their own stage state so a rerun reuses cached verdicts, and decide how the review screen reads the new output.
+  - Pause and cancel are read only between photos and between GPU batches; a running batch is never interrupted. A cancelled run exits with code 2 and keeps all finished photos.
+  - The kill tests simulate a kill with an uncaught exception at a chosen photo or batch. A real signal kill was not observed; P04.MEASURE or an integration check could cover it.
+  - The Docker daemon was reachable this session, so `bash scripts/check.sh --engine` works from the allowlisted shell and takes about 80 seconds. `scripts/ralph/prd.json` is orchestrator-owned and showed as modified in the working tree.
 ---

@@ -50,4 +50,5 @@ rerank that compounded penalties on each run and matched free model text (assess
 - `mmr_lambda`, `final_size` and `pool_size` are untuned starting values (`selection` in `engine/config.yaml`), to be
   reviewed in P04.MEASURE.
 - The new modules are not called by `engine/main.py`, the API or the review screen yet. P04.7 wires them with persisted
-  progress and P04.8 removes the old ranker and exports.
+  progress and P04.8 removes the old ranker and exports. Update (P04.7): the wiring moved to P04.8, so the output the
+  review screen reads changes once; see [ADR 0015](0015-per-stage-resume.md).

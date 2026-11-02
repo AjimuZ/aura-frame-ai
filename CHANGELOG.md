@@ -150,6 +150,15 @@
 
 ### Changed
 
+- An analysis that is killed, crashes or is cancelled now resumes where it stopped. Each photo's progress is stored
+  per stage in the library database (`jobs`): after each photo for ingest, quality, faces and the gate, after each GPU
+  batch for Q-ReAlign and SigLIP 2, and once for content tags. The next run decodes, scores, embeds and tags only
+  what is not finished, and reuses the stored groups while their inputs are unchanged. Pause and cancel from the API
+  take effect between photos and between batches, and a cancelled run keeps every finished photo. A photo stored and
+  read back keeps its exact scores, hashes and EXIF subset, and updating a photo no longer deletes its Q-ReAlign
+  values, embedding or content tag. New tables `photo_measures` and `stage_runs` are created on first open (see
+  ADR 0015). The engine tests for this use fake models and simulated kills; no real model or long collection has
+  been run.
 - Settings now has one "Check providers" button. It asks `GET /api/providers` through the bridge (channel
   `providers:check`, method `checkProviders`) and lists each provider with its state, and says so when the
   services are not running. It replaces the earlier local runtime check, and the URL, primary model and fallback

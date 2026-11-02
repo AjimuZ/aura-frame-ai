@@ -21,6 +21,7 @@ import argparse
 import json
 import shutil
 import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 # Make the sibling `src` package importable when run as `python engine/main.py`.
@@ -41,7 +42,7 @@ from src.cloud import (  # noqa: E402
     run_final_judge,
     run_stage,
 )
-from src.embeddings import assign_clusters  # noqa: E402
+from src.embeddings import assign_clusters, grouping_key  # noqa: E402
 from src.export_results import export_all, export_final_set, export_openai_quality  # noqa: E402
 from src.face_quality import score_faces  # noqa: E402
 from src.final_ranker import (  # noqa: E402
@@ -84,7 +85,15 @@ def _prepare_config(args: argparse.Namespace) -> dict:  # type: ignore[type-arg]
     return config
 
 
-# Runs the full local analysis pipeline, persisting incrementally for resumability.
+# Runs the full local analysis pipeline. Returns 0 when done, 1 when the folder is missing and 2 when cancelled.
+#
+# Resume contract: every per-photo stage stores its results first and then marks the photo done for that stage in
+# the `jobs` table, per photo or per GPU batch. A run that is killed, crashes or is cancelled therefore loses at most
+# the photo or batch in flight, and the next run skips every photo a stage finished: nothing finished is decoded,
+# measured, scored, embedded or tagged again. A photo ingested anew (its derived files were missing) has its stage
+# states cleared, so each stage runs on it again. Grouping is reused while its inputs are unchanged. The steps over
+# the whole collection that only read stored values (duplicate marks, gate report, ranking, reports and the mirror)
+# are recomputed on every run. Pause and cancel are honored between photos and between batches.
 def cmd_analyze(args: argparse.Namespace) -> int:
     config = _prepare_config(args)
     folder = resolve_path(args.input)
@@ -95,22 +104,16 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     conn = db.connect(config)
     include_subfolders = not args.no_subfolders
 
-    # Resumability: the photo ID is the content hash, so a fully-ranked photo with the same
-    # bytes is reused as stored (not decoded again), also when the file was moved or renamed.
-    finished = {
-        p.id: p for p in db.load_photos(conn) if db.get_stage(conn, p.id, "rank") == "done"
-    }
-    photos = index_photos(folder, config, include_subfolders, known=finished)
-    fresh: list[Photo] = []
-    resumed = 0
-    for photo in photos:
-        if photo.carried_over:
-            resumed += 1
-        else:
-            fresh.append(photo)
-        db.upsert_photo(conn, photo)  # also records the new path of a moved file
+    # The photo ID is the content hash, so an ingested photo with the same bytes is reused as stored (not decoded
+    # again), also when the file was moved or renamed. "rank" covers libraries analyzed before ingest was recorded.
+    ingested = db.done_ids(conn, "ingest") | db.done_ids(conn, "rank")
+    known = {p.id: p for p in db.load_photos(conn) if p.id in ingested}
+    photos = index_photos(folder, config, include_subfolders, known=known, checkpoint=_ingest_checkpoint(conn, config))
+    if should_stop(config):
+        return _cancel(conn, config)
+    resumed = sum(1 for photo in photos if photo.carried_over)
     if resumed:
-        events.log(f"Resuming: {resumed} unchanged photos skipped.", "info")
+        events.log(f"Resuming: {resumed} unchanged photos are not decoded again.", "info")
 
     duplicates = mark_duplicates(photos, int(config["filters"].get("phash_distance", 5)))
     events.progress("duplicates", len(photos), len(photos), f"Found {duplicates} duplicates")
@@ -119,48 +122,58 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     if should_stop(config):
         return _cancel(conn, config)
 
-    _stage(conn, fresh, config, "quality", score_quality)
-    if should_stop(config):
+    if _stage(conn, _pending(conn, photos, "quality"), config, "quality", score_quality):
         return _cancel(conn, config)
 
-    _face_stage(conn, fresh, config)
-    if should_stop(config):
+    if _face_stage(conn, _pending(conn, photos, "faces"), config):
         return _cancel(conn, config)
 
-    # Sanity gate: classify fresh photos (reject only objective failures; soft-flag the rest)
-    # so the local pipeline stays permissive and candidates are marked.
-    # Resumed photos keep their previously stored gate decision.
-    local_gate.run_local_gate(fresh, config)
-    for photo in fresh:
+    # Sanity gate: reject only objective failures and soft-flag the rest. Rejected photos are gated too, so their
+    # gate status is recorded. A photo gated by an earlier run keeps its stored decision.
+    gated = _pending(conn, photos, "local_gate", include_rejected=True)
+    local_gate.run_local_gate(gated, config)
+    for photo in gated:
         db.upsert_photo(conn, photo)
-        db.set_stage(conn, photo.id, "local_gate", "done")
+    db.set_stages(conn, [photo.id for photo in gated], "local_gate", "done")
     write_gate_report(photos, config)
     if should_stop(config):
         return _cancel(conn, config)
 
     # Q-ReAlign quality and aesthetic values (0 to 1, GPU batches) follow the preset's aesthetic switch. They are
-    # stored only; nothing ranks with them until the prescore arrives. A missing model leaves them unknown.
+    # stored only; nothing ranks with them until the prescore arrives. A missing model leaves them unknown and the
+    # photos pending, so a later run with the model scores them.
     if config.get("aesthetic", {}).get("enabled", True):
-        score_qrealign(fresh, config, conn)
-        for photo in fresh:
-            db.set_stage(conn, photo.id, "qrealign", "done")
+        pending = _pending(conn, photos, "qrealign")
+        if pending:
+            score_qrealign(pending, config, conn, checkpoint=_batch_checkpoint(conn, config, "qrealign"))
     if should_stop(config):
         return _cancel(conn, config)
 
     if config.get("embeddings", {}).get("enabled", True):
-        embed_siglip2(fresh, config, conn)
-        tag_content(fresh, config, conn)
-        clusters = assign_clusters(photos, config, conn)
-        events.progress("embeddings", len(photos), len(photos), f"Grouped into {clusters} clusters")
-        for photo in photos:
-            db.set_stage(conn, photo.id, "embeddings", "done")
+        pending = _pending(conn, photos, "embeddings")
+        if pending:
+            embed_siglip2(pending, config, conn, checkpoint=_batch_checkpoint(conn, config, "embeddings"))
+        if should_stop(config):
+            return _cancel(conn, config)
+        # Only photos whose embedding stage finished are tagged, so a photo is never marked tagged before its vector
+        # could exist.
+        embedded = db.done_ids(conn, "embeddings")
+        pending = [photo for photo in _pending(conn, photos, "content_tags") if photo.id in embedded]
+        if pending:
+            tag_content(pending, config, conn, checkpoint=_batch_checkpoint(conn, config, "content_tags"))
+        if should_stop(config):
+            return _cancel(conn, config)
+        _group(conn, photos, config)
     if should_stop(config):
         return _cancel(conn, config)
 
     if config.get("aesthetic", {}).get("enabled", True):
-        score_aesthetic(photos, config, conn)
-        for photo in photos:
-            db.set_stage(conn, photo.id, "aesthetic", "done")
+        pending = _pending(conn, photos, "aesthetic")
+        if pending:
+            score_aesthetic(pending, config, conn)
+            for photo in pending:
+                db.upsert_photo(conn, photo)
+            db.set_stages(conn, [photo.id for photo in pending], "aesthetic", "done")
     if should_stop(config):
         return _cancel(conn, config)
 
@@ -182,8 +195,8 @@ def cmd_analyze(args: argparse.Namespace) -> int:
     events.progress("final_set", len(final_set), len(final_set), "Built final set")
 
     for photo in photos:
-        db.set_stage(conn, photo.id, "rank", "done")
         db.upsert_photo(conn, photo)
+    db.set_stages(conn, [photo.id for photo in photos], "rank", "done")
     db.write_mirror(conn, config)
     generate_reports(photos, config)
     export_all(photos, config)
@@ -203,6 +216,8 @@ def cmd_index(args: argparse.Namespace) -> int:
     known = {p.id: p for p in db.load_photos(conn)}
     photos = index_photos(folder, config, not args.no_subfolders, known=known)
     for photo in photos:
+        if not photo.carried_over:
+            db.clear_stages(conn, photo.id)  # decoded anew: no earlier stage result describes this record
         db.upsert_photo(conn, photo)
         db.set_stage(conn, photo.id, "ingest", "done")
     db.write_mirror(conn, config)
@@ -490,8 +505,40 @@ def cmd_export_openai_results(args: argparse.Namespace) -> int:
     return 0
 
 
-# Applies a scoring function across fresh photos, persisting and emitting progress.
-def _stage(conn, photos: list[Photo], config: dict, step: str, func) -> None:  # type: ignore[no-untyped-def]
+# Returns the photos whose `stage` is not recorded as done, in their current order. Rejected photos are left out
+# unless `include_rejected`, since the scoring stages skip them and must not load a model for them.
+def _pending(conn, photos: list[Photo], stage: str, include_rejected: bool = False) -> list[Photo]:  # type: ignore[no-untyped-def]
+    done = db.done_ids(conn, stage)
+    return [p for p in photos if p.id not in done and (include_rejected or p.status != "rejected")]
+
+
+# Returns the ingest checkpoint: it stores each new record at once and marks it ingested, then says whether the run
+# must stop. A record that was not reused from storage describes freshly decoded content, so its earlier stage
+# states are cleared first and every stage runs on it again.
+def _ingest_checkpoint(conn, config: dict) -> Callable[[Photo], bool]:  # type: ignore[no-untyped-def]
+    def record(photo: Photo) -> bool:
+        if not photo.carried_over:
+            db.clear_stages(conn, photo.id)
+        db.upsert_photo(conn, photo)  # also records the new path of a moved file
+        db.set_stage(conn, photo.id, "ingest", "done")
+        return should_stop(config)
+
+    return record
+
+
+# Returns the checkpoint of a batch stage: it marks the batch done for `stage` (its results are already stored),
+# then says whether the run must stop, blocking while the run is paused.
+def _batch_checkpoint(conn, config: dict, stage: str) -> Callable[[Sequence[Photo]], bool]:  # type: ignore[no-untyped-def]
+    def record(batch: Sequence[Photo]) -> bool:
+        db.set_stages(conn, [photo.id for photo in batch], stage, "done")
+        return should_stop(config)
+
+    return record
+
+
+# Applies a per-photo scoring function to `photos`, storing each photo and then marking it done for `step`.
+# Returns True when the run must stop (cancel); a pause blocks between photos until it is lifted.
+def _stage(conn, photos: list[Photo], config: dict, step: str, func) -> bool:  # type: ignore[no-untyped-def]
     total = len(photos)
     for i, photo in enumerate(photos, start=1):
         if photo.status != "rejected":
@@ -500,11 +547,14 @@ def _stage(conn, photos: list[Photo], config: dict, step: str, func) -> None:  #
         db.set_stage(conn, photo.id, step, "done")
         if i % 25 == 0 or i == total:
             events.progress(step, i, total, f"{step} {i}/{total}")
+        if should_stop(config):
+            return True
+    return False
 
 
-# Runs face scoring. A missing face is only a soft flag (added later by the gate), never a
-# rejection.
-def _face_stage(conn, photos: list[Photo], config: dict) -> None:  # type: ignore[no-untyped-def]
+# Runs face scoring with the same storage and stop rules as _stage. A missing face is only a soft flag (added later
+# by the gate), never a rejection.
+def _face_stage(conn, photos: list[Photo], config: dict) -> bool:  # type: ignore[no-untyped-def]
     total = len(photos)
     for i, photo in enumerate(photos, start=1):
         if photo.status != "rejected":
@@ -513,6 +563,28 @@ def _face_stage(conn, photos: list[Photo], config: dict) -> None:  # type: ignor
         db.set_stage(conn, photo.id, "faces", "done")
         if i % 10 == 0 or i == total:
             events.progress("faces", i, total, f"faces {i}/{total}")
+        if should_stop(config):
+            return True
+    return False
+
+
+# Groups the photos. The groups stored for exactly these inputs (see grouping_key) are reused; otherwise they are
+# computed, every photo is stored with its group, and only then is the result recorded, so a recorded result always
+# matches the stored photos.
+def _group(conn, photos: list[Photo], config: dict) -> None:  # type: ignore[no-untyped-def]
+    key = grouping_key(photos, config, conn)
+    stored = db.load_stage_run(conn, "grouping", key)
+    if stored is not None:
+        for photo in photos:
+            photo.cluster_id = int(stored.get(photo.id, -1))
+        message = f"Reused {len(set(stored.values()))} unchanged clusters"
+    else:
+        clusters = assign_clusters(photos, config, conn)
+        for photo in photos:
+            db.upsert_photo(conn, photo)
+        db.save_stage_run(conn, "grouping", key, {p.id: p.cluster_id for p in photos if p.cluster_id >= 0})
+        message = f"Grouped into {clusters} clusters"
+    events.progress("embeddings", len(photos), len(photos), message)
 
 
 # Persists partial results and returns the cancellation exit code.

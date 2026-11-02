@@ -274,10 +274,39 @@ screen does not use it yet.
   become spaces. Tests feed `<script>`, an `<img onerror>` tag, quotes and formula text and parse the page to prove that
   no such tag or attribute exists.
 
-Not done: the stages are not called from `engine/main.py`, the API or the Angular review screen; that belongs to P04.7
-(persisted progress) and P04.8 (removing the old paths), and the old export in `engine/src/export_results.py` stays
-until then. The report and export folders, `output.base_dir` and `output.reports_dir`, are the ignored generated
-locations, but no code chooses them yet.
+Not done: the stages are not called from `engine/main.py`, the API or the Angular review screen. That moved from P04.7
+to P04.8 (removing the old paths), so the output the review screen reads changes once
+([ADR 0015](decisions/0015-per-stage-resume.md)); the old export in `engine/src/export_results.py` stays until then.
+The report and export folders, `output.base_dir` and `output.reports_dir`, are the ignored generated locations, but no
+code chooses them yet.
+
+## Resume
+
+A run that is killed, crashes or is cancelled resumes where it stopped, and repeats no finished work on unchanged
+files. Implemented in P04.7 (`cmd_analyze` in `engine/main.py`, `engine/src/db.py`,
+[ADR 0015](decisions/0015-per-stage-resume.md)):
+
+- **Per photo, per stage.** The `jobs` table holds one state for each photo and stage: `ingest`, `quality`, `faces`,
+  `local_gate`, `qrealign`, `embeddings`, `content_tags`, `aesthetic` and `rank`. A stage stores its results, then marks
+  the photo `done`: after each photo for ingest, quality, faces and the gate, after each GPU batch for Q-ReAlign and
+  SigLIP 2, and once for the content tags (only photos whose SigLIP 2 stage finished are tagged). The next run gives each stage only the photos it has not finished, so at most
+  the photo or batch in flight is redone.
+- **Ingest.** Each record is stored as it is made. A file whose content hash is recorded as ingested, and whose working
+  copy and thumbnail exist, is not decoded again. When the derived files are gone the photo is decoded again and its
+  stage states are cleared, so every stage runs on it again.
+- **Missing models.** A stage whose model cannot load records nothing, so the next run with the model does the work.
+  A failed batch or an unreadable working copy is recorded as done with an unknown value.
+- **Grouping** is stored in `stage_runs` under a hash of its settings and of each member's ID, vector and capture time,
+  and reused while that hash is unchanged. Duplicate marks, the gate report, the legacy ranking, the reports and the
+  mirror only read stored values and are recomputed on every run.
+- **Exact values.** A stored photo loads back with its hashes, EXIF subset, exact scores, raw gate measures and
+  unrounded people penalty (`photo_measures`), so a resumed run gates, groups and ranks it as an uninterrupted run
+  would. Updating a photo row keeps its Q-ReAlign values, embedding and content tag.
+- **Pause and cancel** from the API are read after each photo and each batch: a pause holds the run there, and a cancel
+  ends it with exit code 2 and every finished photo recorded.
+
+Covered by tests with fake models and simulated kills on synthetic images (P04.7, `engine/tests/test_resume.py`;
+results in [Testing](testing.md#current-checks)).
 
 ## Prompt rules
 

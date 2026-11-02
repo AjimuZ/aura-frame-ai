@@ -32,11 +32,21 @@ _MIN_NORM = 1e-8
 
 @dataclass(frozen=True)
 class StageReport:
-    """What a stage did: values stored, photos left unknown, and the error that stopped the model, if any."""
+    """What a stage did: values stored, photos left unknown, and the error that stopped the model, if any.
+
+    `stopped` is True when a checkpoint asked the stage to stop before its last batch; the counts then cover only
+    the batches that ran.
+    """
 
     stored: int
     unknown: int
     error: ModelUnavailable | None = None
+    stopped: bool = False
+
+
+# Called after each batch is stored, with the photos of that batch; returning True stops the stage before the next
+# batch. The pipeline uses it to record per-photo progress and to honor pause and cancel inside a long stage.
+Checkpoint = Callable[[Sequence[Photo]], bool]
 
 
 # Returns the batch size of a model from config (models.<model>.batch_size), clamped to 1..MAX_BATCH_SIZE.
@@ -108,13 +118,15 @@ def _score_task(scorer: BatchScorer, images: list[Image.Image], task: str) -> li
 # Scores the non-rejected photos with Q-ReAlign, in batches, for quality and aesthetics, and stores values between
 # 0 and 1 in `neural_scores`. `scorer` is loaded from the local model directory when not given. When the model
 # cannot be loaded, every photo is stored as unknown, a structured error event is emitted and the report carries
-# the error; no value is invented. Rejected photos are skipped.
+# the error; no value is invented, and `checkpoint` is never called. Rejected photos are skipped. `checkpoint`, when
+# given, runs after each stored batch (see Checkpoint).
 def score_qrealign(
     photos: list[Photo],
     config: dict[str, Any],
     conn: Any,
     scorer: BatchScorer | None = None,
     loader: Callable[[dict[str, Any]], BatchScorer] = load_qrealign,
+    checkpoint: Checkpoint | None = None,
 ) -> StageReport:
     eligible = [photo for photo in photos if photo.status != "rejected"]
     try:
@@ -141,6 +153,8 @@ def score_qrealign(
                 stored += 1
         done += len(chunk)
         events.progress("qrealign", done, len(eligible), f"quality and aesthetics {done}/{len(eligible)}")
+        if checkpoint is not None and checkpoint(chunk) and done < len(eligible):
+            return StageReport(stored, unknown, stopped=True)
     return StageReport(stored, unknown)
 
 
@@ -156,14 +170,15 @@ def _normalized(vector: np.ndarray) -> np.ndarray | None:
 # Embeds the non-rejected photos with SigLIP 2, in batches, and stores one L2-normalized float32 vector per photo
 # in `embeddings`. `embedder` is loaded from the local model directory when not given. A photo whose vector cannot
 # be obtained gets no embedding row, so grouping skips it. When the model cannot be loaded, a structured error
-# event is emitted and the report carries the error; no substitute descriptor is computed. Rejected photos are
-# skipped.
+# event is emitted and the report carries the error; no substitute descriptor is computed, and `checkpoint` is never
+# called. Rejected photos are skipped. `checkpoint`, when given, runs after each stored batch (see Checkpoint).
 def embed_siglip2(
     photos: list[Photo],
     config: dict[str, Any],
     conn: Any,
     embedder: BatchEmbedder | None = None,
     loader: Callable[[dict[str, Any]], BatchEmbedder] = load_siglip2,
+    checkpoint: Checkpoint | None = None,
 ) -> StageReport:
     eligible = [photo for photo in photos if photo.status != "rejected"]
     try:
@@ -183,6 +198,8 @@ def embed_siglip2(
             stored += 1
         done += len(chunk)
         events.progress("siglip2", done, len(eligible), f"embeddings {done}/{len(eligible)}")
+        if checkpoint is not None and checkpoint(chunk) and done < len(eligible):
+            return StageReport(stored, done - stored, stopped=True)
     return StageReport(stored, len(eligible) - stored)
 
 

@@ -245,7 +245,7 @@ memory free at peak; no Ollama reference remains in the code; provider contract 
 - [x] P04.4 Order-independent grouping, content tags and people signals with no identity.
 - [x] P04.5 Shortlist, Swiss tournament in both orders, Bradley-Terry rank, verdict cache.
 - [x] P04.6 Critique, diversity-aware selection, tiers, reports and exports.
-- [ ] P04.7 Persist per-stage progress so resume really works.
+- [x] P04.7 Persist per-stage progress so resume really works.
 - [ ] P04.8 Remove the old gate, ranker, slots, OpenCLIP and LAION paths.
 
 Progress 2026-11-02 (P04.1): `engine/src/ingest.py` hashes each original (read-only), decodes it once, applies the EXIF
@@ -299,6 +299,16 @@ vectors and small files); `npm run lint` printed no findings. Not observed: a re
 `analyze` run (the stages are not called from `engine/main.py`, the API or the review screen; that is P04.7 and P04.8),
 the selection settings on a real collection (P04.MEASURE), the Angular and Electron builds and the node tests (no node
 file changed).
+
+Progress 2026-11-02 (P04.7): `cmd_analyze` in `engine/main.py` now stores each photo's state per stage in the `jobs`
+table as it goes: per photo for ingest, quality, faces and the gate, per GPU batch for Q-ReAlign and SigLIP 2, and once
+for content tags. Each stage gets only the photos it has not finished, grouping is reused while a hash of its inputs is
+unchanged (`stage_runs`), pause and cancel are read between photos and batches, and stored photos load back with their
+exact values ([Pipeline](pipeline.md#resume), [ADR 0015](decisions/0015-per-stage-resume.md)). This addresses
+assessment item B1. Wiring the curation stages of P04.5 and P04.6 into `analyze` moved to P04.8, so the output the
+review screen reads changes once. Observed: `bash scripts/check.sh --engine` passed 473 of 473 engine tests,
+including the new `engine/tests/test_resume.py`. Not observed: a kill of the process by a signal (the kills are
+simulated by an exception), a real model, the Angular and Electron builds and the node tests (no node file changed).
 
 Exit: the regression corpus in [Testing](testing.md#regression-corpus-p04) passes; a run on 2,000
 synthetic images completes on the reference PC with recorded time and peak memory; the benchmark

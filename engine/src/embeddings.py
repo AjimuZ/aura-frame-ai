@@ -7,6 +7,7 @@ the heavy ML stack. These embeddings describe the entire frame for diversity onl
 are NOT face or identity embeddings (see project plan P1.10 / P2).
 """
 
+import hashlib
 from typing import Any
 
 import numpy as np
@@ -109,6 +110,26 @@ def _capture_seconds(photo: Photo) -> float | None:
             except ValueError:
                 continue
     return None
+
+
+# Returns a SHA-256 key of everything assign_clusters reads: both settings and, for each non-rejected photo with an
+# embedding, in ID order, its ID, the bytes of its vector and its capture time. Equal keys mean assign_clusters would
+# return the same groups, so a resumed run can reuse the stored ones; any added, removed or re-embedded photo, or a
+# changed setting, changes the key.
+def grouping_key(photos: list[Photo], config: dict[str, Any], conn: Any) -> str:
+    cfg = config.get("embeddings", {})
+    settings = (
+        float(cfg.get("cluster_distance", _DEFAULT_CLUSTER_DISTANCE)),
+        float(cfg.get("cluster_seconds", _DEFAULT_CLUSTER_SECONDS)),
+    )
+    digest = hashlib.sha256(repr(settings).encode())
+    vectors = db.load_embeddings(conn)
+    for photo in sorted((p for p in photos if p.status != "rejected" and p.id in vectors), key=lambda p: p.id):
+        vector = np.ascontiguousarray(vectors[photo.id], dtype=np.float32)
+        # The size goes first, so the boundary between two photos' bytes is never ambiguous.
+        digest.update(repr((photo.id, vector.size, _capture_seconds(photo))).encode())
+        digest.update(vector.tobytes())
+    return digest.hexdigest()
 
 
 # Groups non-rejected photos that have an embedding; sets cluster_id on each and returns the group

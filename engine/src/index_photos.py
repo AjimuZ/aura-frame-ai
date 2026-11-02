@@ -4,6 +4,7 @@ Ingestion (hashing, EXIF orientation, working copies, thumbnails) lives in src.i
 Originals are opened read-only and never modified.
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -21,13 +22,16 @@ from .utils import Photo, discover_images, resolve_path
 # every later byte-identical copy becomes a separate record rejected as "duplicate_exact" (see
 # ingest.duplicate_record), so the rejection is recorded and counted rather than silent. `known`
 # maps IDs of already analyzed photos to their stored records; a file whose content is in it is
-# not decoded again and keeps its results even when it was moved or renamed.
+# not decoded again and keeps its results even when it was moved or renamed. `checkpoint`, when
+# given, is called with each record as soon as it is made, so the caller can persist it at once;
+# a True answer stops indexing there and the records made so far are returned.
 def index_photos(
     input_folder: Path,
     config: dict[str, Any],
     include_subfolders: bool,
     generate_thumbnails: bool = True,
     known: dict[str, Photo] | None = None,
+    checkpoint: Callable[[Photo], bool] | None = None,
 ) -> list[Photo]:
     extensions = config["input"]["supported_extensions"]
     files = discover_images(input_folder, extensions, include_subfolders)
@@ -56,6 +60,9 @@ def index_photos(
             photos.append(photo)
         if i % 25 == 0 or i == total:
             events.progress("indexing", i, total, f"Indexed {i}/{total}")
+        if checkpoint is not None and checkpoint(photos[-1]) and i < total:
+            events.log(f"Indexing stopped after {i}/{total} images.", "info")
+            return photos
 
     if collapsed:
         events.log(f"{collapsed} byte-identical copies rejected as exact duplicates.", "info")

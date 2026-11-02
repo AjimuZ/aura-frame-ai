@@ -14,7 +14,7 @@ from . import db
 from . import progress_events as events
 from .gpu_models import TextEmbedder, load_siglip2
 from .model_loader import ModelUnavailable
-from .neural_stages import StageReport, _normalized, _report_unavailable
+from .neural_stages import Checkpoint, StageReport, _normalized, _report_unavailable
 from .utils import Photo
 
 CONTENT_TAGS = (
@@ -46,12 +46,15 @@ def _label_matrix(encoder: Any) -> np.ndarray | None:
 # Tags the non-rejected photos that have a stored image embedding with the closest label of CONTENT_TAGS and
 # stores it in `content_tags`, replacing earlier tags. `encoder` is loaded from the local model directory when not
 # given. Returns a report; with no model or text tower every photo counts as unknown and nothing is stored.
+# `checkpoint`, when given, is called once with the eligible photos after their tags are stored, and only when the
+# label vectors were usable, so a missing model or text tower leaves the photos to be tagged by a later run.
 def tag_content(
     photos: list[Photo],
     config: dict[str, Any],
     conn: Any,
     encoder: TextEmbedder | None = None,
     loader: Callable[[dict[str, Any]], TextEmbedder] = load_siglip2,
+    checkpoint: Checkpoint | None = None,
 ) -> StageReport:
     eligible = [photo for photo in photos if photo.status != "rejected"]
     try:
@@ -74,4 +77,6 @@ def tag_content(
         db.save_content_tag(conn, photo.id, CONTENT_TAGS[best], float(similarities[best]), encoder.name)
         stored += 1
     events.progress("content_tags", len(eligible), len(eligible), f"content tags {stored}/{len(eligible)}")
+    if checkpoint is not None:
+        checkpoint(eligible)
     return StageReport(stored, len(eligible) - stored)
