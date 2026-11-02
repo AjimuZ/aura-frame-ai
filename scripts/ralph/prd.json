@@ -952,7 +952,7 @@
       ],
       "priority": 32,
       "passes": false,
-      "notes": "BLOCKED: The pinned Face Landmarker entry requires the real upstream commit or URL, size in bytes and SHA-256 of face_landmarker.task. They are absent from the repository and the task notes, and I cannot obtain or verify them offline. The owner needs to supply those values in the task notes, or authorize a one-time lookup or download. Alternatively, the owner can split the model pin into its own task. After that, the rest of the task (the tasks-API rewrite, people_penalty, missing-model guidance) is feasible in one session.",
+      "notes": "UNBLOCKED by the owner's supervising session on 2026-11-02: the owner authorized a one-time download, used only to compute this pin, of the small (3.6 MB) face_landmarker.task model bundle. The file was deleted right after. GCS has no numbered release path, only a \"latest\" alias, so the pin uses the object's immutable generation id as the revision, which always serves the exact same bytes regardless of what \"latest\" points to later.\n- weights: url=https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task?generation=1683136941468629 revision(generation)=1683136941468629 file=face_landmarker.task sha256=64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff size_bytes=3758596\nSource: object metadata read (no model download needed for this part) at https://www.googleapis.com/storage/v1/b/mediapipe-models/o/face_landmarker%2Fface_landmarker%2Ffloat16%2Flatest%2Fface_landmarker.task confirmed size=3758596, matching the one-time download used to compute the SHA-256 above.",
       "dependsOn": [
         "P04.3"
       ],
