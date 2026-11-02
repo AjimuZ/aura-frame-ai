@@ -35,13 +35,19 @@ export type AnalysisStep =
   | 'done'
   | 'error';
 
-// Result of probing the local Ollama runtime and the configured models.
-export interface OllamaStatus {
-  runtimeReachable: boolean;
-  primaryModel: string;
-  primaryAvailable: boolean;
-  fallbackModel: string | null;
-  fallbackAvailable: boolean;
+// One provider as the engine API reports it. The text is fixed by the API and holds no path or address.
+export interface ProviderStatus {
+  id: string;
+  label: string;
+  cloud: boolean;
+  state: 'available' | 'not_configured' | 'disabled';
+  detail: string;
+}
+
+// Result of the one provider check. `reachable` is false, with an empty list, when the API could not be asked.
+export interface ProvidersStatus {
+  reachable: boolean;
+  providers: ProviderStatus[];
   message: string;
 }
 

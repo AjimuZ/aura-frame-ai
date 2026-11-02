@@ -3,21 +3,8 @@
 # Paths are relative to the repository root and may be overridden via the desktop UI
 # or with the --data-root CLI flag (which redirects working/thumbs/db/output).
 
-model:
-  provider: "ollama"
-  # Configurable local model name. Default primary, with a lighter fallback used when
-  # the primary is missing or fails. These are local Ollama tags, never cloud models.
-  name: "gemma4:12b"
-  fallback_name: "gemma3:4b"
-  ollama_url: "http://localhost:11434"
-  use_vision: true
-  request_timeout_seconds: 120
-  max_retries: 2
-  # Max tokens for the JSON verdict. The schema is small; this only caps runaway output.
-  num_predict: 768
-
 # Local vision provider (llama-server in the `vision` service). Read by
-# engine/src/providers; not yet wired into the pipeline. Every limit is clamped to a hard bound
+# engine/src/providers; the pipeline only probes it for now. Every limit is clamped to a hard bound
 # (timeout 0.25-600 s, retries 0-5, calls 1-20000, failures in a row 1-20, tokens 64-2048).
 ai:
   local:

@@ -148,7 +148,7 @@ under `ng serve` stays too.
 | `exportFinalSet` | `POST /api/libraries/{id}/exports` |
 | `openOutputFolder`, `openReportsFolder` | `shell.openPath` on the host folder, as today |
 | `getSettings`, `setSettings` | Local settings file, as today |
-| `checkOllama`, `getOpenAiStatus` | Replaced by one provider check: `GET /api/providers` |
+| `checkProviders` (P03.5; replaces the earlier local-runtime check), `getOpenAiStatus` | One provider check: `GET /api/providers` |
 | `getOpenAiKeyStatus`, `setOpenAiKey`, `clearOpenAiKey` | Kept and renamed for the Codex API key, in the OS key store |
 | `estimateOpenAiCost`, `startOpenAiQuality`, `exportOpenAiResults` | Removed: the provider setting of a normal run replaces them |
 | `clearGeneratedData`, `getReviewSession`, `saveReviewSession` | `/api/libraries/{id}/data`, `/api/libraries/{id}/review` |
@@ -217,9 +217,16 @@ fake server and a temporary folder only):
   sends an `error` event for that library, so the window leaves "Starting..." without a refresh. The refusal does not
   change the stored status of the run that caused it, and the call still rejects with the same message.
 
-Not done yet: `checkOllama` and `getOpenAiStatus` return their fixed "unable to probe" answers
-instead of `GET /api/providers` (P03.5). `estimateOpenAiCost`, `startOpenAiQuality` and `exportOpenAiResults` keep
-their channels but do nothing (P05.5).
+Provider check (P03.5, tested with a fake HTTP server only): `checkProviders` (channel `providers:check`) asks
+`GET /api/providers` through `ApiClient`, so the gate above applies. It never rejects: it answers
+`{ reachable, providers, message }`, with `reachable: false`, an empty list and a fixed message while the services are
+down, refused, or send an unusable answer. Settings shows each provider's label, state and detail. The earlier local
+runtime check, its URL and model-name settings, its engine command and its legacy engine config keys are gone; the
+engine's model stage only probes the `ai.local` provider and keeps the local ranking (pairwise judging arrives with
+P04). The API still reports provider configuration only, and does not contact them.
+
+Not done yet: `getOpenAiStatus` still returns its fixed "unable to probe" answer (P05.5). `estimateOpenAiCost`,
+`startOpenAiQuality` and `exportOpenAiResults` keep their channels but do nothing (P05.5).
 
 ## Library data layout
 
@@ -317,7 +324,7 @@ Angular UI -> Electron renderer -> typed preload bridge -> Electron main process
   -> docker compose up with the chosen folder, then HTTP with the session token -> gateway -> api
   -> Python engine as a child process of api (JSONL to SSE, one SQLite per library)
   -> OpenCV and MediaPipe measurements -> OpenCLIP and LAION aesthetic score on CPU
-  -> Ollama HTTP client for local AI review
+  -> model stage: a health probe of the local llama-server provider (P03.5); no photo is sent to a model yet
   -> optional OpenAI API flow in engine/src/cloud/, which the window can no longer start
 ```
 
@@ -335,7 +342,7 @@ Electron main's side of this path has been tested with a fake server and a fake 
 | `apps/desktop/electron/main.ts`, `filesystem.ipc.ts`, `settings.ipc.ts`, `preload.ts` | Stay, with small changes | P02 |
 | `apps/desktop/angular/` | Stays. New design in P06 | P06 |
 | `start.py` | `start.sh` | Done in P02.6: `start.py` is absent |
-| `engine/src/vlm/ollama_client.py`, `gemma_judge.py` | `engine/src/providers/local_llama.py` | P03 |
+| The earlier local runtime client in `engine/src/vlm/` | Done in P03.5: removed. `engine/src/providers/llama_server.py` (P03.1) is the local provider, and `vlm/runner.py` only probes it. `gemma_judge.py` stays as a facade until P04 | P03 |
 | `engine/src/quality_score.py`, `aesthetic.py` | Q-ReAlign scorer | P04 |
 | `engine/src/embeddings.py` | SigLIP 2 embeddings with grouping | P04 |
 | `engine/src/face_quality.py` | MediaPipe Face Landmarker signals | P04 |

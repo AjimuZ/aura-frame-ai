@@ -6,7 +6,6 @@ Subcommands:
                        embeddings -> aesthetic -> prerank -> vlm -> rank). Resumable.
   gemma-review         Run local AI review over the pre-ranked candidates.
   export-final         Export the selected final set to ordered folders.
-  ollama-check         Probe the local Ollama runtime and configured models.
   clear-data           Delete all generated data (DB, thumbnails, working, reports, output).
   local-minimal-gate   Run the Local Minimal Gate only (no cloud); writes the gate report.
   openai-estimate      Estimate OpenAI Quality Mode cost (no API calls).
@@ -59,7 +58,7 @@ from src.generate_report import (  # noqa: E402
 from src.index_photos import index_photos  # noqa: E402
 from src.index_photos import mark_duplicates  # noqa: E402
 from src.quality_score import score_quality  # noqa: E402
-from src.vlm import VlmRunner, judge_candidates  # noqa: E402
+from src.vlm import judge_candidates  # noqa: E402
 from src.utils import (  # noqa: E402
     Photo,
     apply_data_root,
@@ -237,15 +236,6 @@ def cmd_export_final(args: argparse.Namespace) -> int:
     export_final_set(selected, config)
     conn.close()
     events.done(f"Exported {len(selected)} photos to the final set.")
-    return 0
-
-
-# Probes the local Ollama runtime and configured models, emitting a structured report.
-def cmd_ollama_check(args: argparse.Namespace) -> int:
-    config = _prepare_config(args)
-    report = VlmRunner(config).check()
-    events.emit({"type": "ollama_check", **report})
-    events.done(report["message"])
     return 0
 
 
@@ -574,10 +564,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_export.add_argument("--ids", default="")
     _common(p_export)
     p_export.set_defaults(func=cmd_export_final)
-
-    p_check = sub.add_parser("ollama-check", help="Probe local Ollama runtime and models")
-    _common(p_check)
-    p_check.set_defaults(func=cmd_ollama_check)
 
     p_clear = sub.add_parser("clear-data", help="Delete all generated data")
     _common(p_clear)

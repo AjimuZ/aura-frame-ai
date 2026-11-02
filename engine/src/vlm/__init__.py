@@ -1,11 +1,10 @@
-"""Local vision-language model abstraction for AuraFrame AI.
+"""Model stage of a run for AuraFrame AI.
 
-Provides a provider-agnostic interface (base.VlmClient), a strict JSON schema validator
-(schema), a local Ollama implementation (ollama_client), and a runner that coordinates a
-primary + fallback model with health/model-presence checks (runner).
+The runner checks the local vision provider (engine/src/providers) before the candidate stage;
+schema holds the legacy single-photo review prompt and parser that remain until package P04
+replaces them with pairwise comparisons.
 """
 
-from .base import VlmClient, VlmHealth
 from .runner import VlmRunner, judge_candidates
 
-__all__ = ["VlmClient", "VlmHealth", "VlmRunner", "judge_candidates"]
+__all__ = ["VlmRunner", "judge_candidates"]

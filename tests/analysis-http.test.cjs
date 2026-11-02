@@ -39,6 +39,11 @@ const TOKEN = 'c0ffee'.repeat(10) + 'abcd';
 const PHOTO_ID = 'IMG_0123456789';
 const SESSION = { slotAssignments: { main_photo: PHOTO_ID }, locks: { main_photo: true }, shortlist: [PHOTO_ID] };
 
+const PROVIDERS = [
+  { id: 'local-scoring', label: 'Local scoring', cloud: false, state: 'available', detail: 'Runs inside the api container.' },
+  { id: 'llama-server', label: 'Local vision model', cloud: false, state: 'not_configured', detail: 'Not configured.' },
+];
+
 function frame(event) {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
@@ -60,6 +65,7 @@ async function startFakeApi(t) {
     'POST /runs/current/resume': (res) => send(res, 200, api.status),
     'POST /runs/current/cancel': (res) => send(res, 200, { ...api.status, message: 'Cancelling the analysis.' }),
     'GET /photos': (res) => send(res, 200, [{ id: PHOTO_ID, fileName: 'synthetic.jpg' }]),
+    'GET /api/providers': (res) => send(res, 200, { providers: PROVIDERS }),
     'GET /review': (res) => send(res, 200, SESSION),
     'PUT /review': (res, body) => send(res, 200, JSON.parse(body)),
     'DELETE /data': (res) => send(res, 200, { removed: 1 }),
@@ -740,9 +746,39 @@ test('a library unknown to the registry is refused before any request', async (t
   assert.deepEqual(api.requests, []);
 });
 
+test('the provider check asks GET /api/providers once the services are up, and sends nothing before', async (t) => {
+  const { api, invoke, config, replies } = await setup(t);
+  const closed = await invoke('providers:check');
+  assert.deepEqual(closed, { reachable: false, providers: [], message: 'The analysis service is not reachable.' });
+  assert.deepEqual(api.requests, []);
+
+  api.status = { ...api.status, step: 'done', running: false, message: 'Finished' };
+  await invoke('analysis:start', LIBRARY_ID, config);
+  await waitFor(() => !isAnalysisRunning(), 'the run to end');
+  const open = await invoke('providers:check');
+  assert.deepEqual(open, { reachable: true, providers: PROVIDERS, message: 'Providers checked.' });
+  const request = api.requests.find(({ url }) => url === '/api/providers');
+  assert.equal(request.method, 'GET');
+  assert.equal(request.headers.authorization, `Bearer ${TOKEN}`);
+  assertNoToken({ replies, events: [] });
+});
+
+test('the provider check never rejects: an unusable or refused answer is reported as unreachable', async (t) => {
+  const { api, invoke } = await setup(t, { inheritedToken: TOKEN });
+  api.routes.set('GET /api/providers', (res) => api.send(res, 200, { providers: [{ id: 'x', state: 'weird' }] }));
+  assert.deepEqual(await invoke('providers:check'), {
+    reachable: false,
+    providers: [],
+    message: 'The analysis service sent an unusable answer.',
+  });
+  api.routes.set('GET /api/providers', (res) => api.send(res, 200, { other: [] }));
+  assert.equal((await invoke('providers:check')).reachable, false);
+  api.routes.set('GET /api/providers', (res) => api.send(res, 500, { code: 'other', message: 'No' }));
+  assert.equal((await invoke('providers:check')).reachable, false);
+});
+
 test('the legacy channels answer as before and contact nothing', async (t) => {
   const { api, invoke } = await setup(t);
-  assert.equal((await invoke('ollama:check')).runtimeReachable, false);
   assert.equal(await invoke('openai:estimate', LIBRARY_ID), null);
   assert.equal((await invoke('openai:status', LIBRARY_ID)).reachable, false);
   await assert.rejects(invoke('export:openaiResults', LIBRARY_ID), /not available/);
@@ -753,7 +789,7 @@ test('the IPC channels are unchanged and match the preload bridge', async (t) =>
   await setup(t);
   const channels = [
     'analysis:start', 'analysis:pause', 'analysis:resume', 'analysis:cancel', 'analysis:status', 'photos:get',
-    'export:finalSet', 'ollama:check', 'data:clear', 'review:get', 'review:save', 'openai:estimate', 'openai:status',
+    'export:finalSet', 'providers:check', 'data:clear', 'review:get', 'review:save', 'openai:estimate', 'openai:status',
     'openai:start', 'export:openaiResults',
   ];
   assert.deepEqual([...handlers.keys()].sort(), [...channels].sort());

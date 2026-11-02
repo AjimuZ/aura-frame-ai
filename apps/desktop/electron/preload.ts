@@ -9,10 +9,10 @@ import type {
   AnalysisStatus,
   AppSettings,
   AuraFrameApi,
-  OllamaStatus,
   OpenAiCostEstimate,
   OpenAiStatus,
   PhotoItem,
+  ProvidersStatus,
   ReviewSession,
   LibraryState,
 } from './ipc/contracts';
@@ -36,7 +36,7 @@ const CHANNELS = {
   exportSet: 'export:finalSet',
   getSettings: 'settings:get',
   setSettings: 'settings:set',
-  checkOllama: 'ollama:check',
+  checkProviders: 'providers:check',
   clearData: 'data:clear',
   getReview: 'review:get',
   saveReview: 'review:save',
@@ -82,7 +82,7 @@ const api: AuraFrameApi = {
   getSettings: () => ipcRenderer.invoke(CHANNELS.getSettings) as Promise<AppSettings>,
   setSettings: (settings: AppSettings) =>
     ipcRenderer.invoke(CHANNELS.setSettings, settings) as Promise<AppSettings>,
-  checkOllama: () => ipcRenderer.invoke(CHANNELS.checkOllama) as Promise<OllamaStatus>,
+  checkProviders: () => ipcRenderer.invoke(CHANNELS.checkProviders) as Promise<ProvidersStatus>,
   clearGeneratedData: (libraryId: string) =>
     ipcRenderer.invoke(CHANNELS.clearData, libraryId) as Promise<void>,
   getReviewSession: (libraryId: string) =>

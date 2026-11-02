@@ -245,7 +245,7 @@ def test_providers_report_a_minimal_status_shape(world: World) -> None:
     assert providers["llama-server"]["state"] == "not_configured"
     assert providers["codex"]["state"] == "disabled"
     assert providers["codex"]["cloud"] is True
-    assert "ollama" not in str(providers).lower()
+    assert set(providers) == {"local-scoring", "llama-server", "codex"}
     for provider in providers.values():
         assert set(provider) == {"id", "label", "cloud", "state", "detail"}
 

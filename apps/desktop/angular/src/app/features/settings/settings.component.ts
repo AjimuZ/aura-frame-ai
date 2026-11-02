@@ -1,10 +1,10 @@
-// Settings: configure the local Ollama endpoint, model, thresholds, and privacy options.
+// Settings: check the model providers, and configure thresholds and privacy options.
 import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
 import { SettingsService } from '../../core/services/settings.service';
 import { AURA_FRAME_API } from '../../core/tokens/aura-frame-api.token';
-import type { AppSettings, OllamaStatus, OpenAiStatus } from '../../core/models';
+import type { AppSettings, OpenAiStatus, ProviderStatus, ProvidersStatus } from '../../core/models';
 import { PhotoStore } from '../../core/services/photo-store.service';
 
 @Component({
@@ -16,24 +16,6 @@ import { PhotoStore } from '../../core/services/photo-store.service';
     <af-page-header title="Settings" subtitle="Local-only configuration. Nothing is sent to the cloud." />
 
     <section class="af-card" style="max-width:640px;">
-      <div class="af-field">
-        <label class="af-field-label">Ollama URL</label>
-        <input class="af-input" [(ngModel)]="model().ollamaUrl" name="ollamaUrl" />
-        <div class="af-field-hint">Local Ollama endpoint, e.g. http://localhost:11434</div>
-      </div>
-
-      <div class="af-field">
-        <label class="af-field-label">Primary model</label>
-        <input class="af-input" [(ngModel)]="model().modelName" name="modelName" />
-        <div class="af-field-hint">Configurable local model tag, e.g. gemma4:12b.</div>
-      </div>
-
-      <div class="af-field">
-        <label class="af-field-label">Fallback model</label>
-        <input class="af-input" [(ngModel)]="model().fallbackModelName" name="fallbackModelName" />
-        <div class="af-field-hint">Used if the primary is missing, e.g. gemma3:4b or qwen2.5-vl.</div>
-      </div>
-
       <div class="af-field">
         <label class="af-field-label">Quality preset</label>
         <select class="af-input" [(ngModel)]="model().preset" name="preset">
@@ -50,17 +32,27 @@ import { PhotoStore } from '../../core/services/photo-store.service';
       </div>
 
       <div class="af-field">
-        <label class="af-field-label">Local AI runtime</label>
+        <label class="af-field-label">Model providers</label>
         <div class="af-actions">
-          <button class="af-button-secondary" (click)="checkOllama()">Check Ollama</button>
-          @if (ollama(); as o) {
-            <span
-              class="af-badge"
-              [class.af-badge--success]="o.primaryAvailable || o.fallbackAvailable"
-              [class.af-badge--warning]="!(o.primaryAvailable || o.fallbackAvailable)"
-            >{{ o.message }}</span>
+          <button class="af-button-secondary" (click)="checkProviders()">Check providers</button>
+          @if (providers(); as p) {
+            @if (!p.reachable) {
+              <span class="af-badge af-badge--warning">{{ p.message }}</span>
+            }
           }
         </div>
+        @if (providers(); as p) {
+          @for (provider of p.providers; track provider.id) {
+            <div class="af-field-hint" style="margin-top:8px;">
+              <span
+                class="af-badge"
+                [class.af-badge--success]="provider.state === 'available'"
+                [class.af-badge--warning]="provider.state !== 'available'"
+              >{{ provider.label }}: {{ stateLabel(provider.state) }}</span>
+              {{ provider.detail }}
+            </div>
+          }
+        }
       </div>
 
       <div class="af-field">
@@ -204,7 +196,7 @@ export class SettingsComponent {
   // Local editable copy of the persisted settings, synced from the service.
   readonly model = signal<AppSettings>({ ...this.settingsService.settings() });
   readonly saved = signal(false);
-  readonly ollama = signal<OllamaStatus | null>(null);
+  readonly providers = signal<ProvidersStatus | null>(null);
   readonly confirmingClear = signal(false);
   readonly cleared = signal(false);
 
@@ -263,8 +255,21 @@ export class SettingsComponent {
     setTimeout(() => this.saved.set(false), 2000);
   }
 
-  async checkOllama(): Promise<void> {
-    this.ollama.set(await this.api.checkOllama());
+  // Runs the one provider check (`GET /api/providers`, through the bridge) and shows each provider's state.
+  async checkProviders(): Promise<void> {
+    this.providers.set(await this.api.checkProviders());
+  }
+
+  // Returns the words shown for a provider state.
+  stateLabel(state: ProviderStatus['state']): string {
+    switch (state) {
+      case 'available':
+        return 'available';
+      case 'not_configured':
+        return 'not configured';
+      case 'disabled':
+        return 'off';
+    }
   }
 
   async clearData(): Promise<void> {

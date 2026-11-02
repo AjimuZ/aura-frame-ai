@@ -10,9 +10,6 @@ import type { AppSettings } from './contracts';
 const VALID_PRESETS = new Set<AppSettings['preset']>(['fast', 'balanced', 'quality']);
 
 const DEFAULT_SETTINGS: AppSettings = {
-  ollamaUrl: 'http://localhost:11434',
-  modelName: 'gemma4:12b',
-  fallbackModelName: 'gemma3:4b',
   preset: 'balanced',
   vlmCandidateCount: 70,
   blurThreshold: 120,
@@ -54,12 +51,13 @@ function settingsPath(): string {
   return path.join(app.getPath('userData'), 'aura-frame-settings.json');
 }
 
-// Reads settings from disk, falling back to defaults for any missing keys.
+// Reads settings from disk, falling back to defaults for any missing keys. Keys that settings no longer
+// have (written by an earlier version) are dropped, because the values pass through sanitize.
 function readSettings(): AppSettings {
   try {
     const raw = fs.readFileSync(settingsPath(), 'utf-8');
     const parsed = JSON.parse(raw) as Partial<AppSettings>;
-    return { ...DEFAULT_SETTINGS, ...parsed };
+    return sanitize(parsed);
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
@@ -72,9 +70,6 @@ function sanitize(input: Partial<AppSettings>): AppSettings {
     ? (merged.preset as AppSettings['preset'])
     : DEFAULT_SETTINGS.preset;
   return {
-    ollamaUrl: String(merged.ollamaUrl || DEFAULT_SETTINGS.ollamaUrl),
-    modelName: String(merged.modelName || DEFAULT_SETTINGS.modelName),
-    fallbackModelName: String(merged.fallbackModelName || DEFAULT_SETTINGS.fallbackModelName),
     preset,
     vlmCandidateCount: Math.max(1, Math.min(2000, Number(merged.vlmCandidateCount) || 70)),
     blurThreshold: Math.max(0, Number(merged.blurThreshold) || 120),

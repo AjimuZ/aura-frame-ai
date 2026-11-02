@@ -1,8 +1,7 @@
-"""Backwards-compatible facade over the local VLM package (src.vlm).
+"""Backwards-compatible facade over the model-stage package (src.vlm).
 
-The judging logic now lives in src.vlm (provider-agnostic interface, strict JSON schema,
-primary + fallback model, health checks). This module preserves the original public
-functions so existing callers keep working.
+The stage now checks the local vision provider (src.providers). This module preserves the
+public names that existing callers use.
 """
 
 from typing import Any
@@ -13,18 +12,16 @@ from .vlm import judge_candidates as _judge_candidates
 from .vlm.schema import PROMPT, parse_review  # noqa: F401 - re-exported for compatibility
 
 
-# Verifies the configured model is reachable and installed (primary or fallback).
+# Verifies the configured local vision provider is reachable and has a model loaded.
 def check_availability(config: dict[str, Any]) -> tuple[bool, str]:
-    report = VlmRunner(config).check()
-    available = bool(report["primaryAvailable"] or report["fallbackAvailable"])
-    return available, "ok" if available else report["message"]
+    runner = VlmRunner(config)
+    try:
+        health = runner.health()
+    finally:
+        runner.close()
+    return health.ready, "ok" if health.ready else health.message
 
 
-# Judges a single photo using the runner (primary + fallback).
-def judge_photo(photo: Photo, config: dict[str, Any]) -> dict[str, Any] | None:
-    return VlmRunner(config).review(photo)
-
-
-# Judges a list of candidate photos, attaching reviews and emitting progress.
+# Probes the provider for a list of candidate photos; the candidates are left unchanged.
 def judge_candidates(candidates: list[Photo], config: dict[str, Any]) -> None:
     _judge_candidates(candidates, config)

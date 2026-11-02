@@ -48,7 +48,7 @@ Run evidence comes from a throwaway `python:3.12-slim` container with `engine/` 
 | ID | Defect | Location | Evidence |
 | --- | --- | --- | --- |
 | B1 | **Resume never works.** Hashes are not saved in the JSON record, so the comparison always fails, and every photo is redone | `engine/src/utils.py:296`, `engine/src/db.py:253`, `engine/main.py:103` | Run: after a round trip `file_hash` is `''`, and the resume condition is false |
-| B2 | The local model receives photos sideways. Orientation is not applied, and the EXIF tag is dropped | `engine/src/vlm/ollama_client.py:109` | Run: a 400x800 photo is sent as 800x400 with no orientation tag |
+| B2 | ~~The local model receives photos sideways. Orientation is not applied, and the EXIF tag is dropped~~ **Resolved in P03.5:** the legacy client that sent the photos is removed. The provider copy applies the EXIF orientation before the metadata is dropped (`engine/src/providers/images.py`), and the model stage no longer sends photos to a model at all until P04 | Read: `engine/src/providers/images.py:21`–`26`; the legacy client file is gone |
 | B3 | Reranking is not idempotent, so penalties compound on each AI re-review | `engine/src/final_ranker.py:130`, `engine/main.py:218` | Run: 8.0 becomes 7.2, then 6.48 |
 | B4 | AI re-review breaks the final set. `rank_photo` resets `selected`, and the command never selects again | `engine/src/final_ranker.py:99`, `engine/main.py:206`–`224` | Run: status goes from `selected` to `accepted`. The command path is read |
 | B5 | Embeddings ignore EXIF orientation | `engine/src/embeddings.py:62` | Read |

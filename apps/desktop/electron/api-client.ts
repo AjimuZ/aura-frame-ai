@@ -6,7 +6,7 @@
 
 import * as http from 'node:http';
 import type { ComposeStack } from './compose-stack';
-import type { AnalysisStatus, AnalysisStep, AnalysisPreset, ReviewSession } from './ipc/contracts';
+import type { AnalysisStatus, AnalysisStep, AnalysisPreset, ProviderStatus, ReviewSession } from './ipc/contracts';
 
 export const PORT_ENV = 'AURAFRAME_PORT';
 export const DEFAULT_GATEWAY_PORT = 8420;
@@ -127,6 +127,29 @@ function toRunStatus(libraryId: string, body: unknown): AnalysisStatus {
   };
 }
 
+const PROVIDER_STATES = new Set<ProviderStatus['state']>(['available', 'not_configured', 'disabled']);
+
+// Returns the bridge provider for one entry of the API's provider list; throws ApiClientError when it is not one.
+function toProviderStatus(entry: unknown): ProviderStatus {
+  if (
+    !isRecord(entry) ||
+    typeof entry['id'] !== 'string' ||
+    typeof entry['label'] !== 'string' ||
+    typeof entry['cloud'] !== 'boolean' ||
+    typeof entry['detail'] !== 'string' ||
+    !PROVIDER_STATES.has(entry['state'] as ProviderStatus['state'])
+  ) {
+    throw badResponse();
+  }
+  return {
+    id: entry['id'],
+    label: entry['label'],
+    cloud: entry['cloud'],
+    state: entry['state'] as ProviderStatus['state'],
+    detail: entry['detail'],
+  };
+}
+
 function libraryPath(libraryId: string, suffix: string): string {
   return `/api/libraries/${encodeURIComponent(libraryId)}${suffix}`;
 }
@@ -200,6 +223,16 @@ export class ApiClient {
       throw badResponse();
     }
     return body;
+  }
+
+  // Returns the providers `GET /api/providers` lists. The API reports configuration and contacts no service.
+  async getProviders(): Promise<ProviderStatus[]> {
+    const body = await this.call('GET', '/api/providers');
+    const list = isRecord(body) ? body['providers'] : null;
+    if (!Array.isArray(list)) {
+      throw badResponse();
+    }
+    return list.map(toProviderStatus);
   }
 
   // Returns the latest saved review session, or null when none was saved.

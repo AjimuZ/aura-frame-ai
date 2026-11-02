@@ -203,13 +203,21 @@ the services, a GPU, and Chromium enforcing the renderer settings (the host has 
 - [ ] P03.2 Add `fetch-models` with pinned revisions and SHA-256 checks.
 - [ ] P03.3 Run the [bake-off](ai-providers.md#bake-off) on the reference PC, and record the results.
 - [ ] P03.4 Confirm or replace the default in [ADR 0004](decisions/0004-default-local-model.md).
-- [ ] P03.5 Remove the Ollama client, its settings, UI texts and tests.
+- [x] P03.5 Remove the Ollama client, its settings, UI texts and tests.
 
 Progress 2026-11-02 (P03.1): `engine/src/providers` holds the `VisionProvider` contract, the llama-server provider,
 the verdict schemas with an in-repo validator, versioned prompts, copy preparation and a guard that degrades to the
 prescore ([AI providers](ai-providers.md#provider-contract)). Observed: `bash scripts/check.sh --engine` passed, 224 of 224
 engine tests (34 new, on a fake server and synthetic images). Not observed: a real llama-server, any model, and the
 pipeline using the provider (P04).
+
+Progress 2026-11-02 (P03.5): the earlier local runtime client, its settings, its Settings fields, its IPC channel,
+its engine command and its legacy config block are removed, and one provider check (`GET /api/providers`, bridge method
+`checkProviders`) replaces the old check in the bridge and in Settings. The engine's model stage now only probes the
+`ai.local` provider; it sends no photo to a model until P04. See [Architecture](architecture.md#bridge-mapping) and
+[assessment item B2](assessment.md). Observed: `npm run lint` and `npm run build` passed; `node --test` gave 165 passed
+of 166 (1 skipped); `bash scripts/check.sh --engine` passed 225 of 225 engine tests. Not observed: a real llama-server,
+any model, and the window.
 
 Exit: the default model completes the benchmark on the reference PC with at least 0.5 GiB of GPU
 memory free at peak; no Ollama reference remains in the code; provider contract tests pass.

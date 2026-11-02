@@ -5,9 +5,6 @@ import { AURA_FRAME_API } from '../tokens/aura-frame-api.token';
 import type { AppSettings } from '../models';
 
 const DEFAULT_SETTINGS: AppSettings = {
-  ollamaUrl: 'http://localhost:11434',
-  modelName: 'gemma4:12b',
-  fallbackModelName: 'gemma3:4b',
   preset: 'balanced',
   vlmCandidateCount: 70,
   blurThreshold: 120,

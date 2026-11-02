@@ -10,9 +10,6 @@ export interface OpenAiSettings {
 }
 
 export interface AppSettings {
-  ollamaUrl: string;
-  modelName: string;
-  fallbackModelName: string;
   preset: AnalysisPreset;
   vlmCandidateCount: number;
   blurThreshold: number;

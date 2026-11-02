@@ -60,9 +60,9 @@ _SCORE_KEYS = (
 
 REQUIRED_KEYS = {*_SCORE_KEYS, "category", "best_slot"}
 
-# JSON Schema handed to Ollama as a structured-output constraint (Ollama >= 0.5). Forcing the
-# exact keys and types is far more reliable than plain "json" mode, which thinking-capable or
-# community fine-tunes routinely ignore (producing prose or a differently shaped object).
+# JSON Schema of the legacy single-photo review. Forcing the exact keys and types is far more
+# reliable than plain "json" mode, which thinking-capable or community fine-tunes routinely
+# ignore (producing prose or a differently shaped object).
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {

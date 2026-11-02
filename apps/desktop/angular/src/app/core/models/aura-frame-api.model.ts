@@ -4,9 +4,9 @@ import type {
   AnalysisConfig,
   AnalysisEvent,
   AnalysisStatus,
-  OllamaStatus,
   OpenAiCostEstimate,
   OpenAiStatus,
+  ProvidersStatus,
   ReviewSession,
 } from './analysis.model';
 import type { PhotoItem } from './photo.model';
@@ -32,7 +32,7 @@ export interface AuraFrameApi {
   openReportsFolder(libraryId: string): Promise<void>;
   getSettings(): Promise<AppSettings>;
   setSettings(settings: AppSettings): Promise<AppSettings>;
-  checkOllama(): Promise<OllamaStatus>;
+  checkProviders(): Promise<ProvidersStatus>;
   clearGeneratedData(libraryId: string): Promise<void>;
   getReviewSession(libraryId: string): Promise<ReviewSession | null>;
   saveReviewSession(libraryId: string, session: ReviewSession): Promise<void>;

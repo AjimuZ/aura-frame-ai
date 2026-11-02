@@ -88,9 +88,6 @@ function samplePhoto(index: number, libraryId: string): PhotoItem {
 const SAMPLE_PHOTOS: PhotoItem[] = Array.from({ length: 30 }, (_, i) => samplePhoto(i, MAIN_ID));
 
 const DEFAULT_SETTINGS: AppSettings = {
-  ollamaUrl: 'http://localhost:11434',
-  modelName: 'gemma4:12b',
-  fallbackModelName: 'gemma3:4b',
   preset: 'balanced',
   vlmCandidateCount: 70,
   blurThreshold: 120,
@@ -298,14 +295,19 @@ export function createMockAuraFrameApi(): AuraFrameApi {
       settings = { ...next, modifyOriginals: false };
       return Promise.resolve({ ...settings });
     },
-    checkOllama: () =>
+    checkProviders: () =>
       Promise.resolve({
-        runtimeReachable: true,
-        primaryModel: settings.modelName,
-        primaryAvailable: true,
-        fallbackModel: settings.fallbackModelName,
-        fallbackAvailable: true,
-        message: 'Preview mode: no real Ollama runtime is contacted.',
+        reachable: true,
+        providers: [
+          {
+            id: 'local-scoring',
+            label: 'Local scoring',
+            cloud: false,
+            state: 'available' as const,
+            detail: 'Preview mode: no real service is contacted.',
+          },
+        ],
+        message: 'Preview mode: no real service is contacted.',
       }),
     clearGeneratedData: (libraryId: string) => {
       photosByLibrary.set(libraryId, []);

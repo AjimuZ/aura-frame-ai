@@ -19,7 +19,7 @@ candidates and explains its choices. You decide. Originals are never changed.
 | Capability | Code today | Target |
 | --- | --- | --- |
 | Launch | Electron desktop app, no engine connected yet | Electron desktop app, services in Docker, `./start.sh` |
-| Local AI | Ollama client | `llama-server`, Qwen3.8-27B by default |
+| Local AI | `llama-server` provider, probed only; no photo is sent to a model yet | `llama-server`, Qwen3.8-27B by default |
 | Cloud AI | Optional direct OpenAI flow | Optional Codex CLI, off by default |
 | Subjects | Requires a face to reach the AI | Any subject |
 | AI method | A 1 to 10 vote per photo | Pairwise tournament in both orders |

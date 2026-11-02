@@ -15,7 +15,7 @@ AuraFrame AI is a privacy-first local AI photo curation tool. Its purpose is to 
 
 ## Current State
 
-**The documentation describes the target; the code has not been migrated.** Today the code is an Angular and Electron desktop application with a Python engine, an Ollama client and an optional direct OpenAI flow. The target is in `docs/architecture.md`, the order of work in `docs/roadmap.md`, and the verified state of the code in `docs/assessment.md`.
+**The documentation describes the target; the code has not been migrated.** Today the code is an Angular and Electron desktop application with a Python engine, a local llama-server provider that the pipeline only probes, and an optional direct OpenAI flow. The target is in `docs/architecture.md`, the order of work in `docs/roadmap.md`, and the verified state of the code in `docs/assessment.md`.
 
 **The owner decides when and how development starts.** Do not begin a roadmap package without that instruction. Verify against the actual manifests and source before editing.
 
@@ -27,7 +27,7 @@ The ignored `img/` directory contains personal material. Do not inspect it, enum
 - Do not install or enable unapproved plugins, marketplaces, MCP servers, or dependencies. The skills approved by the owner are listed in `docs/claude-code.md`.
 - Do not use telemetry or external analytics. This includes third-party tools, whose telemetry must be turned off.
 - Cloud inference is permitted ONLY through the optional, off-by-default Codex CLI provider, in its sidecar, after explicit opt-in. It receives only resized, EXIF-stripped, anonymous image copies, never originals, file names, paths or location. Until package P05 removes it, the legacy OpenAI flow in `engine/src/cloud/` stays off by default and must not be extended. The local pipeline must keep working fully with cloud disabled.
-- Do not use Ollama in new work. The legacy client exists only until package P03 removes it.
+- The local model runs only through `llama-server` and the provider contract in `engine/src/providers/`. The earlier local runtime client, its settings and its IPC channel were removed in P03.5; do not bring another runtime client back, and keep the one provider check, `GET /api/providers`.
 - Do not modify original photos or write into protected personal-data directories.
 - Do not commit personal data, derived images, thumbnails, reports, prompts with personal content, or metadata.
 - Do not implement face identity recognition or identity-based grouping.

@@ -600,3 +600,9 @@ I updated docs/ai-providers.md, docs/testing.md, the roadmap progress note and C
   - Engine tests run with `bash scripts/check.sh --engine`, which uses the container (224 pass). The host has no Python.
   - Not observed: a real llama-server, any model, and the pipeline using the provider. The provider is tested only against a fake server.
 ---
+
+## 2026-11-02T12:34:43Z - P03.5
+- Verified as already implemented; no code change was needed.
+- Files changed: see commit
+- **Learnings for future iterations:**
+---

@@ -88,6 +88,15 @@
 
 ### Changed
 
+- Settings now has one "Check providers" button. It asks `GET /api/providers` through the bridge (channel
+  `providers:check`, method `checkProviders`) and lists each provider with its state, and says so when the
+  services are not running. It replaces the earlier local runtime check, and the URL, primary model and fallback
+  model fields are gone from Settings and from the saved settings file (old values are dropped on read). The
+  engine's `ollama-check` command, its legacy `model:` block in `engine/config.yaml` and the legacy client are
+  removed. The engine's model stage now only probes the `ai.local` provider and keeps the local ranking; no photo
+  is sent to a model until the pairwise judging of P04. Lint and the build pass, 165 of 166 Node tests pass (1
+  skipped) and 225 engine tests pass in the container run, on a fake HTTP server and synthetic images only; no real
+  llama-server or model was run.
 - The window can no longer navigate to another local file, or in development to a host that only starts like the dev
   server's address. Before, any `file://` URL was allowed. The app itself never navigates, so nothing visible
   changes.

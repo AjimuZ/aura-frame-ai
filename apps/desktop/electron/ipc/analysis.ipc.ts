@@ -11,10 +11,10 @@ import type {
   AnalysisEvent,
   AnalysisPreset,
   AnalysisStatus,
-  OllamaStatus,
   OpenAiCostEstimate,
   OpenAiStatus,
   PhotoItem,
+  ProvidersStatus,
   ReviewSession,
 } from './contracts';
 import { readOpenAiKey } from './settings.ipc';
@@ -435,15 +435,16 @@ export function registerAnalysisIpc(
     }
   });
 
-  // Ollama has no API route and is not used in new work; package P03 removes this channel's client.
-  ipcMain.handle('ollama:check', (): OllamaStatus => ({
-    runtimeReachable: false,
-    primaryModel: '',
-    primaryAvailable: false,
-    fallbackModel: null,
-    fallbackAvailable: false,
-    message: 'Unable to probe Ollama.',
-  }));
+  // The one provider check: it asks `GET /api/providers` and never rejects, so Settings can always show an answer.
+  // While the services are down, the answer says so with an empty list and sends no request.
+  ipcMain.handle('providers:check', async (): Promise<ProvidersStatus> => {
+    try {
+      const providers = await api.getProviders();
+      return { reachable: true, providers, message: 'Providers checked.' };
+    } catch (error) {
+      return { reachable: false, providers: [], message: safeApiMessage(error) };
+    }
+  });
 
   ipcMain.handle('data:clear', async (_event, libraryId: string): Promise<void> => {
     assertLibrary(libraries, libraryId);

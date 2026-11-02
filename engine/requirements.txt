@@ -1,5 +1,5 @@
 # AuraFrame AI - local Python computer vision engine dependencies.
-# All processing is local; no cloud or network packages beyond local Ollama HTTP.
+# All processing is local; the only network calls go to the local vision service.
 opencv-python==4.10.0.84
 pillow==11.0.0
 pillow-heif==0.18.0

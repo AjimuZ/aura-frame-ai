@@ -128,14 +128,33 @@ def test_embeddings_fallback_and_clusters(textured: Path, tmp_path: Path, db_con
     conn.close()
 
 
-# When no model is reachable, the VLM runner reports unavailability without raising.
+# When the local vision service is unreachable, the runner reports it without raising and the
+# candidate stage leaves the candidates unchanged.
 def test_vlm_runner_unavailable(config: dict) -> None:
+    from src.vlm import VlmRunner, judge_candidates
+
+    cfg = dict(config)
+    cfg["ai"] = {"local": {"endpoint": "http://127.0.0.1:1", "timeout_seconds": 1}}  # unreachable
+    runner = VlmRunner(cfg)
+    try:
+        health = runner.health()
+    finally:
+        runner.close()
+    assert health.reachable is False
+    assert health.ready is False
+    photo = Photo(id="t", file_path="x.jpg", file_name="x.jpg")
+    judge_candidates([photo], cfg)
+    assert photo.gemma is None
+
+
+# A malformed endpoint is reported as a message, never raised, so a bad setting cannot stop a run.
+def test_vlm_runner_reports_an_invalid_endpoint(config: dict) -> None:
     from src.vlm import VlmRunner
 
     cfg = dict(config)
-    cfg["model"] = {**config["model"], "ollama_url": "http://127.0.0.1:1"}  # unreachable
+    cfg["ai"] = {"local": {"endpoint": "vision:8080"}}
     runner = VlmRunner(cfg)
-    report = runner.check()
-    assert report["primaryAvailable"] is False
-    photo = Photo(id="t", file_path="x.jpg", file_name="x.jpg")
-    assert runner.review(photo) is None
+    health = runner.health()
+    runner.close()
+    assert health.ready is False
+    assert "http" in health.message
