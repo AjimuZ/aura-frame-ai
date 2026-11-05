@@ -297,7 +297,8 @@
         "path": "docs/roadmap.md",
         "section": "2. P01 — Foundation",
         "line": "P01.4 Add the `LICENSE` file for the declared license, or change the declaration."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P01.EXIT",
@@ -346,7 +347,8 @@
         "reference": "docs/roadmap.md",
         "section": "2. P01 — Foundation",
         "line": "Exit: the desktop app starts on a supported Electron version."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P02.3.1",
@@ -702,7 +704,8 @@
         "reference": "docs/roadmap.md",
         "section": "3. P02 — Container stack",
         "line": "Exit: `./start.sh` opens the Electron window; a synthetic folder chosen in the native dialog completes a `fast` run end to end; closing the window stops the services."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P03.1",
@@ -790,7 +793,8 @@
         "path": "docs/roadmap.md",
         "section": "4. P03 — Local AI runtime",
         "line": "P03.3 Run the [bake-off](ai-providers.md#bake-off) on the reference PC, and record the results."
-      }
+      },
+      "taskType": "integration_sensitive"
     },
     {
       "id": "P03.4",
@@ -810,7 +814,8 @@
         "path": "docs/roadmap.md",
         "section": "4. P03 — Local AI runtime",
         "line": "P03.4 Confirm or replace the default in [ADR 0004](decisions/0004-default-local-model.md)."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P03.EXIT",
@@ -833,7 +838,8 @@
         "reference": "docs/roadmap.md",
         "section": "4. P03 — Local AI runtime",
         "line": "Exit: the default model completes the benchmark on the reference PC with at least 0.5 GiB of GPU memory free at peak; no Ollama reference remains in the code; provider contract tests pass."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P04.1",
@@ -1051,7 +1057,8 @@
         "path": "docs/roadmap.md",
         "section": "5. P04 — Curation pipeline",
         "line": "P04.8 Remove the old gate, ranker, slots, OpenCLIP and LAION paths."
-      }
+      },
+      "taskType": "refactor_architectural"
     },
     {
       "id": "P04.EXIT",
@@ -1071,7 +1078,8 @@
         "reference": "docs/roadmap.md",
         "section": "5. P04 — Curation pipeline",
         "line": "Exit: the regression corpus in Testing passes."
-      }
+      },
+      "taskType": "bug_complex"
     },
     {
       "id": "P04.MEASURE",
@@ -1084,7 +1092,7 @@
       ],
       "priority": 38,
       "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. NEEDS THE OWNER: needs scorer and judge weights, the gated dataset and the GPU. Compare against Q-Align as risk R8 says.",
+      "notes": "BLOCKED: waiting for a person: Needs the reference PC with a GPU, scorer and judge weights, and the gated dataset; depends on P03.EXIT and P04.EXIT.\n`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. NEEDS THE OWNER: needs scorer and judge weights, the gated dataset and the GPU. Compare against Q-Align as risk R8 says.",
       "dependsOn": [
         "P04.EXIT",
         "P03.EXIT"
@@ -1093,7 +1101,8 @@
         "reference": "docs/roadmap.md",
         "section": "5. P04 — Curation pipeline",
         "line": "Exit: a run on 2,000 synthetic images completes on the reference PC with recorded time and peak memory; the benchmark score of the pipeline is recorded and is not below the scorer alone."
-      }
+      },
+      "taskType": "integration_sensitive"
     },
     {
       "id": "P05.1",
@@ -1226,7 +1235,8 @@
         "path": "docs/roadmap.md",
         "section": "6. P05 — Codex CLI provider",
         "line": "P05.2 Implement the provider, opt-in, call cap and `--codex-login`."
-      }
+      },
+      "taskType": "ui_simple"
     },
     {
       "id": "P05.3",
@@ -1245,7 +1255,8 @@
         "path": "docs/roadmap.md",
         "section": "6. P05 — Codex CLI provider",
         "line": "P05.3 Check the upstream sandbox in Docker, and record the outcome."
-      }
+      },
+      "taskType": "integration_sensitive"
     },
     {
       "id": "P05.4",
@@ -1268,7 +1279,8 @@
         "path": "docs/roadmap.md",
         "section": "6. P05 — Codex CLI provider",
         "line": "P05.4 Measure the usage cost per comparison, and record it."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P05.5",
@@ -1293,7 +1305,8 @@
         "path": "docs/roadmap.md",
         "section": "6. P05 — Codex CLI provider",
         "line": "P05.5 Remove `engine/src/cloud/`, after moving the image preparer into `providers/`"
-      }
+      },
+      "taskType": "refactor_architectural"
     },
     {
       "id": "P05.EXIT",
@@ -1321,7 +1334,8 @@
         "reference": "docs/roadmap.md",
         "section": "6. P05 — Codex CLI provider",
         "line": "Exit: the contract and data-shape tests pass; without opt-in the sidecar is not running and no call can happen; a real run with the owner's account completes on synthetic images."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P06.1",
@@ -1341,7 +1355,8 @@
         "path": "docs/roadmap.md",
         "section": "7. P06 — Interface",
         "line": "P06.1 Add non-color tokens and shared primitives on the existing palette."
-      }
+      },
+      "taskType": "ui_simple"
     },
     {
       "id": "P06.2",
