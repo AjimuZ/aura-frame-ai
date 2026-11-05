@@ -16,6 +16,9 @@ from .models import RunRequest, RunStatus
 from .security import TOKEN_ENV_VAR
 from .storage import ApiSettings, library_control_file, library_dir
 
+# Set (non-empty) only when start.sh ran with --provider codex --codex-opt-in.
+CODEX_TOKEN_ENV_VAR = "AURAFRAME_CODEX_TOKEN"
+
 # Events kept per run. A client that connects late still sees the latest ones; older events are
 # dropped first, so memory stays bounded however many photos a run scores.
 MAX_BUFFERED_EVENTS = 10000
@@ -123,8 +126,24 @@ class RunSupervisor:
         """Start a run for `library_id` and return its initial status.
 
         Raises ApiError 409 when a run is still active or the photos root is missing, and 503
-        when the engine process cannot be started.
+        when the engine process cannot be started. A `codex` run is refused with 403
+        `codex_not_enabled` (stack not started with `--provider codex --codex-opt-in`) or
+        `codex_library_opt_in_missing` (no per-library opt-in) before anything else happens.
+        The token value is only tested for presence, never read further or logged.
         """
+        if options.provider == "codex":
+            if not os.environ.get(CODEX_TOKEN_ENV_VAR):
+                raise ApiError(
+                    403,
+                    "codex_not_enabled",
+                    "The stack was not started with --provider codex --codex-opt-in.",
+                )
+            if not options.codexLibraryOptIn:
+                raise ApiError(
+                    403,
+                    "codex_library_opt_in_missing",
+                    "This library has not opted in to the codex provider.",
+                )
         photos_root = self._settings.photos_root
         if not photos_root.is_dir():
             raise ApiError(409, "photos_unavailable", "No photo folder is available to analyze.")

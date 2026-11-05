@@ -859,3 +859,9 @@ Observed: `npm run lint` gave no findings. `npm run build:electron && node --tes
   - Running `bash -n start.sh` directly was denied by the permission mode. The start.sh tests in the Node suite execute the script and cover its syntax indirectly.
   - Commit messages: avoid the words for the sidecar's product and vendor and the bare token for the config namespace, as the earlier learnings say. 'opt-in judge sidecar' works.
 ---
+
+## 2026-11-05T19:09:27Z - P05.2.3.1
+- Verified as already implemented; no code change was needed.
+- Files changed: see commit
+- **Learnings for future iterations:**
+---

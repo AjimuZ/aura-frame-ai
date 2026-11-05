@@ -71,6 +71,10 @@ class RunRequest(ApiModel):
     runGemma: StrictBool = False
     preset: Literal["fast", "balanced", "quality"] = "balanced"
     includeSubfolders: StrictBool = True
+    # `codex` is the optional cloud provider. It needs the stack-level opt-in too; see RunStore.start.
+    provider: Literal["local", "codex"] = "local"
+    # The per-library confirmation that anonymous copies may go to the cloud provider.
+    codexLibraryOptIn: StrictBool = False
 
 
 class RunStatus(ApiModel):

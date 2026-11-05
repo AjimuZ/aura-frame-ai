@@ -704,3 +704,80 @@ def test_run_routes_refuse_a_foreign_host(make_world: WorldFactory, method: str,
     assert response.status_code == 403
     assert response.json()["code"] == "foreign_host"
     assert not (world.stub_dir / "argv.json").exists()
+
+
+# --- codex consent ----------------------------------------------------------------------------
+
+CODEX_TOKEN_ENV = "AURAFRAME_CODEX_TOKEN"
+
+
+def test_a_codex_run_without_the_command_line_opt_in_is_refused(
+    make_world: WorldFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(CODEX_TOKEN_ENV, raising=False)
+    world = make_world("quick")
+    body = {"provider": "codex", "codexLibraryOptIn": True}
+    refused = world.client.post(f"/api/libraries/{LIB}/runs", json=body)
+    assert refused.status_code == 403
+    assert refused.json()["code"] == "codex_not_enabled"
+    assert not (world.stub_dir / "argv.json").exists()
+
+
+def test_a_codex_run_without_the_library_opt_in_is_refused(
+    make_world: WorldFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CODEX_TOKEN_ENV, "a" * 64)
+    world = make_world("quick")
+    for body in ({"provider": "codex"}, {"provider": "codex", "codexLibraryOptIn": False}):
+        refused = world.client.post(f"/api/libraries/{LIB}/runs", json=body)
+        assert refused.status_code == 403
+        assert refused.json()["code"] == "codex_library_opt_in_missing"
+    assert not (world.stub_dir / "argv.json").exists()
+
+
+def test_a_codex_run_with_neither_opt_in_is_refused(
+    make_world: WorldFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CODEX_TOKEN_ENV, "")
+    world = make_world("quick")
+    refused = world.client.post(f"/api/libraries/{LIB}/runs", json={"provider": "codex"})
+    assert refused.status_code == 403
+    assert refused.json()["code"] == "codex_not_enabled"
+    assert not (world.stub_dir / "argv.json").exists()
+
+
+def test_a_codex_run_with_both_opt_ins_is_accepted(
+    make_world: WorldFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(CODEX_TOKEN_ENV, "a" * 64)
+    world = make_world("quick")
+    body = {"provider": "codex", "codexLibraryOptIn": True}
+    assert world.client.post(f"/api/libraries/{LIB}/runs", json=body).status_code == 202
+    _wait_stopped(world.client)
+    # The choice is not forwarded to the engine yet: its command line is the local one.
+    # Compare whole arguments: the temporary paths contain the test name.
+    assert "codex" not in world.stub_record()["args"]
+    assert "--provider" not in world.stub_record()["args"]
+
+
+def test_a_local_run_ignores_the_codex_stack_state(
+    make_world: WorldFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(CODEX_TOKEN_ENV, raising=False)
+    world = make_world("quick")
+    body = {"provider": "local"}
+    assert world.client.post(f"/api/libraries/{LIB}/runs", json=body).status_code == 202
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"provider": "other"},
+        {"provider": "codex", "codexLibraryOptIn": "yes"},
+        {"codexLibraryOptIn": 1},
+        {"codexOptIn": True},
+    ],
+)
+def test_invalid_codex_fields_are_rejected(make_world: WorldFactory, body: dict[str, Any]) -> None:
+    world = make_world("quick")
+    assert world.client.post(f"/api/libraries/{LIB}/runs", json=body).status_code == 422

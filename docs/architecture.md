@@ -293,6 +293,12 @@ Rules these routes follow:
   unknown fields are refused with HTTP 422. The engine command is the fixed `ApiSettings.engine_command`
   plus arguments built on the server; the process starts without a shell and without the API token.
   `runGemma` still reaches the legacy `--gemma` flag until package P03 replaces that review.
+- The body also takes `provider` (`local` by default, or `codex`) and the strict boolean `codexLibraryOptIn`
+  (default `false`). A `codex` run is refused with HTTP 403 before anything starts unless both consents are set:
+  `codex_not_enabled` when the stack was not started with `--provider codex --codex-opt-in` (the API sees this as
+  an empty `AURAFRAME_CODEX_TOKEN`; the value is never read further), and `codex_library_opt_in_missing` without
+  the per-library opt-in. Implemented: the refusal only. Planned (P05.2.3): passing the choice to the engine and
+  the sidecar call, so an accepted codex run still runs the local pipeline today.
 - One run exists at a time across all libraries. Cancel gives the engine 30 seconds to stop on its own,
   then kills it. A cancel left in `control.json` by an earlier run is cleared when a new run starts.
 - Events are the engine's JSONL lines. Lines that are not JSON objects with a lowercase `type`, or that

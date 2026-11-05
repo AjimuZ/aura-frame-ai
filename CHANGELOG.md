@@ -4,6 +4,10 @@
 
 ### Added
 
+- The run request of the engine API takes `provider` and a per-library `codexLibraryOptIn`. A `codex` run is refused
+  with a structured 403 (`codex_not_enabled` or `codex_library_opt_in_missing`) unless the stack was started with
+  `--provider codex --codex-opt-in` and the library opted in. An accepted request still runs the local pipeline; the
+  engine and sidecar wiring remains open (P05.2.3). Covered by engine tests; the local pipeline is unchanged.
 - `./start.sh --provider codex` now starts the opt-in Codex sidecar, but only with `--codex-opt-in` on the same command
   line, which states that resized, anonymous copies of the compared photos go to OpenAI; without it the script exits 2
   before any Docker call. `./start.sh --codex-login` runs the ChatGPT device sign-in in a throwaway sidecar, and
