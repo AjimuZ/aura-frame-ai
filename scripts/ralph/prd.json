@@ -1377,7 +1377,8 @@
         "path": "docs/roadmap.md",
         "section": "7. P06 — Interface",
         "line": "P06.2 Apply them to layout, navigation and every screen."
-      }
+      },
+      "taskType": "feature_multi_component"
     },
     {
       "id": "P06.3.1",
@@ -1397,7 +1398,8 @@
         "path": "docs/roadmap.md",
         "section": "7. P06 — Interface",
         "line": "P06.3 Add the pixel icon sprite and, if approved, a pixel title font."
-      }
+      },
+      "taskType": "ui_simple"
     },
     {
       "id": "P06.3.2",
@@ -1409,7 +1411,7 @@
       ],
       "priority": 48,
       "passes": false,
-      "notes": "`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. NEEDS THE OWNER: decide whether the pixel title font is wanted.",
+      "notes": "BLOCKED: waiting for a person: The roadmap conditions the pixel title font on approval ('if approved'); the owner must approve the specific font (and its license) before this is added.\n`conventions_ack` must hold only the hexadecimal value that follows \"ACK-TOKEN: \", without that prefix, or the attempt fails. Reports, notes and progress entries are committed, so never write a retired term in them, not even an old name in a rename table. Decode the list from P01.2.1.1 only for searching. Commit subject and body: the validator refuses these words anywhere, in any case: AI, Codex, OpenAI, GPT, LLM, assistant, Claude, chatbot, copilot, gemini, anthropic. That includes the product name and the name of the project instructions file. Never quote those strings in the message; write \"the optional cloud provider\", \"the local model\" or \"the product\" instead. Review: copy every criterion character for character into `criteria`, because the runner compares exact text. NEEDS THE OWNER: decide whether the pixel title font is wanted.",
       "dependsOn": [
         "P06.1"
       ],
@@ -1418,7 +1420,8 @@
         "path": "docs/roadmap.md",
         "section": "7. P06 — Interface",
         "line": "P06.3 Add the pixel icon sprite and, if approved, a pixel title font."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P06.4",
@@ -1441,7 +1444,8 @@
         "path": "docs/roadmap.md",
         "section": "7. P06 — Interface",
         "line": "P06.4 Build the review flow: alternates, A/B compare, stored decisions."
-      }
+      },
+      "taskType": "feature_multi_component"
     },
     {
       "id": "P06.EXIT",
@@ -1463,7 +1467,8 @@
         "reference": "docs/roadmap.md",
         "section": "7. P06 — Interface",
         "line": "Exit: all checks in Design system pass; the end-to-end test passes."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P07.1",
@@ -1490,7 +1495,8 @@
         "path": "docs/roadmap.md",
         "section": "8. P07 — Release",
         "line": "P07.1 Remove the \"planned\" marks from what was delivered, and fix what changed."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P07.2",
@@ -1509,7 +1515,8 @@
         "path": "docs/roadmap.md",
         "section": "8. P07 — Release",
         "line": "P07.2 Add a project summary for a portfolio, written only from delivered behavior."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P07.3",
@@ -1529,7 +1536,8 @@
         "path": "docs/roadmap.md",
         "section": "8. P07 — Release",
         "line": "P07.3 Add real screenshots made from synthetic photos."
-      }
+      },
+      "taskType": "ui_simple"
     },
     {
       "id": "P07.EXIT",
@@ -1550,7 +1558,8 @@
         "reference": "docs/roadmap.md",
         "section": "8. P07 — Release",
         "line": "Exit: a clean clone runs on the reference PC by following the documentation alone."
-      }
+      },
+      "taskType": "docs_simple"
     },
     {
       "id": "P07.4",
@@ -1569,7 +1578,8 @@
         "path": "docs/roadmap.md",
         "section": "8. P07 — Release",
         "line": "P07.4 Tag version 2.0.0, after authorization by the owner."
-      }
+      },
+      "taskType": "docs_simple"
     }
   ]
 }
