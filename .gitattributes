@@ -1,3 +1,7 @@
 # Shell scripts copied into Linux images keep LF endings on every checkout, including Windows hosts that convert
 # text to CRLF: /bin/sh in the image cannot run a script with CRLF endings.
 docker/**/*.sh text eol=lf
+
+# Every other shell script also runs under bash (WSL, Git Bash, containers): the same CRLF
+# checkout on Windows breaks them with "$'\r': command not found".
+*.sh text eol=lf
