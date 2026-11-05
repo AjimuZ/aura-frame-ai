@@ -1224,7 +1224,7 @@
       ],
       "priority": 40,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: still failing after 3 attempts: the review found the documentation inconsistent with the change; the review did not pass the change; docs/roadmap.md: P05.2 is ticked `[x]`, but the P05.2.3 progress notes (around lines 367-375) still say the provider choice on the run request and the run wiring are open. Only the dialog was delivered. Revert the P05.2 tick unless the whole of P05.2.3 is done, and add a 'Progress 2026-11-05 (P05.2.3.3)' note stating what is delivered and what remains.; The docs still call the dialog planned. Update each to say it is implemented in P05.2.3.3, with the ha",
       "dependsOn": [
         "P05.1",
         "P05.2.2",
