@@ -48,6 +48,7 @@ export class LibraryRegistryStore {
         id: this.nextId(),
         name: DEFAULT_LIBRARY_NAME,
         inputFolder: null,
+        codexOptIn: false,
         createdAt: timestamp,
         updatedAt: timestamp,
       };
@@ -93,6 +94,7 @@ export class LibraryRegistryStore {
       id: this.nextId(),
       name: safeName,
       inputFolder: null,
+      codexOptIn: false,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -141,6 +143,30 @@ export class LibraryRegistryStore {
           : library,
       ),
     }));
+  }
+
+  // Returns whether the library's anonymous copies may go to the optional cloud provider. Throws for an unknown
+  // library. A library with no stored choice reads as off.
+  getCodexOptIn(libraryId: string): boolean {
+    return this.getLibrary(libraryId).codexOptIn;
+  }
+
+  // Stores the library's opt-in and returns the stored value. Only a real boolean is accepted: any other value
+  // (a string, a number, null) throws and leaves the registry unchanged, so a truthy value can never turn it on.
+  // Throws for an unknown library.
+  setCodexOptIn(libraryId: string, enabled: boolean): boolean {
+    this.getLibrary(libraryId);
+    if (typeof enabled !== 'boolean') {
+      throw new Error('The cloud provider opt-in must be true or false.');
+    }
+    const timestamp = this.now();
+    this.updateRegistry((registry) => ({
+      ...registry,
+      libraries: registry.libraries.map((library) =>
+        library.id === libraryId ? { ...library, codexOptIn: enabled, updatedAt: timestamp } : library,
+      ),
+    }));
+    return enabled;
   }
 
   deleteLibrary(libraryId: string): LibraryState {
@@ -299,6 +325,13 @@ export class LibraryRegistryStore {
         throw new Error('The local library registry contains an invalid library name.');
       }
       names.add(key);
+      // A registry written before the opt-in existed has no field, which reads as off. A field of any other type
+      // is corruption, and it is refused rather than guessed at.
+      if (library.codexOptIn === undefined) {
+        library.codexOptIn = false;
+      } else if (typeof library.codexOptIn !== 'boolean') {
+        throw new Error('The local library registry contains an invalid cloud provider opt-in.');
+      }
     }
     return parsed;
   }

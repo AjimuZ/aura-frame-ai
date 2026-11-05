@@ -134,13 +134,15 @@ function assertLibrary(libraries: LibraryRegistryStore, libraryId: string): void
   libraries.getLibrary(libraryId);
 }
 
-// Returns the run options the API accepts. It refuses unknown fields, so only these three are ever sent.
-function toRunOptions(config: AnalysisConfig | undefined): RunOptions {
+// Returns the run options the API accepts. It refuses unknown fields, so only these four are ever sent. The opt-in
+// comes from the registry, never from the renderer's config: whatever the config says about it is dropped.
+function toRunOptions(config: AnalysisConfig | undefined, codexLibraryOptIn: boolean): RunOptions {
   const preset = config?.preset;
   return {
     runGemma: config?.runGemma === true,
     preset: preset && PRESETS.has(preset) ? preset : 'balanced',
     includeSubfolders: config?.includeSubfolders !== false,
+    codexLibraryOptIn: codexLibraryOptIn === true,
   };
 }
 
@@ -366,7 +368,7 @@ export function registerAnalysisIpc(
       message: 'Starting the analysis services.',
       startedAt: new Date().toISOString(),
     });
-    void launchRun(backend, run, folder, toRunOptions(config));
+    void launchRun(backend, run, folder, toRunOptions(config, libraries.getCodexOptIn(libraryId)));
   });
 
   ipcMain.handle('analysis:pause', (_event, libraryId: string): Promise<void> => {

@@ -111,6 +111,7 @@ export function createMockAuraFrameApi(): AuraFrameApi {
         id: MAIN_ID,
         name: 'Main library',
         inputFolder: 'C:/Pictures/Main (preview)',
+        codexOptIn: false,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
       },
@@ -118,6 +119,7 @@ export function createMockAuraFrameApi(): AuraFrameApi {
         id: SECOND_ID,
         name: 'Second library',
         inputFolder: 'C:/Pictures/Second (preview)',
+        codexOptIn: false,
         createdAt: '2026-01-02T00:00:00.000Z',
         updatedAt: '2026-01-02T00:00:00.000Z',
       },
@@ -174,7 +176,7 @@ export function createMockAuraFrameApi(): AuraFrameApi {
         activeLibraryId: id,
         libraries: [
           ...libraryState.libraries,
-          { id, name: safeName, inputFolder: null, createdAt: now, updatedAt: now },
+          { id, name: safeName, inputFolder: null, codexOptIn: false, createdAt: now, updatedAt: now },
         ],
       };
       photosByLibrary.set(id, []);
@@ -220,6 +222,27 @@ export function createMockAuraFrameApi(): AuraFrameApi {
         ),
       };
       return Promise.resolve(folder);
+    },
+    getCodexOptIn: (libraryId: string) => {
+      const library = libraryState.libraries.find((item) => item.id === libraryId);
+      if (!library) return Promise.reject(new Error('Unknown local library.'));
+      return Promise.resolve(library.codexOptIn);
+    },
+    setCodexOptIn: (libraryId: string, enabled: boolean) => {
+      assertLibrariesUnlocked();
+      if (!libraryState.libraries.some((library) => library.id === libraryId)) {
+        return Promise.reject(new Error('Unknown local library.'));
+      }
+      if (typeof enabled !== 'boolean') {
+        return Promise.reject(new Error('The cloud provider opt-in must be true or false.'));
+      }
+      libraryState = {
+        ...libraryState,
+        libraries: libraryState.libraries.map((library) =>
+          library.id === libraryId ? { ...library, codexOptIn: enabled } : library,
+        ),
+      };
+      return Promise.resolve(enabled);
     },
     startAnalysis: (libraryId: string, _config: AnalysisConfig) => {
       const libraryPhotos = photosByLibrary.get(libraryId) ?? [];

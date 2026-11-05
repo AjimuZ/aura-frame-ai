@@ -364,6 +364,17 @@ including the 23 cases of `engine/tests/test_codex_sidecar.py`; `bash scripts/ch
 and `bash scripts/check.sh --integration` with its new sidecar assertions. Still open in P05.2: the per-library
 opt-in dialog and the run wiring (P05.2.3).
 
+Progress 2026-11-05 (P05.2.3.2, part of P05.2): each library in the Electron registry (`libraries.json`) has a
+`codexOptIn` flag, off for new libraries and for registries written before it existed (a stored value that is not a
+boolean is refused). The preload offers `getCodexOptIn` and `setCodexOptIn`; main validates the library id and a strict
+boolean, and refuses a change during a run. `analysis:start` reads the flag from the registry and sends it as
+`codexLibraryOptIn` in the run request, ignoring anything the renderer's config says; it sends no `provider`, so every
+run is still local. Observed: `npm run lint` printed no findings; `npm run build:angular` built;
+`npm run build:electron && node --test "tests/**/*.test.cjs"` passed 235 with 1 skipped (the existing symlink case) and
+0 failed, including the new cases in `tests/profile-store.test.cjs`, `tests/bridge-handlers.test.cjs` and
+`tests/analysis-http.test.cjs`. Still open in P05.2.3: the opt-in dialog, the provider choice on the run request and
+the engine wiring.
+
 Exit: the contract and data-shape tests pass; without opt-in the sidecar is not running and no call
 can happen; a real run with the owner's account completes on synthetic images.
 

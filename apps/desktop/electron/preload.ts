@@ -26,6 +26,8 @@ const CHANNELS = {
   renameLibrary: 'libraries:rename',
   activateLibrary: 'libraries:activate',
   deleteLibrary: 'libraries:delete',
+  getCodexOptIn: 'libraries:getCodexOptIn',
+  setCodexOptIn: 'libraries:setCodexOptIn',
   start: 'analysis:start',
   pause: 'analysis:pause',
   resume: 'analysis:resume',
@@ -62,6 +64,10 @@ const api: AuraFrameApi = {
     ipcRenderer.invoke(CHANNELS.deleteLibrary, libraryId) as Promise<LibraryState>,
   selectPhotoFolder: (libraryId: string) =>
     ipcRenderer.invoke(CHANNELS.selectFolder, libraryId) as Promise<string | null>,
+  getCodexOptIn: (libraryId: string) =>
+    ipcRenderer.invoke(CHANNELS.getCodexOptIn, libraryId) as Promise<boolean>,
+  setCodexOptIn: (libraryId: string, enabled: boolean) =>
+    ipcRenderer.invoke(CHANNELS.setCodexOptIn, libraryId, enabled) as Promise<boolean>,
   startAnalysis: (libraryId: string, config: AnalysisConfig) =>
     ipcRenderer.invoke(CHANNELS.start, libraryId, config) as Promise<void>,
   pauseAnalysis: (libraryId: string) => ipcRenderer.invoke(CHANNELS.pause, libraryId) as Promise<void>,

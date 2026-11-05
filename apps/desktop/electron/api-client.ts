@@ -85,10 +85,12 @@ export interface MediaFile {
 }
 
 // The options of one run. A folder is deliberately absent: the API analyzes its mounted photos root.
+// `codexLibraryOptIn` is the library's stored opt-in for the optional cloud provider, never a renderer value.
 export interface RunOptions {
   runGemma: boolean;
   preset: AnalysisPreset;
   includeSubfolders: boolean;
+  codexLibraryOptIn: boolean;
 }
 
 // Returns the gateway port from the environment that compose also reads, or the default when unset or invalid.

@@ -313,6 +313,46 @@ test('libraries:delete refuses the last library and an unknown one without sendi
   assert.ok(libraries.hasLibrary(FIRST_ID));
 });
 
+test('libraries:getCodexOptIn reads off for a new library, and libraries:setCodexOptIn stores a boolean per library', async (t) => {
+  const { api, libraries, invoke } = await setup(t);
+  assert.equal(await invoke('libraries:getCodexOptIn', FIRST_ID), false);
+  assert.equal(await invoke('libraries:getCodexOptIn', SECOND_ID), false);
+
+  assert.equal(await invoke('libraries:setCodexOptIn', SECOND_ID, true), true);
+  assert.equal(await invoke('libraries:getCodexOptIn', SECOND_ID), true);
+  assert.equal(await invoke('libraries:getCodexOptIn', FIRST_ID), false, 'the other library is untouched');
+  assert.equal(libraries.getState().libraries.find((library) => library.id === SECOND_ID).codexOptIn, true);
+
+  assert.equal(await invoke('libraries:setCodexOptIn', SECOND_ID, false), false);
+  assert.equal(await invoke('libraries:getCodexOptIn', SECOND_ID), false);
+  assert.deepEqual(api.requests, [], 'the opt-in never reaches the API on its own');
+});
+
+test('libraries:setCodexOptIn refuses a value that is not a boolean and an unknown library, and changes nothing', async (t) => {
+  const { libraries, invoke } = await setup(t);
+  for (const value of ['true', 'yes', 1, 0, null, undefined, {}, [], [true]]) {
+    await rejectsWithout(invoke('libraries:setCodexOptIn', FIRST_ID, value), [], /must be true or false/);
+  }
+  await rejectsWithout(invoke('libraries:setCodexOptIn', FIRST_ID), [], /must be true or false/);
+  assert.equal(libraries.getCodexOptIn(FIRST_ID), false);
+
+  const unknown = '33333333-3333-4333-8333-333333333333';
+  await rejectsWithout(invoke('libraries:setCodexOptIn', unknown, true), [], /Unknown local library/);
+  await rejectsWithout(invoke('libraries:setCodexOptIn', '../escape', true), [], /Unknown local library/);
+  await rejectsWithout(invoke('libraries:getCodexOptIn', unknown), [], /Unknown local library/);
+  assert.equal(libraries.getCodexOptIn(SECOND_ID), false);
+});
+
+test('libraries:setCodexOptIn is refused while an analysis is running', async (t) => {
+  const { libraries } = await setup(t);
+  handlers.clear();
+  registerLibrariesIpc(libraries, () => true, { api: {}, servicesUp: () => true });
+  const invoke = (channel, ...args) => Promise.resolve().then(() => handlers.get(channel)({}, ...args));
+  await rejectsWithout(invoke('libraries:setCodexOptIn', FIRST_ID, true), [], /unavailable while an analysis is running/);
+  assert.equal(libraries.getCodexOptIn(FIRST_ID), false);
+  assert.equal(await invoke('libraries:getCodexOptIn', FIRST_ID), false, 'reading stays possible');
+});
+
 // Starts a ComposeStack on a fake spawn with the store's exports folder, and returns the environment compose got.
 async function mountedEnvironment({ libraries, folder }) {
   const calls = [];

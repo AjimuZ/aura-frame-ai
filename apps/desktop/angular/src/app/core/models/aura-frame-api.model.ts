@@ -20,6 +20,8 @@ export interface AuraFrameApi {
   activateLibrary(libraryId: string): Promise<LibraryState>;
   deleteLibrary(libraryId: string): Promise<LibraryState>;
   selectPhotoFolder(libraryId: string): Promise<string | null>;
+  getCodexOptIn(libraryId: string): Promise<boolean>;
+  setCodexOptIn(libraryId: string, enabled: boolean): Promise<boolean>;
   startAnalysis(libraryId: string, config: AnalysisConfig): Promise<void>;
   pauseAnalysis(libraryId: string): Promise<void>;
   resumeAnalysis(libraryId: string): Promise<void>;

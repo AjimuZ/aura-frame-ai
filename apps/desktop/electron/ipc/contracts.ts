@@ -256,6 +256,9 @@ export interface LocalLibrary {
   id: string;
   name: string;
   inputFolder: string | null;
+  // Whether this library's anonymous copies may go to the optional cloud provider. Off until the person turns it on,
+  // and changed only through `setCodexOptIn`, so a renderer cannot slip it into another request.
+  codexOptIn: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -284,6 +287,10 @@ export interface AuraFrameApi {
   activateLibrary(libraryId: string): Promise<LibraryState>;
   deleteLibrary(libraryId: string): Promise<LibraryState>;
   selectPhotoFolder(libraryId: string): Promise<string | null>;
+  // The per-library opt-in for the optional cloud provider. Both reject for an unknown library; the setter also
+  // rejects a value that is not a boolean, and resolves to the value now stored.
+  getCodexOptIn(libraryId: string): Promise<boolean>;
+  setCodexOptIn(libraryId: string, enabled: boolean): Promise<boolean>;
   startAnalysis(libraryId: string, config: AnalysisConfig): Promise<void>;
   pauseAnalysis(libraryId: string): Promise<void>;
   resumeAnalysis(libraryId: string): Promise<void>;

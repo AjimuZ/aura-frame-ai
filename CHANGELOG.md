@@ -4,6 +4,12 @@
 
 ### Added
 
+- Each library now stores its own opt-in for the optional cloud provider in the desktop app's library registry. It is
+  off for new libraries and for registries written before this change, and it is read and changed only through two
+  validated bridge calls (`getCodexOptIn`, `setCodexOptIn`): an unknown library or a value that is not a true boolean
+  is refused, and so is a change while an analysis runs. Every run request now carries the stored value as
+  `codexLibraryOptIn`; the window cannot supply it. No dialog exists yet and no run uses the provider, so nothing is
+  sent to the cloud. Covered by Node tests; the dialog and the engine wiring remain open (P05.2.3).
 - The run request of the engine API takes `provider` and a per-library `codexLibraryOptIn`. A `codex` run is refused
   with a structured 403 (`codex_not_enabled` or `codex_library_opt_in_missing`) unless the stack was started with
   `--provider codex --codex-opt-in` and the library opted in. An accepted request still runs the local pipeline; the

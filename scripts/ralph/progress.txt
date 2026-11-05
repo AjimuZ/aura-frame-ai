@@ -89,6 +89,8 @@
 - Pass a secret to a containerized CLI through stdin: read it into an unexported shell variable (`IFS= read -r -s` on a terminal, `IFS= read -r` otherwise), strip a trailing \r, then `printf '%s\n' "$var" | docker compose run -T ...`. printf is a builtin, so the secret never shows up in a process argv. Test it with a docker stub that records stdin and env separately from argv.
 - To let an internet-less service use a tool in a sidecar without the Docker socket or a shared volume, run a minimal authenticated HTTP front in the sidecar on the internal network. Give it a per-start token passed by compose to those two services only, an allow-list of argument shapes and file names, one call at a time, a private temporary folder per call, and process-group kill on timeout.
 - A flag that sends data off the machine needs an explicit consent flag on the same command line. Validate the pair during argument parsing so a refusal exits 2 before any Docker call, and also refuse the consent flag in any other combination.
+- Add a new per-library setting in four places: the store, with a default for registries that lack the field; an IPC handler that validates the type strictly; a preload channel; and a test that the renderer's request config cannot set it.
+- Read security-relevant request flags from the main-process registry when building the API request. Never copy them from renderer-supplied config.
 
 ---
 
@@ -864,4 +866,15 @@ Observed: `npm run lint` gave no findings. `npm run build:electron && node --tes
 - Verified as already implemented; no code change was needed.
 - Files changed: see commit
 - **Learnings for future iterations:**
+---
+
+## 2026-11-05T19:18:27Z - P05.2.3.2
+- Each library in the Electron registry now has a `codexOptIn` flag. It is off for new libraries and for old registries without the field, and a stored non-boolean is rejected. The preload bridge has `getCodexOptIn` and `setCodexOptIn`, handled on `libraries:getCodexOptIn` and `libraries:setCodexOptIn`. Main checks the library id and requires a real boolean, and it refuses a change while an analysis runs. `analysis:start` reads the flag from the registry and sends it as `codexLibraryOptIn` on every run request. Anything the renderer puts in its config is dropped, and no `provider` is sent, so every run stays local. I did not build the opt-in dialog, which is the next sibling task. The Angular model, the bridge type and the browser mock were updated so the Angular build still compiles. Observed: `npm run lint` gave no findings, `npm run build:angular` built, and `npm run build:electron && node --test "tests/**/*.test.cjs"` passed 235 with 1 skipped (the existing symlink case) and 0 failed. I did not run the engine tests, because the API side was not touched.
+- Files changed: apps/desktop/electron/ipc/contracts.ts, apps/desktop/electron/ipc/library-store.ts, apps/desktop/electron/ipc/libraries.ipc.ts, apps/desktop/electron/ipc/analysis.ipc.ts, apps/desktop/electron/api-client.ts, apps/desktop/electron/preload.ts, apps/desktop/angular/src/app/core/models/library.model.ts, apps/desktop/angular/src/app/core/models/aura-frame-api.model.ts, apps/desktop/angular/src/app/core/services/mock-aura-frame-api.ts, tests/profile-store.test.cjs, tests/bridge-handlers.test.cjs, tests/analysis-http.test.cjs, CHANGELOG.md, docs/roadmap.md, docs/architecture.md
+- **Learnings for future iterations:**
+  - The registry field is `LocalLibrary.codexOptIn` (boolean). The bridge calls are `getCodexOptIn(libraryId): Promise<boolean>` and `setCodexOptIn(libraryId, enabled): Promise<boolean>`. The dialog task should call `setCodexOptIn` and read the current value from `getLibraryState` or `getCodexOptIn`.
+  - The run request always sends `codexLibraryOptIn` and never `provider`. The API default is `local`, so the next task (provider choice and engine wiring) must decide where `provider: 'codex'` comes from. It should come from main or the stack state, not from the renderer's AnalysisConfig, and `toRunOptions` in analysis.ipc.ts is the place to add it.
+  - `toRunOptions(config, codexLibraryOptIn)` builds an explicit object, so unknown fields in the renderer config are dropped. The tests assert that `codexLibraryOptIn`, `codexOptIn` and `provider` in the config never reach the API body.
+  - `library.model.ts` and `mock-aura-frame-api.ts` in Angular mirror the Electron contracts. Any new LocalLibrary field has to be added to the mock's seed libraries and its createLibrary too, or `npm run build:angular` fails.
+  - `tests/analysis-http.test.cjs` `setup()` now also returns `libraries`. A second run in one test works by setting `api.status` to a finished status, so the first run ends by itself.
 ---

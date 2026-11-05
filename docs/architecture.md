@@ -112,7 +112,7 @@ the GPU overlay choice made by Electron main has not been observed with a real D
 | models | named volume | GGUF and PyTorch model files | Survives image rebuilds, and can be mounted read-only |
 | exchange | tmpfs | Anonymous copies for the Codex sidecar | Gone when the container stops |
 | codex-home | named volume, at `/codex-home` | Codex credentials and config | Visible only to the sidecar; the policy refuses it in any other service |
-| registry | Electron `userData` | Library list, host folders, settings, encrypted key | Host-side data, outside the repository |
+| registry | Electron `userData` | Library list, host folders, per-library cloud opt-in flag, settings, encrypted key | Host-side data, outside the repository |
 
 ## GPU scheduling
 
@@ -148,6 +148,7 @@ under `ng serve` stays too.
 | --- | --- |
 | `getLibraryState`, `createLibrary`, `renameLibrary`, `activateLibrary` | Local registry, as today |
 | `deleteLibrary` | Local registry, plus `DELETE /api/libraries/{id}/data` |
+| `getCodexOptIn`, `setCodexOptIn` | Local registry only. The per-library `codexOptIn` flag is off by default (also for older registries), the setter takes a strict boolean for a known library and is refused during a run. `analysis:start` reads the flag and sends it as `codexLibraryOptIn`; the renderer cannot. Implemented; the dialog that sets it is planned (P05.2.3) |
 | `selectPhotoFolder` | Native dialog, as today. The mount happens before the next run |
 | `startAnalysis`, `pauseAnalysis`, `resumeAnalysis`, `cancelAnalysis`, `getAnalysisStatus` | `/api/libraries/{id}/runs` and `/runs/current` |
 | `onProgress` | Main consumes `GET /api/libraries/{id}/events` (SSE) and forwards it over IPC |

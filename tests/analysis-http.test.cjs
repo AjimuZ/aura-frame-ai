@@ -189,7 +189,7 @@ async function setup(t, options = {}) {
     fs.rmSync(root, { recursive: true, force: true });
   });
   const config = { inputFolder: folder, runGemma: false, preset: 'fast', includeSubfolders: true };
-  return { api, folder, invoke, replies, events, spawnCalls, config };
+  return { api, folder, invoke, replies, events, spawnCalls, config, libraries };
 }
 
 async function waitFor(condition, label) {
@@ -357,8 +357,55 @@ test('a start mounts the folder through compose first and names no path to the A
   assert.ok(!spawnCalls[0].args.some((arg) => arg.includes(folder) || arg.includes(TOKEN)));
 
   const started = api.requests.find(({ url }) => url.endsWith('/runs'));
-  assert.deepEqual(JSON.parse(started.body), { runGemma: false, preset: 'fast', includeSubfolders: true });
+  assert.deepEqual(JSON.parse(started.body), {
+    runGemma: false,
+    preset: 'fast',
+    includeSubfolders: true,
+    codexLibraryOptIn: false,
+  });
   assert.ok(!api.requests.some(({ url, body }) => `${url}${body}`.includes('synthetic-photos')));
+});
+
+test('the run request carries the library opt-in from the registry, off by default', async (t) => {
+  const { api, invoke, config, libraries } = await setup(t);
+  // A run that the API reports as finished ends as soon as its stream does, so a second one can start.
+  api.status = { ...api.status, step: 'done', running: false, message: 'Done' };
+  await invoke('analysis:start', LIBRARY_ID, config);
+  await waitFor(() => api.requests.some(({ url }) => url.endsWith('/runs')), 'the first run request');
+  const first = api.requests.find(({ url }) => url.endsWith('/runs'));
+  assert.equal(JSON.parse(first.body).codexLibraryOptIn, false);
+  assert.equal(JSON.parse(first.body).provider, undefined, 'the provider choice is not part of this request');
+
+  await waitFor(() => !isAnalysisRunning(), 'the first run to end');
+  libraries.setCodexOptIn(LIBRARY_ID, true);
+  api.requests.length = 0;
+  await invoke('analysis:start', LIBRARY_ID, config);
+  await waitFor(() => api.requests.some(({ url }) => url.endsWith('/runs')), 'the second run request');
+  const second = api.requests.find(({ url }) => url.endsWith('/runs'));
+  assert.deepEqual(JSON.parse(second.body), {
+    runGemma: false,
+    preset: 'fast',
+    includeSubfolders: true,
+    codexLibraryOptIn: true,
+  });
+});
+
+test('an opt-in or provider in the renderer config never reaches the run request', async (t) => {
+  const { api, invoke, config } = await setup(t);
+  await invoke('analysis:start', LIBRARY_ID, {
+    ...config,
+    codexLibraryOptIn: true,
+    codexOptIn: true,
+    provider: 'codex',
+  });
+  await waitFor(() => api.requests.some(({ url }) => url.endsWith('/runs')), 'the run request');
+  const started = api.requests.find(({ url }) => url.endsWith('/runs'));
+  assert.deepEqual(JSON.parse(started.body), {
+    runGemma: false,
+    preset: 'fast',
+    includeSubfolders: true,
+    codexLibraryOptIn: false,
+  });
 });
 
 test('an unknown preset falls back to the default instead of a refusal', async (t) => {

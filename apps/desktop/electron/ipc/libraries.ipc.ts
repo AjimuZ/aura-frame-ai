@@ -45,6 +45,19 @@ export function registerLibrariesIpc(
     return libraries.activateLibrary(libraryId);
   });
 
+  // Reads the library's opt-in for the optional cloud provider: false until the person turned it on.
+  ipcMain.handle('libraries:getCodexOptIn', (_event, libraryId: string): boolean =>
+    libraries.getCodexOptIn(libraryId),
+  );
+
+  // Stores the opt-in and answers with the stored value. The store refuses an unknown library and any value that
+  // is not a boolean, so nothing but an explicit true or false reaches the registry. Refused during a run, because
+  // that run already holds the value it started with.
+  ipcMain.handle('libraries:setCodexOptIn', (_event, libraryId: string, enabled: boolean): boolean => {
+    assertIdle(isAnalysisRunning);
+    return libraries.setCodexOptIn(libraryId, enabled);
+  });
+
   // Removes the library's data from the volume, then the library from the registry, so the data is never left
   // behind without an owner. While the services are down the deletion is refused with a fixed message and
   // nothing is sent or removed. If the API fails, the library stays registered.
