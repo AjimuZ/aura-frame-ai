@@ -4,6 +4,18 @@
 
 ### Added
 
+- Settings has a Codex section for the active library, and allowing the optional cloud judge now goes through a
+  consent dialog. It states that only resized, EXIF-stripped, anonymous copies of the photos being judged are sent,
+  never the originals, file names, folder paths or location; that a run makes at most 200 Codex calls, retries
+  included; that copies are sent only when the library allows Codex and the app was started with
+  `./start.sh --provider codex --codex-opt-in`; and that plan usage and the OpenAI account's data controls are the
+  user's. It is a native modal: focus starts on "Keep local only", Escape dismisses it, and both answers have the same
+  weight. The choice is stored through `setCodexOptIn`; turning it off is one click, and a change is refused while an
+  analysis runs. The cap shown is the engine default (`ai.codex.max_calls`), mirrored in the window and checked
+  against the engine by a Node test; a changed value in the engine configuration is not shown. The Settings subtitle,
+  which said nothing is sent to the cloud, now reads "Local by default. Nothing leaves this computer unless you opt
+  in." No run uses the provider yet: the provider choice on the run request and the engine wiring remain open
+  (P05.2.3). The dialog has no component test, since the project has no Angular test runner.
 - Each library now stores its own opt-in for the optional cloud provider in the desktop app's library registry. It is
   off for new libraries and for registries written before this change, and it is read and changed only through two
   validated bridge calls (`getCodexOptIn`, `setCodexOptIn`): an unknown library or a value that is not a true boolean

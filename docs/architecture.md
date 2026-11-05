@@ -73,7 +73,8 @@ Written in `compose.yaml` and `docker/` (P02.1), with `gateway`, `api` and `visi
 P03.2 ([Operations](operations.md#model-files)), and the `codex` sidecar since P05.1. Since P05.2.2 its default
 command is an HTTP service on port `8090` that `api` calls over `backend` with a per-start token, and only
 `./start.sh --provider codex --codex-opt-in` or `--codex-login` starts it; no run sends it comparisons until the
-per-library opt-in (P05.2.3). Decisions: [ADR 0010](decisions/0010-compose-stack-layout.md),
+run wiring of P05.2.3 lands (the per-library opt-in exists since P05.2.3.3). Decisions:
+[ADR 0010](decisions/0010-compose-stack-layout.md),
 [ADR 0011](decisions/0011-pinned-model-download.md), [ADR 0016](decisions/0016-codex-sidecar-image.md),
 [ADR 0018](decisions/0018-codex-sidecar-transport.md).
 
@@ -148,7 +149,7 @@ under `ng serve` stays too.
 | --- | --- |
 | `getLibraryState`, `createLibrary`, `renameLibrary`, `activateLibrary` | Local registry, as today |
 | `deleteLibrary` | Local registry, plus `DELETE /api/libraries/{id}/data` |
-| `getCodexOptIn`, `setCodexOptIn` | Local registry only. The per-library `codexOptIn` flag is off by default (also for older registries), the setter takes a strict boolean for a known library and is refused during a run. `analysis:start` reads the flag and sends it as `codexLibraryOptIn`; the renderer cannot. Implemented; the dialog that sets it is planned (P05.2.3) |
+| `getCodexOptIn`, `setCodexOptIn` | Local registry only. The per-library `codexOptIn` flag is off by default (also for older registries), the setter takes a strict boolean for a known library and is refused during a run. `analysis:start` reads the flag and sends it as `codexLibraryOptIn`; the renderer cannot. Implemented, and so is the Settings dialog that sets it (P05.2.3.3). The dialog states the engine's default cap of 200 calls per run, mirrored in the window, because the renderer cannot read `ai.codex.max_calls`; a changed value is not shown |
 | `selectPhotoFolder` | Native dialog, as today. The mount happens before the next run |
 | `startAnalysis`, `pauseAnalysis`, `resumeAnalysis`, `cancelAnalysis`, `getAnalysisStatus` | `/api/libraries/{id}/runs` and `/runs/current` |
 | `onProgress` | Main consumes `GET /api/libraries/{id}/events` (SSE) and forwards it over IPC |

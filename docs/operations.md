@@ -147,8 +147,10 @@ Implemented in P05.2.2 and tested with stubs only (`tests/start-sh.test.cjs`); s
 - With both, the start adds `--profile codex` to `up`, leaves `vision` out and lists no model files. It exports a
   second token, `AURAFRAME_CODEX_TOKEN` (64 hex characters, independent of the session token), which only `api` and
   the sidecar receive through compose. It is never an argument, never printed and never written to a file.
-- Opt-in on the command line only lets the sidecar run. The engine sends nothing until a library also confirms opt-in
-  in the app, and that dialog is planned in P05.2.3, so today no run sends a copy.
+- Opt-in on the command line only lets the sidecar run. The engine sends nothing unless a library also confirms opt-in
+  in the app. That dialog is implemented in P05.2.3.3 (Settings) and states the engine's default cap of 200 calls per
+  run; a changed `ai.codex.max_calls` is not shown. The run wiring is still open in P05.2.3, so today no run sends a
+  copy.
 - `--codex-login` (or `--codex-login device`) checks Docker only, then runs
   `docker compose -f compose.yaml --profile codex run --rm --build codex codex login --device-auth` and exits: `0` when
   the sign-in succeeded, `1` otherwise. The CLI prints a link and a code to enter in a browser.

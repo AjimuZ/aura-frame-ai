@@ -372,8 +372,31 @@ boolean, and refuses a change during a run. `analysis:start` reads the flag from
 run is still local. Observed: `npm run lint` printed no findings; `npm run build:angular` built;
 `npm run build:electron && node --test "tests/**/*.test.cjs"` passed 235 with 1 skipped (the existing symlink case) and
 0 failed, including the new cases in `tests/profile-store.test.cjs`, `tests/bridge-handlers.test.cjs` and
-`tests/analysis-http.test.cjs`. Still open in P05.2.3: the opt-in dialog, the provider choice on the run request and
-the engine wiring.
+`tests/analysis-http.test.cjs`. Still open in P05.2.3: the provider choice on the run request and the engine wiring
+(the opt-in dialog followed in P05.2.3.3, below).
+
+Progress 2026-11-05 (P05.2.3.3, part of P05.2): Settings has a "Codex comparisons" section for the active library,
+with its state in words ("local only" or "Codex allowed"). Allowing opens `CodexOptInDialogComponent`
+(`apps/desktop/angular/src/app/shared/components/codex-opt-in-dialog/`), a standalone native modal `<dialog>` that
+states that only resized, EXIF-stripped, anonymous copies are sent, never the originals, file names, folder paths or
+location; that a run makes at most `CODEX_MAX_CALLS_PER_RUN` (200) Codex calls, retries included; and that copies go
+out only with both the library's opt-in and `./start.sh --provider codex --codex-opt-in`. Focus starts on "Keep local
+only", Escape dismisses, focus returns to the opener, and both answers have the same weight.
+`LibraryService.setCodexOptIn` stores the answer through the bridge's `setCodexOptIn` and mirrors the value main
+returns; turning the opt-in off needs no dialog; the button is disabled during an analysis, and a refusal from main is
+shown. The styles use only the `_tokens.scss` colors, with derived shades through `color-mix()`. The cap is one
+renderer constant that mirrors the engine default, because the window cannot read `ai.codex.max_calls`: a value
+changed in `engine/config.yaml` is not shown. The new `tests/codex-opt-in-dialog.test.cjs` fails when that constant
+differs from `engine/config.yaml` or the `CodexSettings` default, and pins the dialog's disclosure and the bridge path
+by reading the sources. The Settings subtitle no longer says that nothing is sent to the cloud. Observed:
+`npm run lint` printed no findings; `npm run build:angular` built;
+`npm run build:electron && node --test "tests/**/*.test.cjs"` passed 240 with 1 skipped (the existing symlink case)
+and 0 failed, including the 5 cases of the new test; the design system's color script reported no literal in the
+changed files (the renderer as a whole keeps its 13 known literals, fixed in P06). Not observed: the dialog in a
+running window (opening, focus order, Escape, saving, narrow widths), because the repository has no Angular component
+test runner and the app was not started, so the dialog and the Settings integration have no behavior test; the engine
+tests, not run because the engine is unchanged. Still open in P05.2.3: the provider choice on the run request and
+the engine wiring, so no run uses the provider yet and P05.2 stays unchecked.
 
 Exit: the contract and data-shape tests pass; without opt-in the sidecar is not running and no call
 can happen; a real run with the owner's account completes on synthetic images.

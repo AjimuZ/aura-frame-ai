@@ -36,6 +36,20 @@ export class LibraryService {
     return this.apply(await this.api.deleteLibrary(libraryId));
   }
 
+  // Stores the library's Codex opt-in through the bridge and mirrors the value main answers with, so the window never
+  // shows a choice the registry did not keep. Rejects with main's message when main refuses (an unknown library, a
+  // run in progress), and the local state is then unchanged.
+  async setCodexOptIn(libraryId: string, enabled: boolean): Promise<boolean> {
+    const stored = await this.api.setCodexOptIn(libraryId, enabled);
+    this.state.update((state) => ({
+      ...state,
+      libraries: state.libraries.map((library) =>
+        library.id === libraryId ? { ...library, codexOptIn: stored } : library,
+      ),
+    }));
+    return stored;
+  }
+
   setInputFolder(libraryId: string, inputFolder: string): void {
     this.state.update((state) => ({
       ...state,

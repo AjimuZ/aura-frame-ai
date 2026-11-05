@@ -1,19 +1,27 @@
-// Settings: check the model providers, and configure thresholds and privacy options.
+// Settings: check the model providers, set the per-library Codex opt-in, and configure thresholds and privacy options.
 import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { PageHeaderComponent } from '../../shared/components/page-header/page-header.component';
+import { CodexOptInDialogComponent } from '../../shared/components/codex-opt-in-dialog/codex-opt-in-dialog.component';
 import { SettingsService } from '../../core/services/settings.service';
 import { AURA_FRAME_API } from '../../core/tokens/aura-frame-api.token';
-import type { AppSettings, OpenAiStatus, ProviderStatus, ProvidersStatus } from '../../core/models';
+import {
+  CODEX_MAX_CALLS_PER_RUN,
+  type AppSettings,
+  type LocalLibrary,
+  type OpenAiStatus,
+  type ProviderStatus,
+  type ProvidersStatus,
+} from '../../core/models';
 import { PhotoStore } from '../../core/services/photo-store.service';
 
 @Component({
   selector: 'af-settings',
   standalone: true,
-  imports: [PageHeaderComponent, FormsModule],
+  imports: [PageHeaderComponent, FormsModule, CodexOptInDialogComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <af-page-header title="Settings" subtitle="Local-only configuration. Nothing is sent to the cloud." />
+    <af-page-header title="Settings" subtitle="Local by default. Nothing leaves this computer unless you opt in." />
 
     <section class="af-card" style="max-width:640px;">
       <div class="af-field">
@@ -101,6 +109,49 @@ import { PhotoStore } from '../../core/services/photo-store.service';
         <button class="af-button-primary" (click)="save()">Save settings</button>
         @if (saved()) { <span class="af-badge af-badge--success">Saved</span> }
       </div>
+    </section>
+
+    <section class="af-card" style="max-width:640px; margin-top:24px;">
+      <h3>Codex comparisons (optional cloud judge)</h3>
+      <p class="af-field-hint">
+        Off by default and set per library. Copies of compared photos leave this computer only when the library
+        allows Codex and the app was started with <code>./start.sh --provider codex --codex-opt-in</code>.
+      </p>
+      @if (activeLibrary(); as library) {
+        <div class="af-actions" style="align-items:center;">
+          <span
+            class="af-badge"
+            [class.af-badge--success]="!library.codexOptIn"
+            [class.af-badge--warning]="library.codexOptIn"
+          >{{ library.name }}: {{ library.codexOptIn ? 'Codex allowed' : 'local only' }}</span>
+          <button
+            type="button"
+            class="af-button-secondary"
+            [disabled]="store.status().running"
+            (click)="changeCodexOptIn(library)"
+          >
+            {{ library.codexOptIn ? 'Turn off Codex' : 'Review and allow Codex…' }}
+          </button>
+        </div>
+        @if (store.status().running) {
+          <div class="af-field-hint">The choice cannot change while an analysis runs.</div>
+        }
+      } @else {
+        <div class="af-field-hint">Select a library first.</div>
+      }
+      @if (codexError() && !codexDialog()) {
+        <div class="af-field-hint" role="alert">{{ codexError() }}</div>
+      }
+      @if (codexDialog(); as target) {
+        <af-codex-opt-in-dialog
+          [libraryName]="target.name"
+          [maxCalls]="codexMaxCalls"
+          [busy]="codexSaving()"
+          [error]="codexError()"
+          (allowed)="allowCodex(target.id)"
+          (dismissed)="closeCodexDialog()"
+        />
+      }
     </section>
 
     <section class="af-card" style="max-width:640px; margin-top:24px;">
@@ -200,6 +251,13 @@ export class SettingsComponent {
   readonly confirmingClear = signal(false);
   readonly cleared = signal(false);
 
+  // Per-library Codex opt-in. The dialog is bound to the library it was opened for, so the answer always applies
+  // to the library it named. The cap shown is the window's mirror of the engine default.
+  readonly codexMaxCalls = CODEX_MAX_CALLS_PER_RUN;
+  readonly codexDialog = signal<Pick<LocalLibrary, 'id' | 'name'> | null>(null);
+  readonly codexSaving = signal(false);
+  readonly codexError = signal<string | null>(null);
+
   // OpenAI Quality Mode key/status state. apiKeyDraft is a plain field bound to the input;
   // the key itself is write-only and never read back from storage.
   readonly keyConfigured = signal(false);
@@ -258,6 +316,44 @@ export class SettingsComponent {
   // Runs the one provider check (`GET /api/providers`, through the bridge) and shows each provider's state.
   async checkProviders(): Promise<void> {
     this.providers.set(await this.api.checkProviders());
+  }
+
+  // Allowing Codex needs the consent dialog; turning it off is one click, because withdrawing never sends anything.
+  async changeCodexOptIn(library: LocalLibrary): Promise<void> {
+    this.codexError.set(null);
+    if (!library.codexOptIn) {
+      this.codexDialog.set({ id: library.id, name: library.name });
+      return;
+    }
+    await this.saveCodexOptIn(library.id, false);
+  }
+
+  // The dialog's "Allow": closes it only once main has stored the choice; on a refusal the dialog stays open with
+  // main's reason.
+  async allowCodex(libraryId: string): Promise<void> {
+    if (await this.saveCodexOptIn(libraryId, true)) this.codexDialog.set(null);
+  }
+
+  // The dialog was dismissed: nothing is stored, and the library keeps its current choice.
+  closeCodexDialog(): void {
+    this.codexDialog.set(null);
+  }
+
+  // Stores the choice through the typed bridge. Returns false, with the reason in codexError, when main refuses it;
+  // a second request while one is pending is ignored.
+  private async saveCodexOptIn(libraryId: string, enabled: boolean): Promise<boolean> {
+    if (this.codexSaving()) return false;
+    this.codexSaving.set(true);
+    this.codexError.set(null);
+    try {
+      await this.store.libraryService.setCodexOptIn(libraryId, enabled);
+      return true;
+    } catch (error) {
+      this.codexError.set(error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      this.codexSaving.set(false);
+    }
   }
 
   // Returns the words shown for a provider state.

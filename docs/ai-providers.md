@@ -6,8 +6,9 @@ run. The Codex CLI provider is **implemented in the engine** since P05.2.1 (`eng
 [ADR 0017](decisions/0017-codex-provider-gate-and-cap.md)) and tested against a fake CLI only. Its transport to the
 sidecar, `--provider codex --codex-opt-in` and `--codex-login` are **implemented** since P05.2.2
 ([ADR 0018](decisions/0018-codex-sidecar-transport.md)), tested with stubs, a fake CLI and an in-memory sidecar; the
-per-library opt-in dialog, and with it any run that uses the provider, is **planned** (P05.2.3). The sidecar image,
-config and volumes exist since P05.1 ([ADR 0016](decisions/0016-codex-sidecar-image.md)) but have not been built or
+per-library opt-in dialog is **implemented** in Settings since P05.2.3.3 (it states the engine's default cap of 200
+calls, not a changed `ai.codex.max_calls`), and any run that uses the provider is still **planned** (P05.2.3). The
+sidecar image, config and volumes exist since P05.1 ([ADR 0016](decisions/0016-codex-sidecar-image.md)) but have not been built or
 run. The pipeline still uses the legacy client
 until [P03](roadmap.md) and [P04](roadmap.md) land. Decisions: [ADR 0003](decisions/0003-llama-cpp-runtime.md),
 [ADR 0004](decisions/0004-default-local-model.md),
@@ -216,8 +217,9 @@ treat `auth.json` like a password.
 ### Opt-in and limits
 
 - The sidecar starts only with `./start.sh --provider codex --codex-opt-in`; `--provider codex` alone exits `2`
-  before anything runs. Each library must also confirm opt-in in the UI (planned, P05.2.3). The dialog states what
-  is sent, and the number of calls the run will make.
+  before anything runs. Each library must also confirm opt-in in the UI (implemented in P05.2.3.3, in Settings). The
+  dialog states what is sent, and the most calls a run may make. It shows the engine default of 200, mirrored in the
+  window, because the window cannot read `ai.codex.max_calls`; a changed value is not shown.
 - `codex.max_calls` caps each run (default 200). The tournament stops at the cap and ranks with
   the verdicts it has.
 - `codex.model` is optional. Unset, the CLI's own default applies, so the project does not go

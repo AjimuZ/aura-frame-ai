@@ -142,8 +142,9 @@ Verified on 2026-11-01 by reading the source.
     is refused before anything starts. Each call has a private folder in the `exchange` tmpfs, removed afterwards, and
     nothing of a request is logged.
   - `./start.sh --provider codex` refuses to start without `--codex-opt-in`, and no other path starts the `codex`
-    profile except `--codex-login`, which runs the sign-in alone. The engine still sends nothing until the per-library
-    confirmation exists (P05.2.3).
+    profile except `--codex-login`, which runs the sign-in alone. The per-library confirmation is implemented in
+    P05.2.3.3: a Settings dialog that states what is sent and the engine's default cap of 200 calls per run (a changed
+    `ai.codex.max_calls` is not shown). The engine still sends nothing until the run wiring of P05.2.3 lands.
   - `./start.sh --codex-login api-key` passes the key only through the stdin of `codex login --with-api-key`: not an
     argument, an environment variable or a file, and never printed.
   - Remaining exposure: the token is readable in the sidecar's `/proc/1/environ` by its own user, and anything on
