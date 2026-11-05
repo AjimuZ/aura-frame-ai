@@ -1171,7 +1171,7 @@
       ],
       "priority": 40,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: still failing after 3 attempts: check \"test-node\" failed: npm run build:electron && node --test \"tests/**/*.test.cjs\" a-frame-ai\\tests\\start-sh.test.cjs:672:10) at Test.runInAsyncScope (node:async_hooks:227:14) at Test.run (node:internal/test_runner/test:1402:25) at Test.processPendingSubtests (node:internal/test_runner/test:974:18) at Test.postRun (node:internal/test_runner/test:1542:19) at Test.run (node:internal/test_runner/test:1467:12) at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) { generatedMessage: false, code: 'ERR_ASSERTION', actual: 1, expected:",
       "dependsOn": [
         "P05.1",
         "P05.2.2"
