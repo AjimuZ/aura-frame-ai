@@ -1224,7 +1224,7 @@
       ],
       "priority": 40,
       "passes": false,
-      "notes": "",
+      "notes": "BLOCKED: still failing after 3 attempts: the review found the documentation inconsistent with the change; the review did not pass the change; docs/roadmap.md: the line `- [x] P05.2` is now checked, but the new progress note says 'P05.2 stays unchecked'. The Exit (a real run with the owner's account) was not observed, and 'the provider choice on the run request and the engine wiring' are still open in P05.2.3. Revert P05.2 to `[ ]`.; docs/roadmap.md progress note says 'I did not run them in this session' about lint, build and node tests. The orchestrator's checks did pass: lint, build, test-nod",
       "dependsOn": [
         "P05.1",
         "P05.2.2",
